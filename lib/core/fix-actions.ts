@@ -416,6 +416,27 @@ export function getManualRemediationHint(
       return `"${t}" is taking heavy sequential scans and Backenly could not find a column it is safe to index automatically.${measured} Add an index on whichever column your queries filter or sort by — in the AI chat, say "add an index on <table>.<column>".`
     }
 
+    // No executable repair exists and none is coming: the finding's whole claim
+    // is that repairing individual gaps here has stopped working. So the hint
+    // hands over the evidence rather than a command, because the next step is a
+    // decision about the data model and Backenly cannot make it.
+    case 'subsystem_repeat_failure': {
+      const area = Array.isArray(details?.membership)
+        ? (details!.membership as string[]).join(', ')
+        : String(details?.membership ?? 'this area')
+      const n = Number(details?.confirmedRepairCount ?? 0)
+      const gaps = Array.isArray(details?.distinctGapIdentities)
+        ? (details!.distinctGapIdentities as string[]).length
+        : 0
+      return (
+        `Backenly applied ${n || 'several'} verified repairs across ${area}` +
+        `${gaps ? `, spanning ${gaps} different problems` : ''}, and this area is still failing. ` +
+        'Each repair worked on its own, so the pattern points at how the area is modelled rather ' +
+        'than at any one gap. Review the evidence on this finding and decide whether to restructure ' +
+        'it. Dismiss this if the repeated repairs are expected here — Backenly will stop raising it.'
+      )
+    }
+
     // Only the prepared-transaction kind reaches here — the other two have real
     // repairs. It hands over the exact commands and refuses to pick between
     // them, because the choice discards or applies work Backenly cannot see.

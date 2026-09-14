@@ -62,6 +62,7 @@ import { detectIndexBloat } from './index-bloat'
 import { detectIntentDrift } from './intent-conformance'
 import { detectBehaviouralRegression } from './baseline/detect'
 import { detectMigrationResidue } from './migration-residue'
+import { detectSubsystemRecurrence } from './subsystem-recurrence'
 import { hasCapability, type PlatformCapability } from './platform-capabilities'
 
 // ── Bounded-autonomy tiers (graded by blast radius) ───────────────────────────
@@ -128,6 +129,13 @@ export interface Invariant {
  * an invariant here never duplicates detection logic.
  */
 export const INVARIANTS: readonly Invariant[] = [
+  {
+    id: 'repairs_in_one_area_are_holding',
+    title: 'Repeated repairs in one area of the schema are actually holding',
+    rationale:
+      'The loop escalates a single gap that keeps coming back. It cannot see several DIFFERENT gaps repaired across one foreign-key-connected area — four independent stories to the loop, one story to an engineer. When repairs stop holding across an area, the individual fixes are treating symptoms and the area itself needs a structural decision.',
+    probe: detectSubsystemRecurrence,
+  },
   {
     id: 'user_data_is_rls_protected',
     title: 'Every table holding user data is protected by row-level security',
@@ -563,6 +571,13 @@ export function gapIdentity(
  * probe cannot silently leave a false claim of coverage behind.
  */
 const INVARIANT_EMITS: Readonly<Record<string, readonly FindingType[]>> = {
+  // Listed despite having no auto-fix, for the same reason
+  // service_role_keys_stay_server_side is: it is genuinely re-detectable. The
+  // probe recomputes from the live catalog and a rolling window, so the finding
+  // withdraws itself once repairs stop recurring in that area -- or once the
+  // component's membership changes, which produces a different identity and
+  // leaves the old one undetected.
+  repairs_in_one_area_are_holding: ['subsystem_repeat_failure'],
   user_data_is_rls_protected: ['missing_rls'],
   rls_policies_are_not_wide_open: ['rls_expression_invalid'],
   // Genuinely re-detectable, which is why it is listed despite having no

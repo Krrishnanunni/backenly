@@ -148,6 +148,16 @@ export type FindingType =
   //
   // See lib/autonomy/migration-residue.ts.
   | 'migration_residue'
+  /**
+   * Several DIFFERENT gaps repaired in one foreign-key-connected area, whose
+   * repairs are not holding. Distinct from the reconciler's per-gap recurrence
+   * escalation, which fires on ONE `gapIdentity` repeating.
+   *
+   * Has no executable repair by construction: the claim is "the individual
+   * fixes are treating symptoms", and the remedy is a structural decision a
+   * human makes. Classified `notify_only`.
+   */
+  | 'subsystem_repeat_failure'
   // ── Phase 4 — medium/high-risk action queued from AI chat or orchestration
   // before it applies. details.executorAction/executorParams carry the exact
   // AIAction to run once approved — see lib/core/auto-fix-engine.ts's
@@ -318,6 +328,9 @@ export const ALL_FINDING_TYPES = [
   'intent_drift',
   'behavioural_regression',
   'migration_residue',
+  // Added 2026-09-14 in the same commit that introduced it, per the discipline
+  // the five omissions above were each found in production for.
+  'subsystem_repeat_failure',
 ] as const satisfies ReadonlyArray<FindingType>
 
 // Canonical types — exact matches pass through untouched.

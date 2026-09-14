@@ -42,6 +42,8 @@
  */
 
 import { prisma } from '@/lib/db/prisma'
+import type { RawFinding, FindingSeverity } from '@/lib/core/types'
+import { FLAGS } from '@/lib/config/flags'
 import { gapIdentity } from './desired-state'
 import {
   computeSubsystems,
@@ -474,6 +476,119 @@ export async function evaluateSubsystemRecurrence(
     subsystems,
     firing: subsystems.filter(s => s.fires),
   }
+}
+
+// ── The probe ─────────────────────────────────────────────────────────────────
+
+/**
+ * How long a human dismissal suppresses this finding for that exact membership.
+ *
+ * Long on purpose. The condition it reports is slow-moving — a subsystem whose
+ * repairs are not holding stays that way for weeks — so a short window would
+ * re-raise a decision the owner already made, every tick, forever. That is the
+ * "permanent nuisance finding" shape `invariant-probes.ts` names, and the only
+ * thing it teaches an owner is to stop reading the queue.
+ */
+export const DISMISSAL_SUPPRESSION_DAYS = 90
+
+/**
+ * Membership snapshots a human has dismissed recently enough to stay silent on.
+ *
+ * Reaper withdrawals are deliberately NOT suppression. Both land as
+ * `status: 'dismissed'`, but the reaper stamps `details.withdrawnBy` and a human
+ * dismissal does not — so the marker is the discriminator. Treating a withdrawal
+ * as a decision would mean a finding that resolved itself could never be raised
+ * again when the condition returned.
+ */
+async function suppressedMemberships(projectId: string): Promise<Set<string>> {
+  const since = new Date(Date.now() - DISMISSAL_SUPPRESSION_DAYS * 24 * 60 * 60 * 1000)
+  const rows = await prisma.healthFinding
+    .findMany({
+      where: {
+        projectId,
+        type: 'subsystem_repeat_failure',
+        status: 'dismissed',
+        detectedAt: { gte: since },
+      },
+      select: { details: true },
+      take: 200,
+    })
+    .catch(() => [] as Array<{ details: unknown }>)
+
+  const out = new Set<string>()
+  for (const r of rows) {
+    const d = (r.details ?? {}) as Record<string, unknown>
+    if (d.withdrawnBy) continue // reaper, not a human decision
+    const h = d.membershipHash
+    if (typeof h === 'string' && h) out.add(h)
+  }
+  return out
+}
+
+/**
+ * Invariant probe: areas whose repairs are not holding.
+ *
+ * Emits at most one finding per eligible subsystem. `autoFixable` is false and
+ * no `fix` closure is attached, so the kernel cannot route this anywhere that
+ * would try to repair it — the claim is that repairing is what stopped working.
+ *
+ * Located by `subsystem:<fingerprint>:<membershipHash>` rather than by table.
+ * Putting the membership hash inside the identity is what makes recurrence
+ * continuity reset when a table joins or leaves the component: the identity
+ * changes, the reaper withdraws the old finding because its gap is no longer
+ * detected, and a new one opens against the new membership. No separate reset
+ * bookkeeping to get wrong.
+ */
+export async function detectSubsystemRecurrence(projectId: string): Promise<RawFinding[]> {
+  if (!FLAGS.ENABLE_SUBSYSTEM_RECURRENCE_FINDING) return []
+
+  // Cheap pre-check before the expensive path.
+  //
+  // The full evaluation reads the catalog and six ledgers. This probe runs on
+  // every project on every tick, and the gate needs at least
+  // SUBSYSTEM_REPAIR_THRESHOLD confirmed repairs to have any chance of firing —
+  // so a single indexed count rules out the overwhelming majority of projects
+  // before any of that work happens.
+  //
+  // The count is deliberately loose (it does not check the verification stamp
+  // or attribution): being wrong here can only cause the full evaluation to run
+  // and find nothing, never cause a finding to be missed.
+  const candidateRepairs = await prisma.healthFinding.count({
+    where: {
+      projectId,
+      status: 'auto_fixed',
+      fixAppliedAt: { gte: new Date(Date.now() - DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000) },
+    },
+  })
+  if (candidateRepairs < SUBSYSTEM_REPAIR_THRESHOLD) return []
+
+  const report = await evaluateSubsystemRecurrence(projectId)
+  if (report.firing.length === 0) return []
+
+  const suppressed = await suppressedMemberships(projectId)
+
+  return report.firing
+    .filter(s => !suppressed.has(s.membershipHash))
+    .map(s => ({
+      type: 'subsystem_repeat_failure' as const,
+      severity: 'warning' as FindingSeverity,
+      autoFixable: false,
+      details: {
+        location: `subsystem:${s.fingerprint}:${s.membershipHash}`,
+        fingerprint: s.fingerprint,
+        membershipHash: s.membershipHash,
+        membership: s.membership,
+        provenance: s.provenance,
+        confirmedRepairCount: s.confirmedRepairs.length,
+        distinctGapIdentities: s.distinctGapIdentities,
+        repairs: s.confirmedRepairs.map(r => ({ type: r.type, table: r.table, at: r.at })),
+        harm: s.independentHarm.map(h => ({ kind: h.kind, detail: h.detail, at: h.at })),
+        // Amplifiers, recorded for the reader. Neither took part in the decision.
+        changeCount: s.changeCount,
+        externalDdlCount: s.externalDdlCount,
+        windowDays: report.windowDays,
+      },
+    }))
 }
 
 /**

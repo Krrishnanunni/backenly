@@ -231,6 +231,23 @@ export const FLAGS = {
   get ENABLE_SUBSYSTEM_RECURRENCE_SHADOW(): boolean { return readBool('ENABLE_SUBSYSTEM_RECURRENCE_SHADOW') },
 
   /**
+   * Subsystem recurrence as a REAL finding in the review queue.
+   *
+   * Deliberately separate from the shadow flag above. Shadow writes one audit
+   * row nobody sees; this puts a row in front of the owner. Those are different
+   * decisions and collapsing them into one switch would mean the first time
+   * anyone enabled measurement, they also shipped a user-visible surface.
+   *
+   * The finding carries NO executable repair — it is classified `notify_only`,
+   * which is Tier 3, so no autonomy level can act on it. It reports that
+   * repairing individual gaps in one area has stopped working; the remedy is a
+   * structural decision that belongs to the owner.
+   *
+   * Off by default.
+   */
+  get ENABLE_SUBSYSTEM_RECURRENCE_FINDING(): boolean { return readBool('ENABLE_SUBSYSTEM_RECURRENCE_FINDING') },
+
+  /**
    * Autonomy live execution.
    *
    * Separate explicit production lever for real autonomous mutations. The
