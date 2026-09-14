@@ -24,6 +24,11 @@ export interface ProbeContext {
   table?: string
   /** Whether the failing request carried an end-user identity. */
   callerIdentityPresent?: boolean
+  /**
+   * Member tables of the subsystem under investigation. Present only for the
+   * structural symptom; the runtime symptoms reason about one table.
+   */
+  membership?: string[]
 }
 
 export type ProbeFn = (ctx: ProbeContext) => Promise<{ outcome: string; detail?: string }>
@@ -278,7 +283,14 @@ export const databaseReachable: ProbeFn = async () => {
 }
 
 /** testId → probe. Keys must match the catalog's test ids exactly. */
+// Structural probes live in their own module because their admissibility was
+// decided in advance (docs/structural-probe-inventory.md) and their failure
+// mode is different: they THROW when an instrument is unavailable rather than
+// returning a confident negative.
+import { STRUCTURAL_PROBES } from './structural-probes'
+
 export const PROBE_REGISTRY: Record<string, ProbeFn> = {
+  ...STRUCTURAL_PROBES,
   service_rows: serviceRows,
   contract_match: contractMatch,
   caller_identity: callerIdentity,
