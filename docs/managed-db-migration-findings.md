@@ -1,6 +1,8 @@
 # Managed database migration — findings and acceptance gate
 
-Status: **investigation banked, implementation deferred.** No code here.
+Status: **investigation active** on `infra/managed-db-migration-baseline`. The
+section *Repo inspection corrections* (2026-09-15) records where the first
+version of this document was wrong; the sections after it are corrected in place.
 
 ## Why this document exists
 
@@ -13,9 +15,120 @@ This records what was measured, so none of it has to be rediscovered, and fixes
 the acceptance gate in advance so the follow-up work cannot become open-ended
 archaeology.
 
-Every claim below was measured against the real staging environment from a
-one-shot Fargate task, not inferred. Nothing was written to the staging
-database; the only mutations were inside throwaway schemas that were dropped.
+Every claim about staging below was measured against the real staging
+environment from a one-shot Fargate task, not inferred. Nothing was written to
+the staging database; the only mutations were inside throwaway schemas that were
+dropped.
+
+---
+
+## Repo inspection corrections (2026-09-15)
+
+An inspection of the repository before building the lineage probe contradicted
+several statements the first version of this document made. This section keeps
+the evidence, so the earlier claims are not rediscovered as facts.
+
+### 1. `prisma/migrations/` is not part of the repository
+
+`.gitignore` excludes `/prisma/migrations`. None of the 18 migration directories
+or 6 loose files exist on `main` or in the private overlay repository; they exist
+only in a local working tree. Public history begins at the OSS import on
+2026-07-23, so no file in that corpus has reachable git history, and ordering the
+loose files "from git history" is impossible.
+
+The corpus is preserved as forensic evidence under
+`tools/migration-lineage/evidence/`, with a SHA-256 for every file. It is not
+Backenly's migration history and must never be executed as deployment history.
+`/prisma/migrations` stays ignored.
+
+### 2. The migration chain describes less than half of the schema
+
+Replayed intact, one file per simple-protocol query, into an empty PostgreSQL 16.4:
+
+```
+legacy chain, 18 migrations in Prisma order   18/18 replayed, 50 tables
+schema.prisma projection                      119 tables
+tables only in the schema.prisma projection   69
+shared tables whose columns differ            11
+```
+
+The projection is `prisma migrate diff --from-empty --to-schema-datamodel
+prisma/schema.prisma --script`, which needs no database. `add_auth_security` has
+no timestamp and sorts last in Prisma's order.
+
+The chain is historical evidence, not a candidate baseline. A future baseline
+would most likely be generated from the current schema rather than by marking
+these 18 migrations applied.
+
+### 3. Four of the six loose files cannot apply to the chain
+
+Each file applied on its own to a clone of the replayed chain:
+
+```
+add_mcp_read_only_keys.sql   applies
+add_signup_trust.sql         applies
+add_api_versioning.sql       42704  MySQL-style inline INDEX; invalid PostgreSQL
+add_oidc_delegation.sql      42601  MySQL-style inline INDEX; invalid PostgreSQL
+add_rls_policies.sql         42P01  relation "Table" does not exist
+uncap_autonomy_healing.sql   42703  column exists only after db push
+```
+
+The two invalid files can never have run on any PostgreSQL as written; the chain
+creates their tables with valid syntax. `add_rls_policies.sql` addresses Prisma
+*model* names, but every model it names except `Deployment` is mapped to a
+snake_case table, and `ExecutionHistory` is not a model at all.
+
+A file sent as one simple query is one implicit transaction, so each failure
+above had no effect. A historical `psql` run without `ON_ERROR_STOP` continues
+past errors, so partial effects are possible. A replay result therefore cannot
+stand in for a file's footprint.
+
+### 4. Staging was not built from migrations plus hand patches
+
+The recorded provisioning path for the AWS candidate takes a fresh database
+through:
+
+```
+db:generate → db:push → bootstrap → postgrest-install.sh
+  → setup-postgrest-roles.ts → setup-direct-access.sql → bootstrap
+```
+
+The six loose files are not proven to have been applied to staging.
+
+### 5. Production provisioning lineage is unknown
+
+Nothing inspected records whether production RDS was restored from the Hetzner
+dump, built by `db push`, or produced some other way. Do not infer it from staging
+or from historical Hetzner behaviour.
+
+### 6. The loose files are not the only non-Prisma SQL
+
+Repository-owned code creates database structure outside Prisma:
+
+```
+scripts/sql/postgrest-schema-registry.sql    functions, a table, a policy, event triggers
+scripts/sql/postgrest-ddl-sync.sql           functions, an event trigger
+scripts/setup-direct-access.sql              functions, policies, event triggers
+scripts/setup-postgrest-roles.ts             roles, grants, default privileges
+scripts/bootstrap.ts                         schemas
+scripts/apply-webhook-domain-migration.sql   tables, indexes, a function, triggers
+scripts/apply-billing-migration.sql          tables
+scripts/add-billing-minimal.sql              tables
+scripts/create-integration-keys-table.cjs    a table
+scripts/enable-rls.ts → lib/db/rls.ts        RLS and policies
+```
+
+Treating every non-Prisma object as unexplained would fail any gate for the wrong
+reason. The installers also create and alter cluster-wide roles, so they cannot be
+replayed into a scratch database on a shared instance without changing the
+instance itself.
+
+### 7. One task definition cannot carry the whole probe
+
+Gzipped: `pg` client 24.2 KB, legacy chain 8.4 KB, schema projection 14.3 KB,
+loose files 4.0 KB, installers 18.9 KB, RDS CA bundle 2.9 KB. Base64-encoded
+together they exceed the 64 KB task-definition limit, so the probe runs one task
+per database state. (The 33.9 KB figure in section 6 included the smoke probe.)
 
 ---
 
@@ -32,18 +145,17 @@ migration rows              0
 
 The schema is fully built and there is **no migration ledger at all**. The
 documented deploy path runs `npm run db:push`, which synchronises schema without
-recording history — so the 25 entries under `prisma/migrations/` have never been
-applied here.
+recording history, and the migration corpus was never delivered to this database.
 
 **Consequence:** pointing `prisma migrate deploy` at this database would see
 every migration as unapplied while its schema effects already exist. Best case it
 fails on the first `CREATE TABLE`; worse, it partially applies and leaves a
 divergent ledger.
 
-## 2. `prisma/migrations/` contains 18 migrations and 6 loose files
+## 2. The local migration corpus: 18 migrations and 6 loose files, untracked
 
 ```
-18  directories containing migration.sql   ← the Prisma chain
+18  directories containing migration.sql   ← the legacy Prisma chain
  6  loose .sql files                       ← invisible to Prisma
       add_api_versioning.sql
       add_mcp_read_only_keys.sql
@@ -54,12 +166,12 @@ divergent ledger.
 ```
 
 Prisma only reads directories containing `migration.sql`. **Nothing in the
-repository applies the six loose files** — no script, no workflow, no deploy
-step references any of them. They were applied by hand.
+repository applies the six loose files**, no script, no workflow, no deploy step
+references any of them. Where they were applied, it was by hand.
 
-So the live schema is the product of `db push` **plus** six manual patches, and
-replaying the 18-migration chain into an empty database cannot reproduce the six
-unless their effects also reached `schema.prisma`.
+The whole corpus is gitignored (correction 1). The chain builds 50 of 119 tables
+(correction 2), four loose files cannot apply to it (correction 3), and staging
+was provisioned by `db push` and installers rather than by either (correction 4).
 
 ## 3. No image can run migrations
 
@@ -78,7 +190,8 @@ The runtime image is narrower still — `dist-runtime`, `@prisma/client`,
 The cause is structural rather than an oversight: **`prisma` is a
 devDependency**, and the web image ships Next's standalone *traced*
 `node_modules`, which contains only what application code imports. The CLI is
-never imported, so it is never traced in.
+never imported, so it is never traced in. The migration directories were never
+in the repository to begin with (correction 1).
 
 ## 4. The startup migration guard cannot work here
 
@@ -129,9 +242,10 @@ created                       1 table, 2 functions, 1 trigger
 ```
 
 **`pg` does not need to be in the image.** Bundled with esbuild, minified and
-gzipped, it is 33.9 KB inside a task definition — well under the 64 KB limit —
-and the existing ephemeral Fargate harness carries it unchanged. **Docker and ECR
-are therefore unnecessary for lineage analysis.**
+gzipped, the smoke probe was 33.9 KB inside a task definition, and the existing
+ephemeral Fargate harness carries it unchanged. **Docker and ECR are therefore
+unnecessary for lineage analysis.** A single task cannot carry every SQL input as
+well, so the lineage probe uses one task per database state (correction 7).
 
 ## 7. TLS needs explicit handling, and the shortcut must not be inherited
 
@@ -143,25 +257,25 @@ SSL config takes effect.
 The smoke test used `rejectUnauthorized: false` because it was read-only,
 ephemeral, and connecting to a private endpoint from inside the same VPC. **The
 lineage probe must not inherit that** — it creates databases and replays DDL, so
-it should embed the AWS RDS CA bundle and verify properly.
+it should embed the AWS RDS CA bundle and verify properly. A wrong-CA connection
+must be shown to fail, or the verification proves nothing.
 
 ## 8. Open question: RLS policy visibility
 
-The smoke test read `pg_policies` and saw **zero rows** for the whole cluster.
-That is either genuinely zero policies in `public`, or a visibility/context
-limitation of this role.
+The smoke test read `pg_policies` and saw **zero rows**. `pg_policies` covers only
+the database the session is connected to, so that observation covers one
+database, not the cluster. It is either genuinely zero policies, or a query,
+filter or visibility problem.
 
-It must be attributed before any comparison is trusted, because
-`add_rls_policies.sql` is one of the six loose files, and "no policies" is
+It must be attributed before any comparison is trusted, because "no policies" is
 exactly what a broken read looks like.
 
 **Do not assume privilege visibility is the explanation.** That is the
 comfortable answer and it is unfalsifiable from a single empty result. Settle it
 by joining `pg_policy` to `pg_class` and `pg_namespace` directly rather than
-reading the `pg_policies` view, and by inspecting `relrowsecurity` and
-`relforcerowsecurity` on the tables themselves. Those distinguish "these tables
-genuinely carry no policies" from "the view, the query or a filter missed them",
-which the view alone cannot.
+reading the `pg_policies` view, by inspecting `relrowsecurity` and
+`relforcerowsecurity` on the tables themselves, and by a positive control: a
+policy created in a scratch database must be seen by the same query.
 
 ## 9. What the RDS rehearsal already proved
 
@@ -181,75 +295,98 @@ That result carries one invariant for any future work here:
 
 ---
 
-## The acceptance gate
+## The acceptance gate (revised 2026-09-15)
 
-Fixed in advance, so the follow-up cannot drift into indefinite investigation.
+The original three-way model (chain / chain plus the six patches / staging) is
+withdrawn. Correction 3 makes "chain plus patches" a database that never existed,
+and correction 4 means staging was never built from either.
 
-The comparison is **three-way**, not scratch-versus-staging:
+The question is now: **can the current Prisma model plus explicitly documented
+non-Prisma effects fully explain staging?**
 
 ```
-A = scratch built by replaying the 18 migration.sql files
-B = A plus the six loose patches, in a historically derived order
-C = staging, untouched and read-only
+A  legacy 18-migration chain, replayed into a scratch database   historical evidence
+P  current schema.prisma projection, in a scratch database        the canonical model
+C  staging, read-only                                             the reference
+M  reviewed manifests of non-Prisma effects                       legacy SQL, provisioning
+```
 
-A ↔ C   everything the Prisma chain cannot explain
-B ↔ C   residual divergence after known hand patches
-A ↔ B   the exact footprint of the loose files
+```
+A ↔ P   how far the historical chain fell behind the current model    reported, not gating
+P ↔ C   what staging holds beyond or below schema.prisma              gating
+M       explains the P ↔ C differences Prisma cannot represent
 ```
 
 Every difference is classified:
 
 ```
-represented_in_schema_prisma     arrived via db push; chain simply lacks it
-known_loose_sql_effect           attributable to one of the six files
-unexplained_divergence           neither
+represented_in_schema_prisma        present in P
+known_legacy_sql_effect             matches a legacy loose-file manifest entry
+known_provisioning_effect           matches a named provisioning source
+expected_environmental_difference   narrow: genuine engine or host facts only
+unexplained_divergence              none of the above
 ```
+
+**Attribution matches semantics, not names.** A staging object is attributed to a
+manifest entry only when its definition matches the entry's intended effect:
+type, nullability, default, index columns and predicate, trigger timing and
+events, policy command, roles and expressions, `SECURITY DEFINER`, and so on.
+
+Each legacy loose-file manifest records `source_file`, `replay_status`
+(`valid_postgres`, `invalid_postgres`, `depends_on_db_push`,
+`partial_historical_effect_possible`, `unknown`), `intended_effects`,
+`observed_matching_effects_on_staging`, `confidence` and `notes`.
+
+Cluster-wide state (roles, memberships, role-level settings) is reported in a
+separate provisioning inventory, not folded into schema equivalence.
 
 Comparison must be semantic, not counts: tables, columns (type, nullability,
 default, identity/generated), primary keys, foreign keys, unique and check
 constraints, indexes, enums and user-defined types, RLS enabled/forced state,
-`pg_policies`, triggers and trigger functions, and views. Normalise whitespace
-and OIDs; **do not** normalise away `SECURITY DEFINER`, trigger timing and
-events, policy commands and roles, or function bodies.
+policies, triggers and trigger functions, routines, views and extensions.
+Normalise whitespace and OIDs; **do not** normalise away `SECURITY DEFINER`,
+trigger timing and events, policy commands and roles, or function bodies.
 
-Ordering of the six loose files is derived from git history and dependency
-analysis. Where an order cannot be established, the file is reported
-`replay: NOT_PROVEN` with its DDL targets attributed — **never** by trying
-permutations until one succeeds.
+Where a loose file's history cannot be established, it is reported as such with
+its intended effects attributed. **Never** try orderings or permutations until
+something runs.
 
-Do **not** create `_prisma_migrations` in the scratch databases. This gate
-answers a schema-lineage question; ledger semantics belong to a later
-`migrate resolve` rehearsal.
+Do **not** create `_prisma_migrations` in any database. This gate answers a
+schema-lineage question; ledger semantics belong to a later `migrate resolve`
+rehearsal.
 
 ### The decision
 
 ```
-18 migrations replay successfully
-        ↓
-known hand-patch effects attributed
-        ↓
-chain + known patches compared with staging
-        ↓
-unexplained semantic divergence == 0
-        ↓
-ONLY THEN design the migrate-resolve baseline
+STAGING_BASELINE_ELIGIBLE only if
+  objects in P missing from C, or defined differently in C   = 0
+  AND every semantic C-only object is known_legacy_sql_effect,
+      known_provisioning_effect or expected_environmental_difference
+  AND unexplained_divergence                                 = 0
+  AND every capture and replay the verdict depends on is conclusive
 ```
 
-- **residual unexplained divergence == 0** → history is incomplete but the
-  database state is explainable; baselining is tractable.
-- **residual unexplained divergence > 0** → stop. The push history and the
-  migration chain describe different worlds, and the result is a deliberate
-  reconciliation project, not "keep trying until it looks close."
-- **any part of the chain cannot be replayed faithfully** → inconclusive, no
-  baseline.
+- **Any count above is nonzero** → `RECONCILIATION_REQUIRED`. Stop and report the
+  residual differences. This is a deliberate reconciliation project, not "keep
+  trying until it looks close."
+- **Any capture or replay is not conclusive** → `INCONCLUSIVE`. No baseline.
 
-### After a passing gate
+**The verdict is scoped to staging, never global.** `STAGING_BASELINE_ELIGIBLE`
+authorizes designing and rehearsing a staging baseline and nothing more. Before
+production goes anywhere near `migrate resolve`, it needs its own read-only
+capture (`C_production`) and established provisioning provenance. If production
+descends from a Hetzner restore, the legacy loose files may matter there even
+though they did not on staging.
 
-Build a dedicated migration image or job — **not** Prisma CLI plus 25 migration
-directories added to the web or runtime images. Deployment tooling stays out of
-long-running application containers. The runner should refuse by default without
-an explicit target (`scratch`), require a separate mode for a staging baseline,
-and require an entirely different confirmation path for production.
+### After a passing staging gate
+
+Build a dedicated migration image or job, **not** the Prisma CLI plus a migration
+corpus added to the web or runtime images. Deployment tooling stays out of
+long-running application containers. The baseline itself would most likely be
+generated from the current `schema.prisma` rather than taken from the legacy
+chain. The runner should refuse by default without an explicit target
+(`scratch`), require a separate mode for a staging baseline, and require an
+entirely different confirmation path for production.
 
 Do not remove `db push` from the existing deploy path until staging has
 completed that whole transition.
