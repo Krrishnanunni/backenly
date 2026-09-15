@@ -13,7 +13,7 @@ const secret = (name, env = 'staging') => ({
   valueFrom: `arn:aws:secretsmanager:ap-south-1:${ACCOUNT}:secret:backenly-${env}/${name.toLowerCase()}-Ab12Cd`,
 })
 
-function resultEvents(result) {
+function resultLines(result) {
   const body = JSON.stringify(
     {
       result,
@@ -25,9 +25,23 @@ function resultEvents(result) {
     null,
     2,
   )
-  return ['[rehearsal] schema _rehearsal_1700000000000', RESULT_BEGIN, ...body.split('\n'), RESULT_END].map(
-    (message, i) => ({ timestamp: 1700000000000 + i, message }),
-  )
+  return ['[rehearsal] schema _rehearsal_1700000000000', RESULT_BEGIN, ...body.split('\n'), RESULT_END]
+}
+
+const events = lines => lines.map((message, i) => ({ timestamp: 1700000000000 + i, message }))
+
+/**
+ * A log stream split into pages the way get-log-events serves it: each page
+ * names the token for the next, and the token past the last page returns no
+ * events and itself.
+ */
+function logPages(...pages) {
+  const byToken = {}
+  pages.forEach((lines, i) => {
+    byToken[i === 0 ? '' : `f/${i}`] = { events: events(lines), nextForwardToken: `f/${i + 1}` }
+  })
+  byToken[`f/${pages.length}`] = { events: [], nextForwardToken: `f/${pages.length}` }
+  return { __byNextToken: byToken }
 }
 
 function base() {
@@ -58,12 +72,14 @@ function base() {
     'ecs describe-tasks': {
       tasks: [{ stoppedReason: 'Essential container in task exited', containers: [{ exitCode: 0 }] }],
     },
-    'logs get-log-events': { events: resultEvents('PASS'), nextForwardToken: 'f/end' },
+    'logs get-log-events': logPages(resultLines('PASS')),
     'ecs deregister-task-definition': { taskDefinition: { taskDefinitionArn: TASK_DEF_ARN } },
   }
 }
 
 const with_ = patch => ({ ...base(), ...patch })
+const pass = resultLines('PASS')
+const cut = Math.floor(pass.length / 2)
 
 module.exports = [
   { name: 'refuses without an expected account', account: undefined, aws: base() },
@@ -101,12 +117,18 @@ module.exports = [
   { name: 'refuses a bundle older than its source', account: ACCOUNT, staleBundle: true, aws: base() },
   { name: 'run-task failures', account: ACCOUNT, aws: with_({ 'ecs run-task': { tasks: [], failures: [{ reason: 'RESOURCE:CPU' }] } }) },
   { name: 'PASS result', account: ACCOUNT, aws: base() },
-  { name: 'FAIL result', account: ACCOUNT, aws: with_({ 'logs get-log-events': { events: resultEvents('FAIL'), nextForwardToken: 'f/end' } }) },
-  {
-    name: 'no machine-readable result',
-    account: ACCOUNT,
-    aws: with_({ 'logs get-log-events': { events: [{ timestamp: 1, message: 'crashed before result' }], nextForwardToken: 'f/end' } }),
-  },
+  { name: 'FAIL result', account: ACCOUNT, aws: with_({ 'logs get-log-events': logPages(resultLines('FAIL')) }) },
+  { name: 'no machine-readable result', account: ACCOUNT, aws: with_({ 'logs get-log-events': logPages(['crashed before result']) }) },
   { name: 'log read throws', account: ACCOUNT, aws: with_({ 'logs get-log-events': { __throw: 'ResourceNotFoundException: stream' } }) },
   { name: 'deregister throws', account: ACCOUNT, aws: with_({ 'ecs deregister-task-definition': { __throw: 'AccessDenied' } }) },
+  {
+    name: 'result split across log pages',
+    account: ACCOUNT,
+    aws: with_({ 'logs get-log-events': logPages(pass.slice(0, cut), pass.slice(cut)) }),
+  },
+  {
+    name: 'result delivered after the task stopped',
+    account: ACCOUNT,
+    aws: with_({ 'logs get-log-events': { __byAttempt: [logPages(pass.slice(0, cut)), logPages(pass)] } }),
+  },
 ]

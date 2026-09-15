@@ -90,7 +90,9 @@ async function main(): Promise<void> {
   }
 
   const exitCode = await withEphemeralTaskDefinition(ctx, spec, taskDefArn => {
-    const lines = runTaskAndReadLogs(ctx, taskDefArn, spec)
+    const lines = runTaskAndReadLogs(ctx, taskDefArn, spec, {
+      complete: ls => ls.some(l => l.includes(RESULT_END)),
+    })
 
     const a = lines.findIndex(l => l.includes(RESULT_BEGIN))
     const b = lines.findIndex(l => l.includes(RESULT_END))

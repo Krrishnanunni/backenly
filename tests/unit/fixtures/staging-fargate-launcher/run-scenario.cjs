@@ -17,7 +17,13 @@ function runScenario(launcherPath, scenario) {
     if (scenario.staleBundle) fs.utimesSync(bundle, new Date(0), new Date(0))
 
     const log = path.join(dir, 'aws-calls.jsonl')
-    const env = { ...process.env, SHIM_SCENARIO: JSON.stringify(scenario.aws), SHIM_LOG: log }
+    const env = {
+      ...process.env,
+      SHIM_SCENARIO: JSON.stringify(scenario.aws),
+      SHIM_LOG: log,
+      // Log-delivery retries would otherwise sleep between attempts.
+      STAGING_TASK_LOG_POLL_MS: '0',
+    }
     delete env.REHEARSAL_AWS_ACCOUNT_ID
     if (scenario.account !== undefined) env.REHEARSAL_AWS_ACCOUNT_ID = scenario.account
 

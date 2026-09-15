@@ -216,6 +216,22 @@ export function resolveStagingTaskContext(): StagingTaskContext {
   return { net, srcDef, secrets }
 }
 
+/**
+ * A refusal raised inside a task body.
+ *
+ * `die()` calls `process.exit`, which skips `finally`. Inside a registered task
+ * that meant a refused `run-task` left its task definition behind, which is the
+ * one thing this module promises never to do. Throwing lets cleanup run first.
+ */
+export class StagingTaskRefusal extends Error {}
+
+export function refuse(msg: string): never {
+  throw new StagingTaskRefusal(msg)
+}
+
+/** A run whose own verdict passed but whose task definition could not be removed. */
+export const EXIT_CLEANUP_FAILED = 3
+
 export interface OneShotTaskSpec {
   family: string
   containerName: string
@@ -280,18 +296,72 @@ export async function withEphemeralTaskDefinition(
   console.log(`  registered ${taskDefArn.split('/').pop()}`)
 
   let exitCode = 1
+  let cleanupFailed = false
   try {
     exitCode = await body(taskDefArn)
+  } catch (err) {
+    if (!(err instanceof StagingTaskRefusal)) throw err
+    console.error(`\n  REFUSED: ${err.message}\n`)
+    exitCode = 2
   } finally {
     // Ephemeral by construction: nothing durable is left behind in staging.
     try {
       aws(['ecs', 'deregister-task-definition', '--task-definition', taskDefArn])
       console.log(`  deregistered ${taskDefArn.split('/').pop()}`)
     } catch (err) {
-      console.error('  WARNING: could not deregister the task definition:', err)
+      console.error(
+        `  CLEANUP FAILED: ${taskDefArn.split('/').pop()} is still registered: ` +
+          (err instanceof Error ? err.message : String(err)),
+      )
+      console.error('  deregister it by hand; this run does not count as clean')
+      cleanupFailed = true
     }
   }
-  return exitCode
+  // A passing verdict with a leaked task definition is not a clean run.
+  return cleanupFailed && exitCode === 0 ? EXIT_CLEANUP_FAILED : exitCode
+}
+
+function sleepSync(ms: number): void {
+  if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/**
+ * Every event in one log stream, in order.
+ *
+ * `get-log-events` returns at most 1 MB or 10,000 events per call, and the CLI
+ * does not paginate it. The first version of this launcher read one page, which
+ * is invisible for a few dozen rehearsal lines and silently truncates anything
+ * larger. A stream has ended when AWS hands back the same forward token it was
+ * given.
+ */
+export function readLogStream(stream: string): string[] {
+  const lines: string[] = []
+  let token: string | undefined
+  for (let page = 0; page < 1000; page++) {
+    const args = [
+      'logs', 'get-log-events',
+      '--log-group-name', LOG_GROUP,
+      '--log-stream-name', stream,
+      '--start-from-head',
+    ]
+    if (token) args.push('--next-token', token)
+    const res = aws(args)
+    for (const e of res?.events ?? []) lines.push(String(e.message))
+    const next: string | undefined = res?.nextForwardToken
+    if (!next || next === token) return lines
+    token = next
+  }
+  throw new Error(`log stream ${stream} did not end within 1000 pages`)
+}
+
+export interface LogReadOptions {
+  /**
+   * True once the lines contain everything the launcher needs. CloudWatch can
+   * still be delivering events after the task has stopped, so an incomplete
+   * read is retried rather than parsed.
+   */
+  complete?: (lines: string[]) => boolean
+  attempts?: number
 }
 
 /** Run one task, wait for it to stop, and return its log lines. */
@@ -299,6 +369,7 @@ export function runTaskAndReadLogs(
   ctx: StagingTaskContext,
   taskDefArn: string,
   spec: OneShotTaskSpec,
+  opts: LogReadOptions = {},
 ): string[] {
   const netCfg = JSON.stringify({
     awsvpcConfiguration: {
@@ -319,7 +390,7 @@ export function runTaskAndReadLogs(
     '--network-configuration', netCfg,
     '--started-by', spec.startedBy,
   ])
-  if (run?.failures?.length) die(`run-task failed: ${JSON.stringify(run.failures)}`)
+  if (run?.failures?.length) refuse(`run-task failed: ${JSON.stringify(run.failures)}`)
 
   const taskArn: string = run.tasks[0].taskArn
   const taskId = taskArn.split('/').pop()!
@@ -336,21 +407,28 @@ export function runTaskAndReadLogs(
   const containerExit = done?.containers?.[0]?.exitCode
   console.log(`  task stopped: ${done?.stoppedReason ?? 'n/a'} (exit ${containerExit})`)
 
-  let events: any[] = []
-  try {
-    events = aws([
-      'logs', 'get-log-events',
-      '--log-group-name', LOG_GROUP,
-      '--log-stream-name', `${spec.logPrefix}/${spec.containerName}/${taskId}`,
-      '--start-from-head',
-    ])?.events ?? []
-  } catch (err) {
-    // Reporting failure, not a verdict. The launcher's result parsing is the
-    // authority; crashing here would skip the cleanup that makes it ephemeral.
-    console.error('  could not read task logs:', err instanceof Error ? err.message : err)
+  const stream = `${spec.logPrefix}/${spec.containerName}/${taskId}`
+  const attempts = opts.attempts ?? (opts.complete ? 6 : 1)
+  // Overridable so the launcher tests do not sleep; there is no reason to set
+  // it for a real run.
+  const pollMs = Number(process.env.STAGING_TASK_LOG_POLL_MS ?? 5000)
+
+  let lines: string[] = []
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      lines = readLogStream(stream)
+      if (!opts.complete || opts.complete(lines)) break
+      if (attempt < attempts) {
+        console.log(`  logs incomplete, waiting for delivery (${attempt}/${attempts})`)
+      }
+    } catch (err) {
+      // Reporting failure, not a verdict. The launcher's result parsing is the
+      // authority; crashing here would skip the cleanup that makes it ephemeral.
+      console.error('  could not read task logs:', err instanceof Error ? err.message : err)
+    }
+    if (attempt < attempts) sleepSync(pollMs)
   }
 
-  const lines: string[] = events.map((e: any) => String(e.message))
   for (const l of lines) console.log(`    | ${l}`)
   return lines
 }
