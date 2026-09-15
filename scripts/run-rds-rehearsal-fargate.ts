@@ -37,7 +37,7 @@
  *
  * ── Usage ───────────────────────────────────────────────────────────────────
  *
- *   npx tsx scripts/run-rds-rehearsal-fargate.ts
+ *   REHEARSAL_AWS_ACCOUNT_ID=<staging account id>  *     npx tsx scripts/run-rds-rehearsal-fargate.ts
  *
  * Requires an authenticated AWS CLI on PATH. Exits non-zero if the rehearsal
  * fails or if any guard below refuses.
@@ -53,7 +53,13 @@ import { join } from 'node:path'
 // rehearsal at production. Every one of these is checked against what AWS
 // actually reports, never against what was passed in.
 
-const EXPECTED_ACCOUNT = '510155707664'
+// Supplied by the operator, not written down here. This repository is public,
+// and an account id in public source is free reconnaissance: it is the missing
+// half of every role ARN someone would need to guess. Reading it from the
+// environment leaves the guard exactly as strong, because unset refuses and a
+// mismatch refuses, and the value is still compared against what STS actually
+// reports rather than against anything passed in.
+const EXPECTED_ACCOUNT = process.env.REHEARSAL_AWS_ACCOUNT_ID?.trim() ?? ''
 const EXPECTED_REGION = 'ap-south-1'
 const CLUSTER = 'backenly-staging'
 const SOURCE_SERVICE = 'backenly-staging-runtime'
@@ -86,6 +92,12 @@ function die(msg: string): never {
 }
 
 function assertStagingOnly(): void {
+  if (!EXPECTED_ACCOUNT) {
+    die(
+      'REHEARSAL_AWS_ACCOUNT_ID is not set. Set it to the staging account id this ' +
+        'rehearsal is allowed to run against. It is deliberately not hardcoded.',
+    )
+  }
   const id = aws(['sts', 'get-caller-identity'])
   if (id?.Account !== EXPECTED_ACCOUNT) {
     die(`account is ${id?.Account}, expected ${EXPECTED_ACCOUNT}`)
