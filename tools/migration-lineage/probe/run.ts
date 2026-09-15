@@ -24,14 +24,8 @@
  */
 
 import { createHash } from 'node:crypto'
-import {
-  captureSnapshot,
-  checkRlsControl,
-  rlsVisibility,
-  RLS_CONTROL_SQL,
-  type RlsVisibility,
-  type Snapshot,
-} from './capture'
+import { captureSnapshot, rlsVisibility, type RlsVisibility, type Snapshot } from './capture'
+import { checkRlsControl, RLS_CONTROL_SQL } from './rls-control'
 import {
   clientConfig,
   connect,
