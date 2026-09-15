@@ -224,6 +224,28 @@ export async function diagnoseStructuralCause(
   }
 
   if (verdict.kind === 'ambiguous') {
+    // The same blind-instrument rule, on the path that also needs it.
+    //
+    // A tie can mean two things: every separating test ran and none of them
+    // separated, or the one test that WOULD have separated them never ran.
+    // `verdict.reason` cannot tell those apart, because a test removed as
+    // unavailable leaves the engine's "nothing left to ask" set looking
+    // identical to an exhausted one. Reporting the tie alone would describe a
+    // blind instrument as an exhausted one -- the exact confusion this module
+    // exists to prevent, arrived at by a different route than the conclusive
+    // branch above.
+    const surviving = new Set(verdict.candidates.map(c => c.id))
+    const blindfolds = blockedBy.filter(b => surviving.has(b.hypothesis))
+    if (blindfolds.length > 0) {
+      return {
+        ...base,
+        kind: 'inconclusive',
+        reason:
+          `${verdict.reason} The evidence that would have separated them did not run: ` +
+          `${blindfolds.map(b => `${b.test} (${b.reason})`).join('; ')}.`,
+      }
+    }
+
     return {
       ...base,
       kind: 'inconclusive',
