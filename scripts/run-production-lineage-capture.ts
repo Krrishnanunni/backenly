@@ -276,21 +276,27 @@ async function run(from: string, out: string): Promise<void> {
     },
   }
 
-  const registered = aws([
-    'ecs', 'register-task-definition',
-    '--family', FAMILY,
-    '--requires-compatibilities', 'FARGATE',
-    '--network-mode', 'awsvpc',
-    '--cpu', '512',
-    '--memory', '1024',
-    '--execution-role-arn', srcDef.executionRoleArn,
-    '--container-definitions', JSON.stringify([container]),
-  ])?.taskDefinition
-  const taskDefArn: string = registered.taskDefinitionArn
-  console.log(`  registered ${taskDefArn.split('/').pop()}`)
-
+  // Cleanup is armed from the moment a durable AWS resource can exist, so it
+  // covers the window between a successful registration and reading its ARN.
+  // Registering outside the try is how the staging launcher leaked a task
+  // definition once already.
+  let taskDefArn: string | null = null
   let exitCode = 1
   try {
+    const registered = aws([
+      'ecs', 'register-task-definition',
+      '--family', FAMILY,
+      '--requires-compatibilities', 'FARGATE',
+      '--network-mode', 'awsvpc',
+      '--cpu', '512',
+      '--memory', '1024',
+      '--execution-role-arn', srcDef.executionRoleArn,
+      '--container-definitions', JSON.stringify([container]),
+    ])?.taskDefinition
+    if (!registered?.taskDefinitionArn) throw new Error('register-task-definition returned no taskDefinitionArn')
+    taskDefArn = String(registered.taskDefinitionArn)
+    console.log(`  registered ${taskDefArn.split('/').pop()}`)
+
     const netCfg = JSON.stringify({
       awsvpcConfiguration: { subnets: net.subnets, securityGroups: net.securityGroups, assignPublicIp: net.assignPublicIp },
     })
@@ -335,13 +341,16 @@ async function run(from: string, out: string): Promise<void> {
       exitCode = result.verdict === 'PASS' ? 0 : 1
     }
   } finally {
-    try {
-      aws(['ecs', 'deregister-task-definition', '--task-definition', taskDefArn])
-      console.log(`  deregistered ${taskDefArn.split('/').pop()}`)
-    } catch (err) {
-      console.error(`  CLEANUP FAILED: ${taskDefArn.split('/').pop()} is still registered: ${err instanceof Error ? err.message : String(err)}`)
-      console.error('  deregister it by hand; this run does not count as clean')
-      if (exitCode === 0) exitCode = 3
+    if (taskDefArn) {
+      const name = taskDefArn.split('/').pop()
+      try {
+        aws(['ecs', 'deregister-task-definition', '--task-definition', taskDefArn])
+        console.log(`  deregistered ${name}`)
+      } catch (err) {
+        console.error(`  CLEANUP FAILED: ${name} is still registered: ${err instanceof Error ? err.message : String(err)}`)
+        console.error('  deregister it by hand; this run does not count as clean')
+        if (exitCode === 0) exitCode = 3
+      }
     }
   }
   process.exit(exitCode)
