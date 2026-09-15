@@ -362,6 +362,8 @@ export interface LogReadOptions {
    */
   complete?: (lines: string[]) => boolean
   attempts?: number
+  /** Which lines to echo to the console. Every line is still returned. */
+  echo?: (line: string) => boolean
 }
 
 /** Run one task, wait for it to stop, and return its log lines. */
@@ -429,6 +431,6 @@ export function runTaskAndReadLogs(
     if (attempt < attempts) sleepSync(pollMs)
   }
 
-  for (const l of lines) console.log(`    | ${l}`)
+  for (const l of lines) if (!opts.echo || opts.echo(l)) console.log(`    | ${l}`)
   return lines
 }

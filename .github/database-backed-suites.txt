@@ -114,3 +114,10 @@ __tests__/edition/project-lifecycle.test.ts
 # table. A mock cannot show that, and "returns one project" would pass against
 # an enumeration that happened to find one.
 __tests__/edition/fleet-scheduler.test.ts
+
+# The migration-lineage probe, against a real engine. Four properties have no
+# meaning without one: that a whole migration file survives as a single
+# submission (Prisma's raw API cannot send one at all), that the capture reads
+# the semantics the comparison depends on rather than object names, that the RLS
+# reads see a policy that exists, and that a scratch database is always dropped.
+tests/integration/migration-lineage-probe-db.spec.ts
