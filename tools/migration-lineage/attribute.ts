@@ -42,8 +42,27 @@ export type ReplayStatus =
 export interface ManifestEntry {
   /** Exactly the key diff.ts produces: "<kind> <identity>". */
   key: string
-  /** Field values this source is expected to produce. Never empty. */
+  /**
+   * Field values this source is expected to produce. Never empty.
+   *
+   * Only what should GATE equality belongs here. A property worth recording but
+   * not worth failing on — an extension version, say — goes in `observed`.
+   */
   expect: Record<string, unknown>
+  /** A narrower class within the bucket, for entries that need one. */
+  subtype?: 'platform_extension'
+  /** Who is responsible for creating it. */
+  ownership?: string
+  /** Whether the platform depends on it, as opposed to tolerating it. */
+  required?: boolean
+  /** Repository paths that establish the provenance claim. */
+  evidence?: string[]
+  /** A server-level condition the object alone does not prove. */
+  serverPrerequisite?: string
+  /** What a real check of this object would have to establish. */
+  validation?: string
+  /** Recorded at capture time, deliberately NOT gating. */
+  observed?: Record<string, unknown>
   note?: string
 }
 

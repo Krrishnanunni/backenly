@@ -9,7 +9,10 @@
  * nothing.
  */
 
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { capabilityParity, requiredExtensions } from '../../tools/production-lineage/capability-parity'
+import { validateManifest, type Manifest } from '../../tools/migration-lineage/attribute'
 import {
   assertReadOnlyBundle,
   assertReadOnlyModuleGraph,
@@ -29,6 +32,13 @@ import { attribute } from '../../tools/migration-lineage/attribute'
 import type { Snapshot } from '../../tools/migration-lineage/probe/capture'
 
 const ROOT = join(__dirname, '..', '..')
+
+const EMPTY_SNAPSHOT: Snapshot = {
+  meta: { database: 'd', serverVersion: '16.13', schemas: ['public'] },
+  schemas: [{ name: 'public', owner: 'o' }],
+  tables: [], columns: [], constraints: [], indexes: [], types: [], sequences: [],
+  policies: [], triggers: [], routines: [], views: [], eventTriggers: [], extensions: [],
+}
 
 async function bundle(entry: string): Promise<{ code: string; modules: string[] }> {
   const { build } = await import('esbuild')
@@ -116,13 +126,91 @@ describe('production guards', () => {
   })
 })
 
+describe('platform extensions', () => {
+  const manifest: Manifest = JSON.parse(
+    readFileSync(join(ROOT, 'tools', 'migration-lineage', 'manifests', 'provisioning-platform-extensions.json'), 'utf8'),
+  )
+  const extensionRow = (patch: Record<string, unknown> = {}) => ({ name: 'vector', version: '0.8.1', schema: 'public', ...patch })
+  const extra = (row: Record<string, unknown>) =>
+    diffSnapshots(EMPTY_SNAPSHOT, { ...EMPTY_SNAPSHOT, extensions: [row] }).filter(d => d.status === 'extra_in_right')
+
+  it('is a valid manifest that declares all three as required', () => {
+    expect(() => validateManifest(manifest)).not.toThrow()
+    expect(requiredExtensions([manifest])).toEqual([
+      expect.objectContaining({ name: 'pg_stat_statements', required: true, serverPrerequisite: expect.stringContaining('shared_preload_libraries') }),
+      expect.objectContaining({ name: 'pgstattuple', required: true }),
+      expect.objectContaining({ name: 'vector', required: true }),
+    ])
+  })
+
+  it('attributes a platform extension to provisioning', () => {
+    const [a] = attribute(extra(extensionRow()), [manifest])
+    expect(a.bucket).toBe('known_provisioning_effect')
+    expect(a.source).toBe('provisioning/platform-extensions')
+  })
+
+  it('does not treat a version change as divergence', () => {
+    // Version is recorded under `observed`, never in `expect`: a version bump is
+    // a provisioning fact, not lineage divergence.
+    expect(attribute(extra(extensionRow({ version: '0.9.1' })), [manifest])[0].bucket).toBe('known_provisioning_effect')
+  })
+
+  it('still notices an extension installed somewhere else', () => {
+    expect(attribute(extra(extensionRow({ schema: 'extensions' })), [manifest])[0].bucket).toBe('unexplained_divergence')
+  })
+})
+
+describe('capability parity', () => {
+  const required = [
+    { name: 'pg_stat_statements', required: true, evidence: [] },
+    { name: 'pgstattuple', required: true, evidence: [] },
+    { name: 'vector', required: true, evidence: [] },
+  ]
+  const all = [
+    { name: 'pg_stat_statements', version: '1.10' },
+    { name: 'pgstattuple', version: '1.5' },
+    { name: 'vector', version: '0.8.1' },
+  ]
+
+  it('fails when one managed environment cannot do what the platform needs', () => {
+    const r = capabilityParity(
+      [
+        { environment: 'production', extensions: all },
+        { environment: 'staging', extensions: [{ name: 'plpgsql', version: '1.0' }] },
+      ],
+      required,
+    )
+    expect(r.parity).toBe('FAIL')
+    expect(r.reasons.join(' ')).toMatch(/staging is missing pg_stat_statements, pgstattuple, vector/)
+  })
+
+  it('passes only when every captured environment has them', () => {
+    expect(
+      capabilityParity(
+        [
+          { environment: 'production', extensions: all },
+          { environment: 'staging', extensions: all },
+        ],
+        required,
+      ).parity,
+    ).toBe('PASS')
+  })
+
+  it('is unknown, never a pass, when an environment was not captured', () => {
+    const r = capabilityParity(
+      [
+        { environment: 'production', extensions: all },
+        { environment: 'staging', extensions: null },
+      ],
+      required,
+    )
+    expect(r.parity).toBe('UNKNOWN')
+    expect(r.reasons.join(' ')).toMatch(/staging was not captured/)
+  })
+})
+
 describe('the production gate', () => {
-  const EMPTY: Snapshot = {
-    meta: { database: 'd', serverVersion: '16.13', schemas: ['public'] },
-    schemas: [{ name: 'public', owner: 'o' }],
-    tables: [], columns: [], constraints: [], indexes: [], types: [], sequences: [],
-    policies: [], triggers: [], routines: [], views: [], eventTriggers: [], extensions: [],
-  }
+  const EMPTY = EMPTY_SNAPSHOT
   const clean: ProductionEvidence = {
     captureVerdict: 'PASS',
     projectionPresent: true,

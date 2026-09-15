@@ -4,7 +4,11 @@
  *   npx tsx tools/production-lineage/report.ts \
  *     --capture <production capture json> \
  *     --projection <replay-push.json from the staging run> \
+ *     [--staging <capture-staging.json>] \
  *     [--manifests tools/migration-lineage/manifests] [--out report.json]
+ *
+ * `--staging` adds the managed platform capability parity check, which is
+ * reported separately from the lineage verdict and has its own exit code.
  *
  * The projection is the schema.prisma state captured during the staging
  * investigation. It is a property of the repository, not of an environment,
@@ -19,7 +23,9 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { attribute, type Attribution, type Manifest } from '../migration-lineage/attribute'
 import { countByKind, diffSnapshots, type Difference } from '../migration-lineage/diff'
+import type { Snapshot } from '../migration-lineage/probe/capture'
 import type { ProbeResult } from '../migration-lineage/probe/run'
+import { capabilityParity, requiredExtensions } from './capability-parity'
 import { gateProduction, type ProductionEvidence } from './verdict'
 import type { ProductionCaptureResult } from './probe/run'
 
@@ -122,6 +128,34 @@ function main(): void {
     if (unobserved.length > 20) console.log(`    … and ${unobserved.length - 20} more`)
   }
 
+  // Separate question, separate answer. Lineage explains state; parity asks
+  // whether every managed environment can do what the platform depends on.
+  const stagingPath = arg('--staging')
+  const staging = stagingPath ? (JSON.parse(readFileSync(stagingPath, 'utf8')) as ProbeResult) : null
+  const extensionsOf = (snap: Snapshot | null | undefined) =>
+    snap ? snap.extensions.map(e => ({ name: String(e.name), version: (e.version as string) ?? null })) : null
+  const parity = capabilityParity(
+    [
+      { environment: 'production', extensions: extensionsOf(capture.snapshot) },
+      { environment: 'staging', extensions: extensionsOf(staging?.snapshot) },
+    ],
+    requiredExtensions(manifests),
+  )
+
+  section('MANAGED PLATFORM CAPABILITY PARITY   (not part of the lineage verdict)')
+  for (const env of parity.byEnvironment) {
+    const shown = env.captured
+      ? env.present.map(p => `${p.name} ${p.version ?? ''}`.trim()).join(', ') || 'none'
+      : 'not captured'
+    console.log(`  ${env.environment.padEnd(12)} ${shown}`)
+    if (env.missing.length) console.log(`  ${''.padEnd(12)} MISSING: ${env.missing.join(', ')}`)
+  }
+  console.log(`\n  parity: ${parity.parity}`)
+  for (const r of parity.reasons) console.log(`    - ${r}`)
+  for (const cap of parity.required.filter(c => c.serverPrerequisite)) {
+    console.log(`    note: ${cap.name} also needs ${cap.serverPrerequisite}`)
+  }
+
   const evidence: ProductionEvidence = {
     captureVerdict: capture.verdict ?? null,
     projectionPresent: Boolean(projectionResult.snapshot),
@@ -132,18 +166,27 @@ function main(): void {
   const result = gateProduction(pToProd, attributions, evidence)
 
   section('VERDICT')
-  console.log(`  ${result.verdict}`)
+  console.log(`  lineage:  ${result.verdict}`)
   for (const r of result.reasons) console.log(`    - ${r}`)
   for (const n of result.notes) console.log(`    note: ${n}`)
-  console.log('\n  This describes production state only. Baseline eligibility additionally')
-  console.log('  depends on a delivery mechanism proven on staging first.')
+  console.log(`  parity:   ${parity.parity}`)
+  console.log('\n  These are separate findings. An explained lineage does NOT mean the')
+  console.log('  environments are equivalent, and baseline eligibility additionally depends')
+  console.log('  on a delivery mechanism proven on staging first.')
 
   const out = arg('--out')
   if (out) {
-    writeFileSync(out, JSON.stringify({ generatedAt: new Date().toISOString(), evidence, gate: result, pToProd, attributions }, null, 2))
+    writeFileSync(
+      out,
+      JSON.stringify({ generatedAt: new Date().toISOString(), evidence, gate: result, capabilityParity: parity, pToProd, attributions }, null, 2),
+    )
     console.log(`\n  wrote ${out}`)
   }
-  process.exitCode = result.verdict === 'PRODUCTION_LINEAGE_EXPLAINED' ? 0 : 1
+
+  // Distinct codes, so a capability failure cannot hide behind an explained
+  // lineage: 0 both clean, 4 lineage explained but parity not proven, 1 lineage.
+  process.exitCode =
+    result.verdict !== 'PRODUCTION_LINEAGE_EXPLAINED' ? 1 : parity.parity === 'PASS' ? 0 : 4
 }
 
 main()

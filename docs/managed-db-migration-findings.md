@@ -191,10 +191,101 @@ default (`plans.allowedAuthProviders`).
 ### What this does and does not authorise
 
 It authorises **designing and rehearsing** a staging baseline. It is not
-authority to baseline staging, and it says nothing about production, whose
-provisioning lineage is still unknown (correction 5). Production needs its own
-read-only capture and its own provenance before `migrate resolve` goes anywhere
-near it.
+authority to baseline staging. Production is covered separately below.
+
+---
+
+## Production (2026-09-16)
+
+Correction 5 said production's lineage was unknown. It is now established,
+read-only, and it is **not** what staging's story would have predicted.
+
+### Provenance
+
+`/ecs/backenly-production/db-bootstrap`, stream `cutover/cutover/c37b33c7…`:
+
+```
+pg_restore of the Hetzner dump (sha256 de8d1122…) into an EMPTY backenly
+  + globals, role attributes, memberships, settings
+  + credential verifiers, transferred verbatim
+  + V3 PostgREST provisioning (schema-registry, ddl-sync), registry seeded = 17
+  + setup-direct-access (bkn_ro_* roles)
+DATABASE CUTOVER COMPLETE
+```
+
+Production therefore carries Hetzner's accumulated history. Earlier `restore/…`
+streams in that group ran against `backenly_migration_rehearsal` with the final
+database untouched, so only the `cutover` stream speaks for the live database.
+The group has 30-day retention: anything older is unknown, not absent.
+
+### The comparison
+
+```
+P -> C_prod   objects missing from production            0
+              objects defined differently in production  0
+              provisioning extras                       33   attributed
+              platform extensions                        3   attributed
+              unexplained_divergence                     0
+```
+
+**Verdict: `PRODUCTION_LINEAGE_EXPLAINED`.**
+
+The three extensions (`pg_stat_statements`, `pgstattuple`, `vector`) are
+classified `known_provisioning_effect`, subtype `platform_extension`, in
+`tools/migration-lineage/manifests/provisioning-platform-extensions.json`. They
+are repo-owned and intentionally outside `schema.prisma`, which declares no
+extensions, so the projection can never contain them. They are **not**
+`expected_environmental_difference`: that bucket is too weak for objects the
+product depends on. `pg_stat_statements` feeds measured slow-query detection and
+its absence is reported UNCHECKED rather than healthy; `vector` backs the shipped
+`enable_vector_search` capability. Extension *version* is recorded but excluded
+from the equality gate: a version bump is a provisioning fact, not divergence.
+
+**The stronger fact:** production and staging's captured platform schemas are
+semantically identical — 120 tables, 1332 columns, 230 constraints, 531 indexes,
+21 routines, 5 event triggers, 0 public policies — despite completely different
+provenance (dump restore versus `db push`). Production additionally holds 22
+`workspace_*` tenant schemas, 99 tenant tables and all 421 policies (87 RLS, 80
+FORCE), none of which are platform schema.
+
+### Managed environment capability parity: FAIL
+
+Reported separately, and it must stay separate. An explained lineage does not
+mean the environments are equivalent.
+
+```
+production   pg_stat_statements  pgstattuple  vector
+staging      none of them
+```
+
+Staging cannot run the detectors that depend on `pg_stat_statements`, so a clean
+autonomy run there can mean "never checked". `tools/production-lineage/report.ts`
+exits 4 for this case: lineage explained, parity not proven.
+
+Closing that gap is **not** merely `CREATE EXTENSION`. `pg_stat_statements`
+requires `shared_preload_libraries` and a restart, which on RDS is parameter-group
+and reboot semantics. Before any baseline mutation, check staging's RDS parameter
+configuration read-only.
+
+### The decomposition this produces
+
+A managed database is five layers, and trying to force them all into Prisma
+migrations is what made this project necessary:
+
+```
+1  server/platform prerequisites     shared_preload_libraries, parameter groups
+2  database extensions               pg_stat_statements, pgstattuple, vector
+3  canonical application schema      a squashed baseline from schema.prisma
+4  non-Prisma managed provisioning   PostgREST registry, DDL sync, direct access
+5  tenant/runtime state              workspace_* schemas, policies, tenant data
+```
+
+**The safety rule that falls out of it:** the baseline owns layer 3 and nothing
+else. It must never reconcile, drop or otherwise reach production's 22
+`workspace_*` schemas and 99 tenant tables. A baseline generated from
+`schema.prisma` also contains no extensions, so layer 2 must be owned explicitly
+by provisioning or a rebuilt database comes up missing capabilities two detectors
+need.
 
 ---
 
