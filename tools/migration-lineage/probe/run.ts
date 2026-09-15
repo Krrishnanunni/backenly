@@ -24,6 +24,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { captureCapabilities, PLATFORM_EXTENSIONS, type CapabilityReport } from './capabilities'
 import { captureSnapshot, rlsVisibility, type RlsVisibility, type Snapshot } from './capture'
 import { checkRlsControl, RLS_CONTROL_SQL } from './rls-control'
 import {
@@ -75,6 +76,7 @@ export interface ProbeResult {
   rlsControl: { visibility: RlsVisibility | null; failures: string[]; error: string | null } | null
   snapshot: Snapshot | null
   inventory: Inventory | null
+  capabilities: CapabilityReport | null
   input: { purpose: string; source: Record<string, unknown>; files: Array<{ name: string; sha256: string; bytes: number }> } | null
   replay: ReplayReport | null
   scratch: ScratchCleanup[]
@@ -143,6 +145,7 @@ export async function runProbe(env: ProbeEnv): Promise<ProbeResult> {
     rlsControl: null,
     snapshot: null,
     inventory: null,
+    capabilities: null,
     input: null,
     replay: null,
     scratch: [],
@@ -224,6 +227,7 @@ export async function runProbe(env: ProbeEnv): Promise<ProbeResult> {
       const schemas = await platformSchemas(ref)
       r.snapshot = await captureSnapshot(ref, schemas)
       r.inventory = await captureInventory(ref, schemas)
+      r.capabilities = await captureCapabilities(ref, PLATFORM_EXTENSIONS)
       r.rls = await rlsVisibility(ref)
       if (!r.rls.consistent) fail(`RLS visibility is inconsistent: ${r.rls.inconsistencies.join('; ')}`)
     }

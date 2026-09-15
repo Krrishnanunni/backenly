@@ -287,6 +287,61 @@ else. It must never reconcile, drop or otherwise reach production's 22
 by provisioning or a rebuilt database comes up missing capabilities two detectors
 need.
 
+That rule is executable rather than remembered: `tools/managed-db/layers.ts`
+classifies any captured object into a layer and refuses baseline SQL that reaches
+`CREATE EXTENSION`, roles, grants, event triggers, default privileges,
+provisioning objects or a `workspace_*` schema. A rehearsal fails on its own
+instead of relying on a reviewer noticing.
+
+---
+
+## Managed capability discovery (2026-09-16)
+
+Read-only, both environments, nothing installed.
+
+**Layer 1 is already satisfied on staging, and there is no restart boundary.**
+Both instances run user-managed parameter groups with
+`shared_preload_libraries = pg_stat_statements`, `in-sync`, nothing pending
+reboot. The staging server confirms it itself rather than by inference:
+
+```
+SHOW shared_preload_libraries   rdsutils,pg_stat_statements,rds_casts
+source                          configuration file
+context                         postmaster
+pending_restart                 false
+```
+
+Per-extension status on staging (`tools/migration-lineage/probe/capabilities.ts`):
+
+```
+pg_stat_statements   available_not_installed   available 1.10   preloaded yes
+pgstattuple          available_not_installed   available 1.5    no preload needed
+vector               available_not_installed   available 0.8.1  no preload needed
+```
+
+All three are available at exactly the versions production runs. So the parity
+failure is **layer 2 only**: ordinary database provisioning, no parameter-group
+change and no reboot.
+
+The status model distinguishes four things that "extension missing" would
+flatten, because they have different owners:
+
+```
+preload_missing             instance configuration: parameter group and restart
+available_not_installed     database provisioning: CREATE EXTENSION
+installed_not_operational   installed but broken; investigate, do not reinstall
+unavailable                 the package is not on this server at all
+operational                 installed and proven to work by a real read
+```
+
+`preload_missing` outranks `available_not_installed` deliberately: with no
+preload, `CREATE EXTENSION` would simply fail. "Installed" is not "operational"
+either, so each extension carries a harmless read that proves it works
+(`tools/managed-db/extension-spec.ts`).
+
+Nothing was installed. The evidence is banked first so the baseline project does
+not quietly become a provisioning-mutation project.
+
 ---
 
 ## 1. Staging is db-push-managed, not migration-managed

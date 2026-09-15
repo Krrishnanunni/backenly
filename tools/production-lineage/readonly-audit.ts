@@ -58,6 +58,10 @@ export const FORBIDDEN_MODULES = [
   'tools/migration-lineage/probe/run.ts',
   'tools/migration-lineage/build-inputs.ts',
   'tools/migration-lineage/derive-manifests.ts',
+  // Layer 2 mutation and the scratch-database machinery it rehearses in.
+  'tools/managed-db/scratch-database.ts',
+  'tools/managed-db/provision-extensions.ts',
+  'tools/managed-db/rehearse-extensions.ts',
 ]
 
 export interface AuditFinding {
