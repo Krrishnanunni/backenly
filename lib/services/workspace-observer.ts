@@ -18,6 +18,7 @@
  */
 
 import { prisma } from '@/lib/db/prisma'
+import { detectSubsystemRecurrence } from '@/lib/autonomy/subsystem-recurrence'
 import { probeQueryFailed } from '@/lib/core/drift-detector'
 import { queryWorkspaceSchema, executeInWorkspaceSchema } from './workspaceDatabase'
 import { applyPermissionPolicy } from './workspace-rls'
@@ -261,6 +262,13 @@ export async function runObserverForProject(projectId: string): Promise<Observer
     // ── Runtime contract — live HTTP probes of the advertised API surfaces
     // (auth/db/storage/functions/healthz) through the real serving chain.
     detectContractViolations(projectId),
+    // Daily, not per-minute, and deliberately so: this reports that repairs
+    // across one area have stopped holding, which is a slow-moving structural
+    // signal. It also has no executable fix (notify_only / Tier 3), so the
+    // reconciler would never mint a finding for it -- ensureFinding is reached
+    // only from the WOULD_AUTO_APPLY branch. The observer is the path that
+    // persists non-auto findings, which is what this is.
+    detectSubsystemRecurrence(projectId),
   ]
 
   const settled = await Promise.allSettled(detectors)
@@ -644,6 +652,13 @@ async function writeFinding(
   const DISCRIMINATOR: Record<string, string> = {
     verification_failed: 'scenarioId',
     contract_surface_broken: 'surface',
+    // One row per SUBSYSTEM, keyed on the membership snapshot rather than the
+    // fingerprint. Two things follow from that choice, and both are wanted:
+    // a backend with two failing areas keeps two independent rows, and a
+    // component whose membership changes gets a NEW row while the old one is
+    // reaped — which is exactly the continuity reset the fingerprint cannot
+    // provide, since a table joining the component can move it.
+    subsystem_repeat_failure: 'membershipHash',
   }
 
   const discriminatorKey = DISCRIMINATOR[finding.type]

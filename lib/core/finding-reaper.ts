@@ -236,6 +236,12 @@ export async function reapArchFindings(projectId: string): Promise<number> {
  * the withdrawal on the same cadence as the claim.
  */
 const INVARIANT_REAPABLE_TYPES = [
+  // Withdraws when repairs stop recurring in that area, and ALSO when the
+  // component's membership changes: the identity carries a membership hash, so
+  // a table joining or leaving produces a different gap and leaves the old
+  // finding undetected. That is the continuity reset, implemented by the reaper
+  // rather than by separate bookkeeping.
+  'subsystem_repeat_failure',
   'workflow_broken',
   'missing_rls',
   'unprotected_user_data',
