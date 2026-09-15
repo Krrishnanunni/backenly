@@ -9,6 +9,7 @@
  */
 
 import { buildChainInput } from '../../tools/migration-lineage/build-inputs'
+import { capabilityStatus } from '../../tools/migration-lineage/probe/capabilities'
 import { encodeInput } from '../../tools/migration-lineage/probe/input'
 import { runProbe } from '../../tools/migration-lineage/probe/run'
 
@@ -30,6 +31,27 @@ describe('migration lineage probe against PostgreSQL', () => {
     expect(r.rls?.consistent).toBe(true)
     expect(r.scratch.map(s => ({ created: s.created, dropped: s.dropped }))).toEqual([{ created: true, dropped: true }])
     expect(r.scratchDatabasesAfter).toEqual([])
+  })
+
+  it('reports platform capabilities as four separate facts', async () => {
+    const r = await runProbe({ mode: 'capture-staging', databaseUrl: DATABASE_URL, local: true })
+
+    const capabilities = r.capabilities!
+    expect(capabilities.extensions.map(e => e.name)).toEqual(['pg_stat_statements', 'pgstattuple', 'vector'])
+    // Deliberately not asserting which are present: that is an environment fact,
+    // and pinning it here would make this test a statement about one machine.
+    for (const e of capabilities.extensions) {
+      expect(['operational', 'installed_not_operational', 'available_not_installed', 'preload_missing', 'unavailable'])
+        .toContain(capabilityStatus(e))
+      // Installed means an operational verdict was actually attempted.
+      if (e.installedVersion) expect(e.operational).not.toBeNull()
+    }
+
+    const pgStatStatements = capabilities.extensions.find(e => e.name === 'pg_stat_statements')!
+    expect(pgStatStatements.needsPreload).toBe(true)
+    expect(typeof pgStatStatements.preloaded).toBe('boolean')
+    // The server's own answer, not the parameter group's.
+    expect(capabilities.sharedPreloadLibraries).toMatchObject({ source: expect.any(String), context: expect.any(String) })
   })
 
   it('replays the legacy chain intact and captures what it built', async () => {
