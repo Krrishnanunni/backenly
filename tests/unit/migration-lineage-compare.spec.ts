@@ -14,6 +14,7 @@ import type { Snapshot } from '../../tools/migration-lineage/probe/capture'
 
 const EMPTY: Snapshot = {
   meta: { database: 'd', serverVersion: '16.13', schemas: ['public'] },
+  schemas: [{ name: 'public', owner: 'owner' }],
   tables: [], columns: [], constraints: [], indexes: [], types: [], sequences: [],
   policies: [], triggers: [], routines: [], views: [], eventTriggers: [], extensions: [],
 }
@@ -64,6 +65,17 @@ describe('semantic diff', () => {
     const d = diffSnapshots(left, right)
     expect(d).toHaveLength(1)
     expect(d[0].status).toBe('differs')
+  })
+
+  it('sees an extra schema even when it holds nothing', () => {
+    const right = snapshot({ schemas: [{ name: 'public', owner: 'owner' }, { name: 'backenly_pgrst_idle', owner: 'someone_else' }] })
+    const d = diffSnapshots(EMPTY, right)
+    expect(d).toEqual([expect.objectContaining({ status: 'extra_in_right', key: 'schema backenly_pgrst_idle' })])
+  })
+
+  it('does not call a schema different because its owner differs', () => {
+    const right = snapshot({ schemas: [{ name: 'public', owner: 'backenly_admin' }] })
+    expect(diffSnapshots(EMPTY, right)).toEqual([])
   })
 
   it('refuses a snapshot with two objects of the same identity', () => {

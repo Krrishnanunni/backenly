@@ -30,6 +30,7 @@ import type { PgClient } from './connect'
 
 export interface Snapshot {
   meta: { database: string; serverVersion: string; schemas: string[] }
+  schemas: Array<Record<string, unknown>>
   tables: Array<Record<string, unknown>>
   columns: Array<Record<string, unknown>>
   constraints: Array<Record<string, unknown>>
@@ -62,6 +63,13 @@ const NOT_EXTENSION_MEMBER = (catalog: string, alias: string) =>
   `NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = '${catalog}'::regclass AND d.objid = ${alias}.oid AND d.deptype = 'e')`
 
 const QUERIES = {
+  // A schema with nothing in it still exists, and `backenly_pgrst_idle` is
+  // exactly that: load-bearing and empty. Without this, an extra empty schema
+  // would have no footprint in the comparison at all.
+  schemas: `
+    SELECT n.nspname AS name, pg_get_userbyid(n.nspowner) AS owner
+      FROM pg_namespace n WHERE n.nspname = ANY($1)`,
+
   tables: `
     SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS kind,
            c.relpersistence::text AS persistence, c.relispartition AS partition,
@@ -206,6 +214,7 @@ const QUERIES = {
 } as const
 
 const SORT_KEYS: Record<keyof typeof QUERIES, string[]> = {
+  schemas: ['name'],
   tables: ['schema', 'name'],
   columns: ['schema', 'table', 'name'],
   constraints: ['schema', 'table', 'name'],

@@ -132,6 +132,72 @@ per database state. (The 33.9 KB figure in section 6 included the smoke probe.)
 
 ---
 
+## The result (2026-09-16)
+
+The probe ran against staging as four one-shot Fargate tasks. All four passed,
+staging was only read, and every scratch database was created and dropped with
+none left behind.
+
+**Verdict: `STAGING_BASELINE_ELIGIBLE`.** Scoped to staging, which is the only
+environment measured.
+
+```
+P -> C   objects missing from staging            0
+         objects defined differently in staging  0
+         objects staging holds beyond the model  33   all attributed
+         unexplained_divergence                  0
+```
+
+The 33 are provisioning, attributed by definition rather than by name:
+
+```
+scripts/sql/postgrest-schema-registry.sql   22   schemas postgrest and backenly_pgrst_idle,
+                                                 the registry table with its columns, primary key
+                                                 and index, 2 event triggers, 16 routines
+scripts/setup-direct-access.sql              8   2 event triggers, 6 routines
+scripts/sql/postgrest-ddl-sync.sql           3   1 event trigger, 2 routines
+```
+
+Those expectations were derived by replaying each file, in the order
+`scripts/postgrest-install.sh` applies them, into a throwaway PostgreSQL cluster
+on top of the schema.prisma projection, and capturing what appeared or changed
+(`tools/migration-lineage/derive-manifests.ts`). Every routine matched by body
+digest, so staging's provisioning objects are byte-identical to the repository's
+current SQL.
+
+**Section 8 is settled: staging genuinely has zero policies.** `pg_policy` read
+directly, the same rows joined through `pg_class` and `pg_namespace`, and the
+`pg_policies` view all agree at zero, while a policy created in a scratch
+database was seen by the same reads. RLS is enabled on 0 of 120 `public` tables,
+and no `workspace_*` schema holds a table. Nothing `add_rls_policies.sql`
+describes is present.
+
+**No staging object needed a legacy-SQL attribution** (`known_legacy_sql_effect`
+= 0). Everything the six loose files would have contributed is either already in
+`schema.prisma`, and therefore in P, or absent entirely as with the RLS policies.
+
+TLS verified against the embedded ap-south-1 roots (TLSv1.3, leaf ← *Amazon RDS
+ap-south-1 Subordinate CA RSA2048 G1.A.5* ← *Root CA RSA2048 G1*), and both
+negative controls were refused by verification: public roots without the RDS CA
+gave `SELF_SIGNED_CERT_IN_CHAIN`, and the correct CA against a wrong identity
+gave `ERR_TLS_CERT_ALTNAME_INVALID`.
+
+For the record, A → P, which does not gate anything: the chain builds 50 of the
+119 tables, and carries 4 columns and 1 index the current model no longer has
+(`plans.allowFullExport`, `plans.removeBranding`, `backend_patterns.failure_count`,
+`backend_patterns.success_count`, `workspaces_projectId_idx`) plus one changed
+default (`plans.allowedAuthProviders`).
+
+### What this does and does not authorise
+
+It authorises **designing and rehearsing** a staging baseline. It is not
+authority to baseline staging, and it says nothing about production, whose
+provisioning lineage is still unknown (correction 5). Production needs its own
+read-only capture and its own provenance before `migrate resolve` goes anywhere
+near it.
+
+---
+
 ## 1. Staging is db-push-managed, not migration-managed
 
 Measured on `backenly-staging-pg`, database `backenly`:
@@ -260,7 +326,7 @@ lineage probe must not inherit that** — it creates databases and replays DDL, 
 it should embed the AWS RDS CA bundle and verify properly. A wrong-CA connection
 must be shown to fail, or the verification proves nothing.
 
-## 8. Open question: RLS policy visibility
+## 8. RLS policy visibility — settled 2026-09-16, see "The result" above
 
 The smoke test read `pg_policies` and saw **zero rows**. `pg_policies` covers only
 the database the session is connected to, so that observation covers one

@@ -29,6 +29,15 @@ const q = (row: Row, field: string) => String(row[field] ?? '')
 
 export const KINDS: KindSpec[] = [
   {
+    // Compared by presence only. Ownership is environmental (a scratch database
+    // and staging have different owners for the same schema), and a schema's
+    // contents are compared as the objects below.
+    kind: 'schema',
+    collection: 'schemas',
+    key: r => q(r, 'name'),
+    fields: [],
+  },
+  {
     kind: 'table',
     collection: 'tables',
     key: r => `${q(r, 'schema')}.${q(r, 'name')}`,
