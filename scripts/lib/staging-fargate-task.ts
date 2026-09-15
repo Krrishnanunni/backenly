@@ -237,6 +237,12 @@ export interface OneShotTaskSpec {
   containerName: string
   logPrefix: string
   startedBy: string
+  /**
+   * Image to run. Defaults to the staging runtime image, which is what the
+   * probe-style tasks want. The migration runner supplies its own, because
+   * deployment tooling deliberately does not live in the application image.
+   */
+  image?: string
   command: string[]
   /** Launcher-specific variables. NODE_PATH is appended by this module. */
   environment: Array<{ name: string; value: string }>
@@ -257,7 +263,7 @@ export async function withEphemeralTaskDefinition(
   // overrides are capped near 8 KB, a task definition is not.
   const container = {
     name: spec.containerName,
-    image: ctx.srcDef.containerDefinitions[0].image,
+    image: spec.image ?? ctx.srcDef.containerDefinitions[0].image,
     essential: true,
     command: spec.command,
     environment: [

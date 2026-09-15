@@ -13,7 +13,13 @@
 set -euo pipefail
 
 REGION="${AWS_REGION:-ap-south-1}"
-REPO="${MIGRATE_ECR_REPO:-backenly-db-bootstrap}"
+# backenly-runtime, not a repository of its own: the staging execution role's
+# EcrPull is scoped to backenly-{web,runtime,postgrest,pgrst-probe}, and a new
+# repository would mean an IAM change to publish a migration image. Measured:
+# pulling from backenly-db-bootstrap returned 403 at task start. The separation
+# that matters is the image contents and the task definition, not the repository
+# name, so this ships as an immutable migrate-<sha> tag alongside the app image.
+REPO="${MIGRATE_ECR_REPO:-backenly-runtime}"
 ACCOUNT="${MIGRATE_AWS_ACCOUNT_ID:-}"
 [ -n "$ACCOUNT" ] || { echo "MIGRATE_AWS_ACCOUNT_ID is not set"; exit 2; }
 
