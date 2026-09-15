@@ -38,6 +38,10 @@ function runScenario(launcherPath, scenario) {
       String(s ?? '')
         .split(dir)
         .join('<TMP>')
+        // The separator after the placeholder is a backslash on Windows and a
+        // slash on Linux. Recording it would pin the transcript to whichever
+        // machine produced it, and CI runs on the other one.
+        .replace(/<TMP>\\/g, '<TMP>/')
         .replace(/\r\n/g, '\n')
         .split('\n')
         // Stack frames name whichever file path ran, which differs between a

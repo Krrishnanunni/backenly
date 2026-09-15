@@ -227,7 +227,7 @@
     "refuses a bundle older than its source": {
       "exitCode": 2,
       "stdout": "\nPhase 6 RDS rehearsal — staging, one-shot Fargate task\n\n  account 111122223333 · region ap-south-1 · cluster backenly-staging\n  secrets carried: DATABASE_URL, DIRECT_URL\n",
-      "stderr": "\n  REFUSED: <TMP>\\bundle.b64 is older than scripts/rehearse-maintenance-rds.ts — re-emit it, or the rehearsal would run stale logic and report on the wrong code\n\n",
+      "stderr": "\n  REFUSED: <TMP>/bundle.b64 is older than scripts/rehearse-maintenance-rds.ts — re-emit it, or the rehearsal would run stale logic and report on the wrong code\n\n",
       "awsCalls": [
         [
           "sts",
