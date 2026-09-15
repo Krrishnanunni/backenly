@@ -78,6 +78,24 @@ describe('baseline audit', () => {
     expect(() => assertBaselineOwnsOnlyCanonicalSchema(sql)).toThrow(/outside the canonical schema/)
   })
 
+  it('does not mistake canonical tables for tenant schemas', () => {
+    // `workspace_files` and `workspace_backups` are platform tables in public.
+    // They begin with hex letters, which an imprecise tenant pattern reads as a
+    // workspace id — measured, not hypothetical: it blocked the first generated
+    // baseline.
+    const sql = `
+      CREATE TABLE "workspace_files" ("id" TEXT NOT NULL, "projectId" TEXT NOT NULL);
+      CREATE TABLE "workspace_backups" ("id" TEXT NOT NULL);
+      CREATE TABLE "workspace_schema_snapshots" ("id" TEXT NOT NULL);
+      CREATE TABLE "workspaces" ("id" TEXT NOT NULL);`
+    expect(auditBaselineSql(sql)).toEqual([])
+  })
+
+  it('still catches a real tenant schema', () => {
+    expect(auditBaselineSql('CREATE TABLE workspace_07339e54.todos (id int);').map(f => f.layer)).toEqual(['tenant_state'])
+    expect(auditBaselineSql('GRANT SELECT ON workspace_1bd84a95.users TO anon;').map(f => f.layer)).toContain('tenant_state')
+  })
+
   it('reports every violation at once, not the first', () => {
     const sql = 'CREATE EXTENSION vector; GRANT SELECT ON t TO anon; CREATE TABLE workspace_07339e54.x (id int);'
     expect(auditBaselineSql(sql).map(f => f.layer).sort()).toEqual(['extensions', 'managed_provisioning', 'tenant_state'])

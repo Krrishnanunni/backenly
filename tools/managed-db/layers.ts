@@ -116,7 +116,12 @@ const FORBIDDEN_IN_BASELINE: ForbiddenStatement[] = [
   { pattern: /\b(GRANT|REVOKE)\b/i, layer: 'managed_provisioning', why: 'privileges are provisioning' },
   { pattern: /\bCREATE\s+EVENT\s+TRIGGER\b/i, layer: 'managed_provisioning', why: 'event triggers are provisioning' },
   { pattern: /\bALTER\s+DEFAULT\s+PRIVILEGES\b/i, layer: 'managed_provisioning', why: 'default privileges are provisioning' },
-  { pattern: /workspace_[0-9a-f]/i, layer: 'tenant_state', why: 'tenant schemas are never baseline-owned' },
+  // Tenant schemas are `workspace_` plus a UUID-derived hex run. Requiring
+  // eight hex characters keeps canonical platform tables like `workspace_files`
+  // and `workspace_backups` out of it: those start with hex letters but are not
+  // hex runs, and flagging them would block every baseline this gate exists to
+  // protect.
+  { pattern: /workspace_[0-9a-f]{8}/i, layer: 'tenant_state', why: 'tenant schemas are never baseline-owned' },
   { pattern: /\bbackenly_pgrst_\w+/i, layer: 'managed_provisioning', why: 'PostgREST registry objects are provisioning' },
   { pattern: /\bbackenly_direct_\w+/i, layer: 'managed_provisioning', why: 'direct-access objects are provisioning' },
   { pattern: /\bCREATE\s+SCHEMA\s+(IF\s+NOT\s+EXISTS\s+)?"?(postgrest|backenly_pgrst_idle)\b/i, layer: 'managed_provisioning', why: 'provisioning schemas are not baseline-owned' },

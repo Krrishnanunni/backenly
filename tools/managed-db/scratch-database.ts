@@ -13,9 +13,9 @@
 import { randomBytes } from 'node:crypto'
 import type { PgClient } from '../migration-lineage/probe/connect'
 
-export type ScratchPurpose = 'chain' | 'push' | 'rlsctl' | 'ext'
+export type ScratchPurpose = 'chain' | 'push' | 'rlsctl' | 'ext' | 'base'
 
-export const SCRATCH_NAME = /^backenly_lineage_(chain|push|rlsctl|ext)_[0-9a-f]{8}$/
+export const SCRATCH_NAME = /^backenly_lineage_(chain|push|rlsctl|ext|base)_[0-9a-f]{8}$/
 const RESERVED = new Set(['backenly', 'postgres', 'rdsadmin', 'template0', 'template1'])
 
 export function scratchName(purpose: ScratchPurpose, suffix = randomBytes(4).toString('hex')): string {
