@@ -37,9 +37,17 @@ function loadManifests(dir: string | null): Manifest[] {
     .map(f => JSON.parse(readFileSync(join(dir, f), 'utf8')) as Manifest)
 }
 
-/** The replayed chain must be the hashed evidence, byte for byte. */
-function verifyChainInputs(root: string, chain: ProbeResult | null): { ok: boolean; problems: string[] } {
-  if (!chain?.input) return { ok: false, problems: ['no chain replay result to verify'] }
+/**
+ * The replayed chain must be the hashed evidence, byte for byte.
+ *
+ * `ok: null` means there was nothing to verify because the chain was not
+ * replayed in this run, which is a different fact from a file failing its hash.
+ * Since staging was baselined the chain is forensic evidence rather than a
+ * lineage input, so a run that omits it is normal; reporting that as a hash
+ * mismatch would be a false statement about the evidence.
+ */
+function verifyChainInputs(root: string, chain: ProbeResult | null): { ok: boolean | null; problems: string[] } {
+  if (!chain?.input) return { ok: null, problems: ['the legacy chain was not replayed in this run'] }
   const sums = verifiedEvidence(root)
   const problems: string[] = []
   for (const file of chain.input.files) {
@@ -166,6 +174,7 @@ function main(): void {
   section('VERDICT')
   console.log(`  ${result.verdict}`)
   for (const r of result.reasons) console.log(`    - ${r}`)
+  for (const n of result.notes) console.log(`    note: ${n}`)
   console.log(`\n  scoped to staging. It says nothing about production, whose provisioning lineage is unknown.`)
 
   const out = arg('--out')

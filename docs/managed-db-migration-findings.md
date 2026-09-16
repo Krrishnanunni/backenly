@@ -344,6 +344,75 @@ not quietly become a provisioning-mutation project.
 
 ---
 
+## Staging is migration-managed (2026-09-16)
+
+Finding 1 below is now historical. Staging has migration history, applied by the
+dedicated Layer 3 runner rather than by the application image.
+
+**What ran.** `00000000000000_baseline` was resolved as applied against the real
+staging database, then `20260916120000_maintenance_ledger` — the first
+post-baseline migration, carrying the Phase 6b execution ledger — was deployed
+through `scripts/run-migration-job-fargate.ts` as a one-shot Fargate task on
+image `backenly-runtime:migrate-02bec30d`:
+
+```
+status  exit 1  1 migration pending: 20260916120000_maintenance_ledger
+deploy  exit 0  Applying migration `20260916120000_maintenance_ledger`
+deploy  exit 0  No pending migrations to apply.
+status  exit 0  Database schema is up to date!
+```
+
+The runner image contains the canonical chain and the pinned Prisma CLI, and
+nothing else; the gitignored legacy corpus cannot enter it, because the build
+context is assembled from `prisma/migrations-canonical/`.
+
+**Post-baseline capture.** A fresh read-only capture of staging, compared
+against a replay of the current `schema.prisma` in a scratch database:
+
+| | P (schema.prisma) | C (staging) |
+|---|---|---|
+| tables | 121 | 123 |
+| columns | 1360 | 1370 |
+| constraints | 232 | 234 |
+| indexes | 539 | 541 |
+
+The whole difference reconciles: `_prisma_migrations` (8 columns, 1 constraint,
+1 index) plus the one provisioning table already manifested. Attribution:
+
+```
+represented_in_schema_prisma       2259
+known_provisioning_effect            47
+unexplained_divergence                0
+```
+
+**The ledger needed a manifest.** `_prisma_migrations` is created by
+`prisma migrate`, never by `schema.prisma`, so without an entry it would read as
+eleven unexplained objects on every capture for the rest of this database's
+life — the kind of standing noise that trains a gate to be ignored. It is
+`known_provisioning_effect`, subtype `migration_ledger`, in
+`tools/migration-lineage/manifests/provisioning-prisma-migration-ledger.json`.
+
+The manifest claims its field values were replayed, and that claim is now
+checked rather than asserted: `tools/managed-db/rehearse-baseline.ts` creates the
+ledger in a throwaway database and fails if the objects it created are not
+exactly the ones the manifest names. A Prisma CLI upgrade that changed the
+ledger's shape surfaces there instead of being absorbed.
+
+**Two reporting defects found while doing this.** Both made a report say
+something that was not observed, which is the failure mode this document exists
+to prevent:
+
+- A run that did not replay the legacy chain was reported as *"a replayed file
+  did not match its recorded hash"*. Since staging is baselined the chain is
+  forensic evidence, not a lineage input, so omitting it is normal. `ok: null`
+  now means "nothing to verify" and is distinct from a hash mismatch, which
+  still blocks.
+- Non-gating notes were dropped whenever the verdict was eligible, so a verdict
+  reached with a leg missing printed identically to one reached with every leg
+  run. `GateResult.notes` now carries them and the report prints them.
+
+---
+
 ## 1. Staging is db-push-managed, not migration-managed
 
 Measured on `backenly-staging-pg`, database `backenly`:

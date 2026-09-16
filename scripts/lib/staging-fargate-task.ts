@@ -372,6 +372,12 @@ export interface LogReadOptions {
   echo?: (line: string) => boolean
 }
 
+export interface OneShotTaskResult {
+  lines: string[]
+  /** The container's own exit code, or null if ECS did not report one. */
+  containerExit: number | null
+}
+
 /** Run one task, wait for it to stop, and return its log lines. */
 export function runTaskAndReadLogs(
   ctx: StagingTaskContext,
@@ -379,6 +385,23 @@ export function runTaskAndReadLogs(
   spec: OneShotTaskSpec,
   opts: LogReadOptions = {},
 ): string[] {
+  return runTaskAndReadResult(ctx, taskDefArn, spec, opts).lines
+}
+
+/**
+ * The same run, with the container's exit code kept.
+ *
+ * The lineage probes parse their verdict out of the logs, so the exit code is
+ * noise to them. For a migration job it is the authority: `migrate deploy`
+ * failing halfway still writes plenty of reassuring output, and a launcher that
+ * only read the logs would report success for it.
+ */
+export function runTaskAndReadResult(
+  ctx: StagingTaskContext,
+  taskDefArn: string,
+  spec: OneShotTaskSpec,
+  opts: LogReadOptions = {},
+): OneShotTaskResult {
   const netCfg = JSON.stringify({
     awsvpcConfiguration: {
       subnets: ctx.net.subnets,
@@ -412,7 +435,7 @@ export function runTaskAndReadLogs(
 
   const done = aws(['ecs', 'describe-tasks', '--cluster', CLUSTER, '--tasks', taskArn])
     ?.tasks?.[0]
-  const containerExit = done?.containers?.[0]?.exitCode
+  const containerExit = done?.containers?.[0]?.exitCode ?? null
   console.log(`  task stopped: ${done?.stoppedReason ?? 'n/a'} (exit ${containerExit})`)
 
   const stream = `${spec.logPrefix}/${spec.containerName}/${taskId}`
@@ -438,5 +461,5 @@ export function runTaskAndReadLogs(
   }
 
   for (const l of lines) if (!opts.echo || opts.echo(l)) console.log(`    | ${l}`)
-  return lines
+  return { lines, containerExit }
 }

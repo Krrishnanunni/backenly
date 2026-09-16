@@ -168,6 +168,23 @@ describe('the gate', () => {
     expect(gate([], [], { ...clean, chainReplay: 'failed' }).verdict).toBe('STAGING_BASELINE_ELIGIBLE')
   })
 
+  it('separates a chain that was never replayed from one whose files failed their hash', () => {
+    // Since staging was baselined the legacy chain is forensic evidence, not a
+    // lineage input, so a run may omit it. What must not happen is the report
+    // describing that as a hash mismatch: it would be a false statement about
+    // the evidence, and the real mismatch above must keep blocking.
+    const notReplayed = gate([], [], { ...clean, chainReplay: null, inputsVerified: null })
+    expect(notReplayed.verdict).toBe('STAGING_BASELINE_ELIGIBLE')
+    // Stated, so an eligible verdict reached with a leg missing does not read
+    // the same as one reached with every leg run.
+    expect(notReplayed.notes).toContainEqual(expect.stringContaining('was not replayed'))
+    expect([...notReplayed.reasons, ...notReplayed.notes].join(' ')).not.toContain('did not match')
+
+    const mismatch = gate([], [], { ...clean, inputsVerified: false })
+    expect(mismatch.verdict).toBe('INCONCLUSIVE')
+    expect(mismatch.reasons).toContainEqual(expect.stringContaining('did not match its recorded hash'))
+  })
+
   it('prefers inconclusive over reconciliation when evidence is missing', () => {
     const d = diffSnapshots(EMPTY, snapshot({ tables: [table('mystery')] }))
     expect(gate(d, attribute(d, []), { ...clean, captureStaging: false }).verdict).toBe('INCONCLUSIVE')

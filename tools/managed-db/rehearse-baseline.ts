@@ -60,6 +60,13 @@ export interface BaselineRehearsalResult {
   baseliningDelta: Difference[]
   /** Objects the migration ledger itself introduced. Reported, not hidden. */
   ledgerObjects: string[]
+  /**
+   * Whether those objects are exactly the ones the lineage manifest claims the
+   * runner creates. The manifest says its values were replayed; this is the
+   * replay, so a drifting Prisma CLI surfaces here instead of being absorbed as
+   * an explained difference on every future capture.
+   */
+  ledgerMatchesManifest: string[] | null
   /** What deploying the forward migrations actually added. */
   forwardDelta: Difference[]
   forwardSecondDeployNoOp: boolean | null
@@ -90,6 +97,24 @@ function prisma(root: string, schemaPath: string, url: string, args: string[]): 
 
 const NO_PENDING = /No pending migrations|Database schema is up to date/i
 
+export const LEDGER_MANIFEST = join(
+  'tools', 'migration-lineage', 'manifests', 'provisioning-prisma-migration-ledger.json',
+)
+
+/**
+ * The manifest that lets a lineage capture explain `_prisma_migrations` must
+ * describe what the runner actually creates, object for object. Names only: the
+ * field values are gated by the lineage report's own attribution.
+ */
+function compareLedgerToManifest(root: string, created: string[]): string[] {
+  const manifest = JSON.parse(readFileSync(join(root, LEDGER_MANIFEST), 'utf8')) as { entries: Array<{ key: string }> }
+  const claimed = new Set(manifest.entries.map(e => e.key))
+  const problems: string[] = []
+  for (const key of created) if (!claimed.has(key)) problems.push(`${key} was created but no entry claims it`)
+  for (const key of claimed) if (!created.includes(key)) problems.push(`${key} is claimed but was not created`)
+  return problems
+}
+
 export async function rehearseBaseline(root: string, adminUrl: string): Promise<BaselineRehearsalResult> {
   const r: BaselineRehearsalResult = {
     rehearsal: 'layer3-baseline',
@@ -104,6 +129,7 @@ export async function rehearseBaseline(root: string, adminUrl: string): Promise<
     historyRows: [],
     baseliningDelta: [],
     ledgerObjects: [],
+    ledgerMatchesManifest: null,
     forwardDelta: [],
     forwardSecondDeployNoOp: null,
     error: null,
@@ -198,6 +224,9 @@ export async function rehearseBaseline(root: string, adminUrl: string): Promise<
   }
   if (r.ledgerObjects.length === 0) {
     r.failures.push('no migration ledger was introduced; the baseline did not take effect')
+  } else {
+    r.ledgerMatchesManifest = compareLedgerToManifest(root, r.ledgerObjects)
+    for (const problem of r.ledgerMatchesManifest) r.failures.push(`migration ledger manifest: ${problem}`)
   }
   if (!r.historyRows.some(h => h.migration_name === BASELINE_ID && h.finished)) {
     r.failures.push('the baseline is not recorded as applied in _prisma_migrations')
@@ -234,7 +263,11 @@ async function main(): Promise<void> {
   }
   console.log(`    forward migrations   ${JSON.stringify(result.forwardMigrations)}`)
   console.log(`    baselining delta     ${result.baseliningDelta.length} (canonical schema)`)
-  console.log(`    ledger objects       ${result.ledgerObjects.length}`)
+  const manifest = result.ledgerMatchesManifest
+  console.log(
+    `    ledger objects       ${result.ledgerObjects.length}` +
+      (manifest === null ? '' : manifest.length === 0 ? ' (all claimed by the lineage manifest)' : ` (${manifest.length} manifest problem(s))`),
+  )
   console.log(`    forward delta        ${result.forwardDelta.length}: ${result.forwardDelta.slice(0, 6).map(d => d.key).join(', ')}`)
   console.log(`    second forward no-op ${result.forwardSecondDeployNoOp}`)
   console.log(`    history              ${result.historyRows.map(h => h.migration_name).join(', ')}`)

@@ -21,7 +21,7 @@ import {
   assertStagingOnly,
   die,
   resolveStagingTaskContext,
-  runTaskAndReadLogs,
+  runTaskAndReadResult,
   withEphemeralTaskDefinition,
   type OneShotTaskSpec,
 } from './lib/staging-fargate-task'
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   }
 
   const exitCode = await withEphemeralTaskDefinition(ctx, spec, taskDefArn => {
-    const lines = runTaskAndReadLogs(ctx, taskDefArn, spec)
+    const { lines, containerExit } = runTaskAndReadResult(ctx, taskDefArn, spec)
     const text = lines.join('\n')
     // Prisma says what it did; the task's exit code is the authority, and the
     // launcher reports both rather than interpreting one as the other.
@@ -85,6 +85,23 @@ async function main(): Promise<void> {
     console.log(
       `\n  observed: clean=${clean} noPending=${noPending} applied=${applied} resolved=${resolved}`,
     )
+
+    // `status` exits 1 when migrations are pending, which is an answer rather
+    // than a failure, so the launcher passes it through: the caller sees the
+    // same code Prisma chose. For a mutation the exit code gates the claim.
+    if (command === 'status') return containerExit === 0 ? 0 : 1
+
+    if (containerExit !== 0) {
+      console.error(`\n  FAILED: ${command} exited ${containerExit}; the database may be partially migrated`)
+      return 1
+    }
+    const proved = command === 'deploy' ? applied || noPending : resolved
+    if (!proved) {
+      // A zero exit with none of the expected output means the logs did not
+      // arrive or the runner did something else. Not a success.
+      console.error(`\n  FAILED: ${command} exited 0 but its outcome was never observed in the logs`)
+      return 1
+    }
     return 0
   })
 
