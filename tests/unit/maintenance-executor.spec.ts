@@ -94,6 +94,11 @@ jest.mock('@/lib/autonomy/maintenance/primitives/dual-write', () => ({
   installDualWrite: (...a: any[]) => mockInstallDualWrite(...(a as [])),
 }))
 
+const mockSwitchReaders = jest.fn()
+jest.mock('@/lib/autonomy/maintenance/primitives/switch-readers', () => ({
+  switchReaders: (...a: any[]) => mockSwitchReaders(...(a as [])),
+}))
+
 import { executeMaintenancePlan, type StepBinding } from '@/lib/autonomy/maintenance/execute'
 import { buildMaintenancePlan, type MaintenancePlan } from '@/lib/autonomy/maintenance/plan'
 
@@ -144,8 +149,57 @@ const build = (hypothesisId: string, fingerprint = 'cat-v1'): MaintenancePlan =>
 
 /** [add_structure, verify] — every rung implemented, tiers 1 and 0. */
 const runnable = () => build('missing_constraint_permits_invalid_state')
-/** Six rungs ending in the Phase 7 pair, so the ladder is blocked. */
-const blocked = () => build('duplicated_lifecycle_state')
+/** The full six-rung expand/contract ladder. Tier 2 rungs, so approval-bound. */
+const fullLadder = () => build('duplicated_lifecycle_state')
+
+/**
+ * The same ladder with one primitive withdrawn, so it is genuinely blocked.
+ *
+ * Phases 6b and 7 implemented every step kind, so no real ladder is blocked any
+ * more. The state still has to be tested: the next step kind to be invented
+ * arrives unimplemented, and a ladder containing it must not run.
+ */
+const runBlocked = async (over: Record<string, unknown> = {}) => {
+  let outcome: any
+  await jest.isolateModulesAsync(async () => {
+    jest.doMock('@/lib/autonomy/maintenance/step', () => {
+      const real = jest.requireActual('@/lib/autonomy/maintenance/step')
+      const table = { ...real.EXECUTOR_CAPABILITY, dual_write: 'not_implemented' }
+      return {
+        ...real,
+        EXECUTOR_CAPABILITY: table,
+        classifyMaintenanceStep: (s: any) => {
+          const c = real.classifyMaintenanceStep(s)
+          return { ...c, capability: table[s.kind], executable: table[s.kind] === 'implemented' }
+        },
+      }
+    })
+    const { buildMaintenancePlan: build2 } = require('@/lib/autonomy/maintenance/plan')
+    const { executeMaintenancePlan: exec } = require('@/lib/autonomy/maintenance/execute')
+    const plan = build2({
+      findingId: 'f1',
+      diagnosis: diagnosis('duplicated_lifecycle_state'),
+      subsystem: { fingerprint: 'sessions', membership: ['sessions', 'users'] },
+      catalogFingerprint: 'cat-v1',
+    })
+    outcome = {
+      plan,
+      result: await exec({
+        plan,
+        projectId: 'p1',
+        currentCatalogFingerprint: 'cat-v1',
+        autonomyLevel: 'AGGRESSIVE',
+        bindings: bindingsFor(plan),
+        mutationsEnabled: true,
+        approvedPlanVersion: plan.planVersion,
+        approvalId: 'a1',
+        ...over,
+      }),
+    }
+  })
+  jest.dontMock('@/lib/autonomy/maintenance/step')
+  return outcome
+}
 
 function bindingsFor(plan: MaintenancePlan): Record<number, StepBinding> {
   const out: Record<number, StepBinding> = {}
@@ -156,6 +210,11 @@ function bindingsFor(plan: MaintenancePlan): Record<number, StepBinding> {
     } else if (s.kind === 'verify') out[s.ordinal] = { kind: 'verify', ...cols }
     else if (s.kind === 'dual_write') out[s.ordinal] = { kind: 'dual_write', ...cols }
     else if (s.kind === 'backfill') out[s.ordinal] = { kind: 'backfill', ...cols }
+    else if (s.kind === 'switch_readers') {
+      out[s.ordinal] = { kind: 'switch_readers', table: 'sessions', sourceColumn: 'status', targetColumn: 'state' }
+    }
+    // `contract` deliberately gets none: it is human-only, and the executor must
+    // not require a binding for a step it will never run.
   }
   return out
 }
@@ -189,6 +248,12 @@ beforeEach(() => {
     reconciliation: {},
   })
   mockInstallDualWrite.mockResolvedValue({ installed: true, objectName: 'bkn_dw_sessions_state', refusal: null })
+  mockSwitchReaders.mockResolvedValue({
+    switched: [{ kind: 'ai_function', id: 'fn1', name: 'notify', replacements: 2, previousCode: 'old' }],
+    skipped: [],
+    inventory: { controllable: [{ id: 'fn1' }], unobservable: [{}, {}, {}], coverage: 'partial' },
+    refusal: null,
+  })
   mockExecuteAction.mockResolvedValue({ success: true, message: 'column added' })
 })
 
@@ -196,24 +261,30 @@ beforeEach(() => {
 
 describe('a blocked ladder does not run, including its runnable prefix', () => {
   it('refuses, and mutates nothing', async () => {
-    const plan = blocked()
+    const { plan, result } = await runBlocked()
     expect(plan.validity).toBe('blocked_by_capability')
 
-    const r = await run({ plan, approvedPlanVersion: plan.planVersion, approvalId: 'a1' })
-
-    expect(r.status).toBe('refused')
-    expect(r.haltReason).toMatch(/all-or-nothing/)
-    expect(r.steps).toEqual([])
+    expect(result.status).toBe('refused')
+    expect(result.haltReason).toMatch(/all-or-nothing/)
+    expect(result.steps).toEqual([])
     // The first rung IS implemented and would have succeeded. Running it would
     // leave a new column nothing fills and a dual-write never installed.
     expect(mockExecuteAction).not.toHaveBeenCalled()
   })
 
   it('still records the refusal, so a refusal is not a silent no-op', async () => {
-    await run({ plan: blocked(), approvedPlanVersion: 'whatever' })
+    await runBlocked({ approvedPlanVersion: 'whatever' })
     expect(mockCreateExecution).toHaveBeenCalledTimes(1)
     expect(mockCreateExecution.mock.calls[0][0].data.status).toBe('refused')
     expect(mockCreateExecution.mock.calls[0][0].data.haltReason).toMatch(/blocked by capability/)
+  })
+
+  it('does NOT treat the human-only contract rung as a block', async () => {
+    // The six-rung ladder ends in a step a person performs. That must not make
+    // everything before it unrunnable, or Phase 6b could never run end to end.
+    const plan = fullLadder()
+    expect(plan.validity).toBe('executable')
+    expect(plan.humanOnlySteps.join(' ')).toMatch(/contract/)
   })
 })
 
@@ -246,17 +317,16 @@ describe('tier gates', () => {
   it('refuses tier 2 with no approval, at the most permissive level', async () => {
     // AGGRESSIVE is the default dial. It does not widen the band: Tier 2 is
     // hard-denied at every level, which is the floor this asserts.
-    const r = await run({ plan: blocked(), autonomyLevel: 'AGGRESSIVE' })
+    const r = await run({ plan: fullLadder(), autonomyLevel: 'AGGRESSIVE' })
     expect(r.status).toBe('refused')
-    expect(r.haltReason).toBeTruthy()
+    expect(r.haltReason).toMatch(/tier 2 requires an approval/)
   })
 
   it('refuses an approval issued for a different plan version', async () => {
-    const plan = blocked()
+    const plan = fullLadder()
     const r = await run({ plan, approvedPlanVersion: 'some-older-version' })
     expect(r.status).toBe('refused')
-    // Blocked-by-capability is checked first and is itself a refusal; the point
-    // is that a mismatched approval never reaches execution either way.
+    expect(r.haltReason).toMatch(/different plan version/)
     expect(mockExecuteAction).not.toHaveBeenCalled()
   })
 })
@@ -417,9 +487,12 @@ describe('a backfill is dispatched, not looped', () => {
     // backfill rung is reachable only once switch_readers/contract exist. Until
     // then the assertion that matters is that the executor never loops batches
     // itself: BackgroundJob owns attempts, backoff and dead-lettering.
-    const plan = blocked()
+    const plan = fullLadder()
     const r = await run({ plan, approvedPlanVersion: plan.planVersion, approvalId: 'a1' })
-    expect(r.status).toBe('refused')
-    expect(mockEnqueue).not.toHaveBeenCalled()
+    const backfill = r.steps.find(s => s.kind === 'backfill')
+    expect(backfill).toMatchObject({ status: 'dispatched', backgroundJobId: 'job-1' })
+    expect(mockEnqueue).toHaveBeenCalledTimes(1)
+    expect(mockEnqueue.mock.calls[0][0]).toBe('maintenance_backfill')
   })
 })
+

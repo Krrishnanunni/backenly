@@ -19,11 +19,16 @@
  *
  * ── Why a plan can be right and still refuse to run ─────────────────────────
  *
- * Three of six step kinds have no implementation. `CREATE_TRIGGER` writes an
- * AppTrigger row rather than a database trigger; `RUN_DATA_MIGRATION`'s backfill
- * is atomic by design where maintenance needs resumable and batched; nothing
- * reconciles a source column against a target one. See
- * `EXECUTOR_CAPABILITY` in ./step.ts.
+ * When this was written, three of six step kinds had no implementation.
+ * Phases 6b and 7 built five; the sixth, `contract`, never will be — it drops
+ * the legacy column, and on a platform that hands out connection strings and
+ * serves PostgREST clients that pick their own columns, "nobody reads this" is
+ * not a fact software can establish. It is `human_only`, it is planned and
+ * shown, and it is the one step whose absence does not block the ladder. See
+ * `EXECUTOR_CAPABILITY` and `OPTIONAL_TERMINAL_STEPS` in ./step.ts.
+ *
+ * The middle state still matters and is still reachable: a future step kind
+ * arrives unimplemented, and a ladder containing it must not run.
  *
  * The alternative — emitting placeholder verbs so the ladder looks complete —
  * is exactly how `schema_not_registered` shipped pointing at
@@ -42,6 +47,7 @@ import { createHash } from 'node:crypto'
 import type { StructuralDiagnosis } from '../hypothesis/structural'
 import {
   EXECUTOR_CAPABILITY,
+  OPTIONAL_TERMINAL_STEPS,
   classifyMaintenanceStep,
   requiresRollbackSpec,
   type MaintenanceStep,
@@ -74,6 +80,15 @@ export interface MaintenancePlan {
   validity: PlanValidity
   /** Why it is not executable. Empty only when validity is 'executable'. */
   blockedReasons: string[]
+  /**
+   * Steps a person must perform. Reported, never a reason to block.
+   *
+   * Separate from `blockedReasons` because they are different facts: one is
+   * "waiting for a tool to be built", the other is "this will always need a
+   * human". Folding them together would make the ladder look perpetually
+   * unfinished when it is simply finished at a different boundary.
+   */
+  humanOnlySteps: string[]
   /** Live-schema identity at planning time. A mismatch means stale. */
   catalogFingerprint: string
   createdAt: string
@@ -270,6 +285,7 @@ export function buildMaintenancePlan(input: PlanInput): MaintenancePlan {
     steps: [],
     validity: 'invalid',
     blockedReasons: reasons,
+    humanOnlySteps: [],
   })
 
   // ── 1. The diagnosis must be decision-quality ──────────────────────────────
@@ -315,13 +331,20 @@ export function buildMaintenancePlan(input: PlanInput): MaintenancePlan {
   }))
 
   // ── 3. Capability — a plan may be right and still not runnable ─────────────
+  //
+  // `contract` is the one step whose absence does not block: the ladder is
+  // complete and safe once readers have moved and held, and the legacy column
+  // simply stays. It is still planned, still shown, and still requires a person
+  // — it just does not make everything before it unrunnable. See
+  // OPTIONAL_TERMINAL_STEPS in ./step.ts for why that exception is exactly one
+  // step wide.
+  const humanOnly: string[] = []
   for (const step of steps) {
     const c = classifyMaintenanceStep(step)
-    if (!c.executable) {
-      blockedReasons.push(
-        `${step.kind}: ${EXECUTOR_CAPABILITY[step.kind]} — ${c.reason}`,
-      )
-    }
+    if (c.executable) continue
+    const line = `${step.kind}: ${EXECUTOR_CAPABILITY[step.kind]} — ${c.reason}`
+    if (OPTIONAL_TERMINAL_STEPS.includes(step.kind)) humanOnly.push(line)
+    else blockedReasons.push(line)
   }
 
   const planVersion = stableHash([
@@ -348,6 +371,7 @@ export function buildMaintenancePlan(input: PlanInput): MaintenancePlan {
     steps,
     validity: blockedReasons.length > 0 ? 'blocked_by_capability' : 'executable',
     blockedReasons,
+    humanOnlySteps: humanOnly,
   }
 }
 

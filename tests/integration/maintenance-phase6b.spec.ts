@@ -38,6 +38,8 @@ import {
 } from '@/lib/autonomy/maintenance/primitives/dual-write'
 import { runBackfillBatch } from '@/lib/autonomy/maintenance/primitives/backfill'
 import { runVerify } from '@/lib/autonomy/maintenance/primitives/verify'
+import { switchReaders, revertReaders } from '@/lib/autonomy/maintenance/primitives/switch-readers'
+import { inventoryReaders } from '@/lib/autonomy/maintenance/readers'
 import {
   transformLiteralSql,
   transformSql,
@@ -327,5 +329,94 @@ describe('removing the dual-write', () => {
     const r = await rows(`SELECT state FROM "${SCHEMA}"."sessions" WHERE status = 'after-removal'`)
     // Non-vacuity for the removal: the trigger really is not running any more.
     expect(r[0]).toEqual({ state: null })
+  })
+})
+
+// ── Phase 7: moving the readers Backenly wrote ───────────────────────────────
+
+describe('switching readers', () => {
+  const FN_CODE = 'async (ctx) => { const s = ctx.row.status; return s === "ok" ? ctx.row.status : null }'
+  let fnId = ''
+
+  beforeAll(async () => {
+    await prisma.project.create({ data: { id: PROJECT_ID, name: 'phase7-acceptance' } })
+    const fn = await prisma.aiFunction.create({
+      data: {
+        projectId: PROJECT_ID,
+        name: 'notify-on-status',
+        description: 'fixture',
+        generatedCode: FN_CODE,
+        triggerType: 'manual',
+        status: 'active',
+      },
+    })
+    fnId = fn.id
+  })
+
+  afterAll(async () => {
+    await prisma.aiFunction.deleteMany({ where: { projectId: PROJECT_ID } }).catch(() => {})
+    await prisma.project.deleteMany({ where: { id: PROJECT_ID } }).catch(() => {})
+  })
+
+  it('finds the Backenly-authored reader and never claims to see the rest', async () => {
+    const inv = await inventoryReaders(PROJECT_ID, 'sessions', 'status')
+    expect(inv.controllable).toEqual([
+      { kind: 'ai_function', id: fnId, name: 'notify-on-status', occurrences: 2 },
+    ])
+    // The half that matters: these are stated as a standing fact, not as an
+    // empty query result. They are why `contract` stays human-only.
+    expect(inv.unobservable.length).toBeGreaterThan(0)
+    expect(inv.coverage).toBe('partial')
+  })
+
+  it('repoints the reader and leaves everything else in the code alone', async () => {
+    const r = await switchReaders({
+      projectId: PROJECT_ID, table: 'sessions', sourceColumn: 'status', targetColumn: 'state',
+    })
+    expect(r.refusal).toBeNull()
+    expect(r.switched).toHaveLength(1)
+    expect(r.switched[0]).toMatchObject({ id: fnId, replacements: 2, previousCode: FN_CODE })
+
+    const after = await prisma.aiFunction.findUnique({ where: { id: fnId } })
+    expect(after!.generatedCode).toBe(FN_CODE.replace(/\bstatus\b/g, 'state'))
+    // Non-vacuity: the rest of the function is untouched.
+    expect(after!.generatedCode).toContain('s === "ok"')
+  })
+
+  it('refuses a second switch rather than rewriting twice', async () => {
+    // The code now references the target, which means it already reads both
+    // columns — a situation a person should look at, not one to rewrite again.
+    const r = await switchReaders({
+      projectId: PROJECT_ID, table: 'sessions', sourceColumn: 'state', targetColumn: 'other',
+    })
+    expect(r.refusal).toBeNull()
+    const again = await switchReaders({
+      projectId: PROJECT_ID, table: 'sessions', sourceColumn: 'other', targetColumn: 'other',
+    })
+    expect(again.refusal).toMatch(/same column/)
+  })
+
+  it('reverts to the recorded bytes, not by rewriting backwards', async () => {
+    // Restore the fixture, switch, then revert.
+    await prisma.aiFunction.update({ where: { id: fnId }, data: { generatedCode: FN_CODE } })
+    const r = await switchReaders({
+      projectId: PROJECT_ID, table: 'sessions', sourceColumn: 'status', targetColumn: 'state',
+    })
+    expect(r.switched).toHaveLength(1)
+
+    const back = await revertReaders(r.switched)
+    expect(back).toEqual({ reverted: 1, failures: [] })
+    const after = await prisma.aiFunction.findUnique({ where: { id: fnId } })
+    // Byte for byte. A reverse rewrite would also rename occurrences that were
+    // always the target column.
+    expect(after!.generatedCode).toBe(FN_CODE)
+  })
+
+  it('ignores an inactive function, which runs nothing', async () => {
+    await prisma.aiFunction.update({ where: { id: fnId }, data: { status: 'inactive' } })
+    const inv = await inventoryReaders(PROJECT_ID, 'sessions', 'status')
+    expect(inv.controllable).toEqual([])
+    expect(inv.coverage).toBe('none_controllable')
+    await prisma.aiFunction.update({ where: { id: fnId }, data: { status: 'active' } })
   })
 })
