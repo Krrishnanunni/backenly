@@ -25,5 +25,13 @@ FROM ${BASE_IMAGE}
 # /app rather than anywhere else.
 COPY maintenance.cjs /app/maintenance.cjs
 
+# The acceptance fixture. One disposable project, one fixed shape, no arbitrary
+# SQL — see scripts/maintenance-acceptance-fixture.ts. It ships here rather than
+# in an image of its own because it needs the same Prisma client and the same
+# guards, and because a second image is a second thing to keep pinned.
+COPY fixture.cjs /app/fixture.cjs
+
 WORKDIR /app
+# The fixture is reached by overriding this at task launch, so the default
+# remains the only thing that runs unless a caller asks for the other.
 ENTRYPOINT ["node", "/app/maintenance.cjs"]
