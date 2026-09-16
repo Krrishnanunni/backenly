@@ -183,12 +183,18 @@ async function prepare(): Promise<void> {
   // than disabling or working around the policy. `is_local = true`, so the
   // settings revert with the transaction and never leak onto a pooled
   // connection, which is why the INSERT has to be inside it.
+  // The product adds an ownership column, `user_id uuid NOT NULL`, whose DEFAULT
+  // reads the current user from the claim. A session with no user id makes that
+  // default evaluate to NULL and every insert fails with 23502 — so the owner's
+  // id goes into the claim, which is the same thing a real request does.
   const { rlsSessionSql, rlsSessionParams } = await import('@/lib/services/rls-session')
   await prisma.$transaction(async tx => {
     await tx.$executeRawUnsafe(
       rlsSessionSql(1),
-      ...rlsSessionParams({ isServiceRole: true, userRole: 'service' } as never),
+      ...rlsSessionParams({ userId: owner.id, isServiceRole: true, userRole: 'service' } as never),
     )
+    // One tenant user, so anything keyed to it resolves.
+    await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."users" (email) VALUES ('acceptance@fixture.local')`)
     await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."sessions" (id, status, legacy_state)
            SELECT gen_random_uuid(),
                   (ARRAY['active','archived','pending'])[1 + (g % 3)],
