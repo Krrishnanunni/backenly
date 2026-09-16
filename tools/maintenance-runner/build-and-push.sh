@@ -34,17 +34,32 @@ trap 'rm -rf "$CTX"' EXIT
 # `@prisma/client` and `.prisma` come from the base image. Everything else,
 # including `pg`, is bundled: the runtime image does not ship `pg` as a package
 # because its own server bundle already contains it.
-echo "bundling…"
-node -e '
-  require("esbuild").build({
-    entryPoints: ["scripts/run-maintenance-plan.ts"],
-    bundle: true, platform: "node", target: "node20", format: "cjs",
-    outfile: process.argv[1], minify: true,
-    external: ["@prisma/client", ".prisma/client", "pg-native", "pg-cloudflare", "cloudflare:sockets"],
-    alias: { "server-only": "./tools/maintenance-runner/server-only-stub.js" },
-    logLevel: "warning",
-  }).catch(e => { console.error(e); process.exit(1) })
-' "$CTX/maintenance.cjs"
+#
+# MAINTENANCE_BUNDLE lets the bundle be built elsewhere and handed in. On this
+# project's Windows + WSL setup it has to be: node_modules holds the win32
+# esbuild binary, so a bundle step inside WSL dies with "you installed esbuild
+# for another platform". Bundle on the host, build the image here.
+if [ -n "${MAINTENANCE_BUNDLE:-}" ]; then
+  [ -f "$MAINTENANCE_BUNDLE" ] || { echo "MAINTENANCE_BUNDLE does not exist: $MAINTENANCE_BUNDLE"; exit 2; }
+  echo "using prebuilt bundle $MAINTENANCE_BUNDLE"
+  cp "$MAINTENANCE_BUNDLE" "$CTX/maintenance.cjs"
+else
+  echo "bundling…"
+  node -e '
+    require("esbuild").build({
+      entryPoints: ["scripts/run-maintenance-plan.ts"],
+      bundle: true, platform: "node", target: "node20", format: "cjs",
+      outfile: process.argv[1], minify: true,
+      external: ["@prisma/client", ".prisma/client", "pg-native", "pg-cloudflare", "cloudflare:sockets"],
+      alias: { "server-only": "./tools/maintenance-runner/server-only-stub.js" },
+      logLevel: "warning",
+    }).catch(e => { console.error(e); process.exit(1) })
+  ' "$CTX/maintenance.cjs"
+fi
+
+# Whatever produced it, it must be a real bundle and not a stub or a stale file.
+grep -q 'run-maintenance-plan\|--plan-version' "$CTX/maintenance.cjs" \
+  || { echo "refusing: maintenance.cjs does not look like the maintenance entry point"; exit 2; }
 
 cp "$ROOT/tools/maintenance-runner/Dockerfile.maintenance" "$CTX/"
 echo "context:"
