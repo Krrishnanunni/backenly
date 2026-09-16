@@ -176,13 +176,42 @@ async function prepare(): Promise<void> {
 
   // Rows and statistics only. Nothing here is structure, so nothing here can
   // disagree with the platform's metadata.
-  const q = (sql: string) => prisma.$executeRawUnsafe(sql)
-  await q(`INSERT INTO "${schema}"."sessions" (id, status, legacy_state)
+  //
+  // The product enables RLS on every tenant table it creates, so a bare INSERT
+  // is refused with 42501 — correctly. This uses the platform's OWN session
+  // contract (lib/services/rls-session.ts) to write as the service role rather
+  // than disabling or working around the policy. `is_local = true`, so the
+  // settings revert with the transaction and never leak onto a pooled
+  // connection, which is why the INSERT has to be inside it.
+  // The product adds an ownership column, `user_id uuid NOT NULL`, whose DEFAULT
+  // reads the current user from the claim. A session with no user id makes that
+  // default evaluate to NULL and every insert fails with 23502 — so the owner's
+  // id goes into the claim, which is the same thing a real request does.
+  const { rlsSessionSql, rlsSessionParams } = await import('@/lib/services/rls-session')
+  await prisma.$transaction(async tx => {
+    await tx.$executeRawUnsafe(
+      rlsSessionSql(1),
+      ...rlsSessionParams({ userId: owner.id, isServiceRole: true, userRole: 'service' } as never),
+    )
+    // One tenant user, with the OWNER'S id.
+    //
+    // The product also creates `fk_sessions_user`, so the claim-derived
+    // user_id must exist in the tenant users table. Giving that row the same
+    // id makes its own ownership default self-referential, which PostgreSQL
+    // accepts because foreign keys are checked after the row lands.
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "${schema}"."users" (id, email) VALUES ($1::uuid, $2)`,
+      owner.id,
+      'acceptance@fixture.local',
+    )
+    await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."sessions" (id, status, legacy_state)
            SELECT gen_random_uuid(),
                   (ARRAY['active','archived','pending'])[1 + (g % 3)],
                   (ARRAY['ACTIVE','ARCHIVED','PENDING'])[1 + (g % 3)]
              FROM generate_series(1, ${FIXTURE_ROWS}) g`)
-  await q(`ANALYZE "${schema}"."sessions"`)
+  })
+  // ANALYZE reads statistics rather than rows, so it needs no claim.
+  await prisma.$executeRawUnsafe(`ANALYZE "${schema}"."sessions"`)
 
   const counted = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
     `SELECT count(*)::bigint AS n FROM "${schema}"."sessions"`,
@@ -324,8 +353,8 @@ async function inspect(projectId: string): Promise<void> {
     die(`project ${projectId} is named "${project.name}"; this only inspects the acceptance project`)
   }
 
-  const columns = await q<{ column_name: string; data_type: string }>(
-    `SELECT column_name, data_type FROM information_schema.columns
+  const columns = await q<{ column_name: string; data_type: string; is_nullable: string; column_default: string | null }>(
+    `SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns
       WHERE table_schema = $1 AND table_name = 'sessions' ORDER BY ordinal_position`,
     schema,
   )
@@ -366,7 +395,13 @@ async function inspect(projectId: string): Promise<void> {
         projectId,
         workspaceSchema: schema,
         rows: Number(counted[0]?.n ?? 0),
-        columns: columns.map(c => `${c.column_name}:${c.data_type}`),
+        // Nullability and defaults included: "which column refuses a NULL" is
+        // the question a 23502 leaves you with, and guessing it is how a
+        // fixture gets debugged by trial.
+        columns: columns.map(
+          c => `${c.column_name}:${c.data_type}:${c.is_nullable === 'YES' ? 'null' : 'NOTNULL'}` +
+               `${c.column_default ? `:default=${String(c.column_default).slice(0, 30)}` : ''}`,
+        ),
         targetColumnPresent: columns.some(c => c.column_name === TARGET_COLUMN),
         triggers: triggers.map(t => t.tgname),
         rowsDisagreeingWithTransform: agree ? Number(agree[0]?.n ?? 0) : null,

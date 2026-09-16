@@ -76,12 +76,19 @@ grep -q 'run-maintenance-plan\|--plan-version' "$CTX/maintenance.cjs" \
 grep -q 'maintenance-prod-acceptance' "$CTX/fixture.cjs" \
   || { echo "refusing: fixture.cjs does not look like the acceptance fixture"; exit 2; }
 
-# The fixture must never grow an arbitrary-SQL surface. Checked on the bytes
-# about to be baked into an image that runs against production, not on the
-# source that produced them.
-for forbidden in '"--sql"' '"--query"' '"--table"' '"--schema"' '"--column"' '"--force"'; do
-  if grep -qF -- "$forbidden" "$CTX/fixture.cjs"; then
-    echo "refusing: fixture.cjs accepts $forbidden"
+# The fixture must never grow an arbitrary-SQL surface.
+#
+# Checked on the SOURCE, not the bundle. The fixture now builds through the
+# product's own lifecycle, so its bundle contains the product — including
+# unrelated code that happens to mention "--schema" (the Prisma CLI's own flag,
+# among others). Grepping the bundle was a proxy for a property that belongs to
+# this file's argument parser, and the proxy stopped being true the moment the
+# bundle grew. tests/unit/maintenance-acceptance-fixture.spec.ts enumerates the
+# exact arg() set and is the precise form of this check.
+FIXTURE_SRC="$ROOT/scripts/maintenance-acceptance-fixture.ts"
+for forbidden in "'--sql'" "'--query'" "'--table'" "'--schema'" "'--column'" "'--force'"; do
+  if grep -qF -- "arg($forbidden)" "$FIXTURE_SRC"; then
+    echo "refusing: the fixture reads $forbidden"
     exit 2
   fi
 done

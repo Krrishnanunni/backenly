@@ -144,3 +144,12 @@ tests/integration/maintenance-phase6b.spec.ts
 # a dry run can return anything but WOULD_REFUSE — 50+ analysed rows, and
 # exactly one live hypothesis rather than a tie the diagnosis will not break.
 tests/integration/maintenance-resolve-db.spec.ts
+
+# The maintenance primitives against a table the PRODUCT built, which means one
+# with row-level security on it. Every other fixture here uses raw DDL and so
+# has no RLS, which is exactly why reconcile.ts could read zero rows from a
+# table holding eighty and call it "no rows" — for months, with every suite
+# green. It also creates a throwaway NOSUPERUSER role, because the local
+# development role is a superuser and superusers bypass RLS entirely, so a
+# superuser-only test would prove nothing about production.
+tests/integration/maintenance-rls-aware.spec.ts

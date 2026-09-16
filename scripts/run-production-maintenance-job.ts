@@ -144,19 +144,30 @@ async function main(): Promise<void> {
     // The acceptance fixture. A project id and a confirmation, and nothing else
     // reaches it: the schema, the tables, the columns and every statement are
     // fixed in scripts/maintenance-acceptance-fixture.ts.
-    if (!projectId) die('--project is required')
     if (mode !== 'prepare' && mode !== 'cleanup' && mode !== 'inspect') {
       die('--mode must be prepare, cleanup or inspect for --job fixture')
     }
     entryPoint = ['node', '/app/fixture.cjs']
-    command = ['--mode', mode, '--project', projectId]
-    // `inspect` writes nothing, so it needs no confirmation. The two that do
-    // write take different ones, so a shell-history re-run of prepare cannot
-    // delete the evidence it created.
-    if (mode !== 'inspect') {
-      const confirmFlag = mode === 'prepare' ? '--confirm' : '--confirm-destroy'
-      if (argValue(confirmFlag) !== projectId) die(`${confirmFlag} must be exactly "${projectId}"`)
-      command.push(confirmFlag, projectId)
+
+    if (mode === 'prepare') {
+      // The product mints the project id, so there is none to pass or confirm
+      // against. The confirmation is the marker name the fixture will create
+      // with, which is also the only project it will ever touch.
+      const marker = 'maintenance-prod-acceptance'
+      if (argValue('--confirm') !== marker) die(`--confirm must be exactly "${marker}"`)
+      command = ['--mode', 'prepare', '--confirm', marker]
+    } else {
+      if (!projectId) die('--project is required')
+      command = ['--mode', mode, '--project', projectId]
+      // `inspect` writes nothing, so it needs no confirmation. Cleanup takes a
+      // different one from prepare, so a shell-history re-run cannot delete the
+      // evidence prepare just created.
+      if (mode === 'cleanup') {
+        if (argValue('--confirm-destroy') !== projectId) {
+          die(`--confirm-destroy must be exactly "${projectId}"`)
+        }
+        command.push('--confirm-destroy', projectId)
+      }
     }
 
     console.log(`
@@ -249,6 +260,18 @@ async function runTask(spec: TaskSpec): Promise<void> {
   const srcDef = aws(['ecs', 'describe-task-definition', '--task-definition', SERVICE])?.taskDefinition
   if (!srcDef) die('could not read the production task definition')
   const secrets = productionSecrets(srcDef)
+
+  // The edition seam. `currentEdition()` defaults to single-tenant when this is
+  // unset, and single-tenant refuses to create a second project — so a fixture
+  // task without it cannot use the product's own provisioning path. Read from
+  // the web service's own definition rather than asserted here, so this job
+  // runs as the edition production actually is.
+  const webDef = aws(['ecs', 'describe-task-definition', '--task-definition', 'backenly-production-web'])?.taskDefinition
+  const edition = (webDef?.containerDefinitions?.[0]?.environment ?? [])
+    .find((e: any) => e.name === 'BACKENLY_EDITION')?.value
+  if (!edition) die('backenly-production-web does not declare BACKENLY_EDITION')
+  environment.push({ name: 'BACKENLY_EDITION', value: String(edition) })
+  console.log(`  edition: ${edition} (from backenly-production-web)`)
 
   console.log(`  secrets carried: ${secrets.map(s => s.name).join(', ')}`)
   console.log(`  expected database: ${database}`)
