@@ -261,7 +261,43 @@ export function concludeInvestigation(
     t => !state.spentTests.includes(t.id) && leader.predicts[t.id] !== undefined,
   )
 
-  if (leader.confidence >= ACT_THRESHOLD && margin >= LEAD_MARGIN && !refutable) {
+  // The confidence bar, measured against the belief that evidence could move.
+  //
+  // Removing the tie-break veto above was not enough on its own. An
+  // unconfirmable hypothesis also holds POSTERIOR MASS, and nothing can ever
+  // take that mass away — in production `split_brain_writers` held 0.286 of it,
+  // capping a confirmed leader at 0.714 against a bar of 0.85. No evidence
+  // could close that gap on any project, so the bar was unreachable rather than
+  // demanding.
+  //
+  // So the leader is judged on the share of belief that is actually decidable,
+  // while ACT_THRESHOLD itself is untouched. Two conditions, and the second is
+  // what keeps the first honest:
+  //
+  //   1. it clears ACT_THRESHOLD among the settleable hypotheses, and
+  //   2. it holds a strict majority of the TOTAL posterior.
+  //
+  // Without (2) this would be plain renormalisation, which reads 1.0 for a
+  // leader holding 0.3 against 0.7 of unmeasurable mass — inflating confidence
+  // exactly where the evidence is weakest. With it, such a leader stays
+  // ambiguous, which is the right answer: most of the belief is somewhere this
+  // platform cannot look.
+  //
+  // The reported confidence stays the true posterior. Nothing downstream is
+  // told the system is more certain than it is.
+  const settleableMass = live
+    .filter(h => h.confirmable !== false)
+    .reduce((sum, h) => sum + h.confidence, 0)
+  const confidenceAmongSettleable =
+    settleableMass > 0 ? leader.confidence / settleableMass : 0
+  const holdsMajority = leader.confidence > 0.5
+
+  const clearsBar =
+    leader.confirmable !== false &&
+    holdsMajority &&
+    confidenceAmongSettleable >= ACT_THRESHOLD
+
+  if (clearsBar && margin >= LEAD_MARGIN && !refutable) {
     return { kind: 'conclusive', hypothesis: leader, confidence: leader.confidence }
   }
 

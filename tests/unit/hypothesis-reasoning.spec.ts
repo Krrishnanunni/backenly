@@ -225,6 +225,54 @@ describe('concludeInvestigation', () => {
       expect(v.kind).toBe('ambiguous')
     })
 
+    it('does not cap a confirmed leader below the bar with mass nothing can take', () => {
+      // The production numbers. duplicated_lifecycle_state was CONFIRMED by its
+      // deciding probe and still sat at 0.714 against a bar of 0.85, because
+      // split_brain_writers held the other 0.286 and no evidence could ever
+      // move it. The bar was unreachable rather than demanding.
+      let state = initialState('s', [H('a', 0.25, { t: 'x' }), U('unsettlable', 0.1, { u: 'seen' })])
+      state = applyObservation(state, { testId: 'u', outcome: 'seen' })
+      state = applyObservation(state, { testId: 't', outcome: 'x' })
+
+      const live = liveHypotheses(state).sort((x, y) => y.confidence - x.confidence)
+      expect(live[0].id).toBe('a')
+      expect(live[0].confidence).toBeLessThan(0.85)
+
+      const v = concludeInvestigation(state, [T('t'), T('u')])
+      expect(v.kind).toBe('conclusive')
+      // The reported confidence is the TRUE posterior, not the renormalised
+      // one. Nothing downstream is told the system is more certain than it is.
+      if (v.kind === 'conclusive') expect(v.confidence).toBeLessThan(0.85)
+    })
+
+    it('still refuses when most of the belief is somewhere it cannot look', () => {
+      // The guard that keeps the rule above from being plain renormalisation.
+      // A leader holding a minority of the posterior would read 1.0 among the
+      // settleable hypotheses, which is exactly the case where the evidence is
+      // weakest and confidence should not be manufactured.
+      let state = initialState('s', [H('a', 0.1, { t: 'x' }), U('unsettlable', 0.9, { u: 'seen' })])
+      state = applyObservation(state, { testId: 'u', outcome: 'seen' })
+      state = applyObservation(state, { testId: 't', outcome: 'x' })
+
+      const live = liveHypotheses(state).sort((x, y) => y.confidence - x.confidence)
+      expect(live[0].id).toBe('unsettlable')
+
+      const v = concludeInvestigation(state, [T('t'), T('u')])
+      expect(v.kind).toBe('ambiguous')
+    })
+
+    it('leaves an ordinary field completely unaffected', () => {
+      // No unconfirmable hypothesis means settleable mass is the whole mass, so
+      // the bar is ACT_THRESHOLD exactly as before. The majority requirement is
+      // implied by it, since 0.85 > 0.5.
+      let state = initialState('s', [H('a', 0.5, { t: 'x' }), H('b', 0.5, { t: 'y' })])
+      state = applyObservation(state, { testId: 't', outcome: 'x' })
+      expect(concludeInvestigation(state, [T('t')]).kind).toBe('conclusive')
+
+      let weak = initialState('s', [H('c', 0.51, {}), H('d', 0.49, {})])
+      expect(concludeInvestigation(weak, []).kind).toBe('ambiguous')
+    })
+
     it('still loses outright when the evidence refutes it', () => {
       let state = initialState('s', [H('a', 0.5, { t: 'x' }), U('unsettlable', 0.5, { t: 'y' })])
       state = applyObservation(state, { testId: 't', outcome: 'x' })
