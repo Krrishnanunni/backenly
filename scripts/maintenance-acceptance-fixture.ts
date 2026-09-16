@@ -193,8 +193,17 @@ async function prepare(): Promise<void> {
       rlsSessionSql(1),
       ...rlsSessionParams({ userId: owner.id, isServiceRole: true, userRole: 'service' } as never),
     )
-    // One tenant user, so anything keyed to it resolves.
-    await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."users" (email) VALUES ('acceptance@fixture.local')`)
+    // One tenant user, with the OWNER'S id.
+    //
+    // The product also creates `fk_sessions_user`, so the claim-derived
+    // user_id must exist in the tenant users table. Giving that row the same
+    // id makes its own ownership default self-referential, which PostgreSQL
+    // accepts because foreign keys are checked after the row lands.
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "${schema}"."users" (id, email) VALUES ($1::uuid, $2)`,
+      owner.id,
+      'acceptance@fixture.local',
+    )
     await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."sessions" (id, status, legacy_state)
            SELECT gen_random_uuid(),
                   (ARRAY['active','archived','pending'])[1 + (g % 3)],
