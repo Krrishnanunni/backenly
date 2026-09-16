@@ -115,6 +115,11 @@ const sleep = (ms: number) => {
 
 async function main(): Promise<void> {
   const image = argValue('--image')
+  // Which entry point in the image. Both target production and both carry the
+  // same guards, so this selects a job rather than an environment — the thing a
+  // flag must never select is which database it reaches.
+  const job = argValue('--job') ?? 'maintenance'
+  if (job !== 'maintenance' && job !== 'fixture') die('--job must be maintenance or fixture')
   const projectId = argValue('--project')
   const findingId = argValue('--finding')
   const planId = argValue('--plan')
@@ -126,24 +131,45 @@ async function main(): Promise<void> {
   if (!/:maintenance-[0-9a-f]{7,40}$/.test(image)) {
     die(`--image must carry a maintenance-<git sha> tag, not a floating one: ${image}`)
   }
+  const database = process.env.PRODUCTION_DB_NAME?.trim()
+  if (!database) die('PRODUCTION_DB_NAME is not set; state the database this job is allowed to touch')
+
+  const environment: Array<{ name: string; value: string }> = [
+    { name: 'EXPECT_DATABASE', value: database },
+  ]
+  let command: string[]
+  let entryPoint: string[] | undefined
+
+  if (job === 'fixture') {
+    // The acceptance fixture. A project id and a confirmation, and nothing else
+    // reaches it: the schema, the tables, the columns and every statement are
+    // fixed in scripts/maintenance-acceptance-fixture.ts.
+    if (!projectId) die('--project is required')
+    if (mode !== 'prepare' && mode !== 'cleanup') die('--mode must be prepare or cleanup for --job fixture')
+    const confirmFlag = mode === 'prepare' ? '--confirm' : '--confirm-destroy'
+    if (argValue(confirmFlag) !== projectId) die(`${confirmFlag} must be exactly "${projectId}"`)
+    entryPoint = ['node', '/app/fixture.cjs']
+    command = ['--mode', mode, '--project', projectId, confirmFlag, projectId]
+
+    console.log(`
+Production acceptance fixture — ${mode}
+`)
+    await runTask({ image, entryPoint, command, environment, database, label: `fixture-${mode}` })
+    return
+  }
+
   if (!projectId || !findingId || !planId || !planVersion) {
     die('--project, --finding, --plan and --plan-version are all required')
   }
   if (mode !== 'dry-run' && mode !== 'execute') die('--mode must be dry-run or execute')
 
-  const database = process.env.PRODUCTION_DB_NAME?.trim()
-  if (!database) die('PRODUCTION_DB_NAME is not set; state the database this job is allowed to touch')
-
   // Identifiers only. Nothing about the plan's CONTENTS crosses this boundary.
-  const command = [
+  command = [
     '--project', projectId,
     '--finding', findingId,
     '--plan', planId,
     '--plan-version', planVersion,
     '--mode', mode,
-  ]
-  const environment: Array<{ name: string; value: string }> = [
-    { name: 'EXPECT_DATABASE', value: database },
   ]
 
   if (mode === 'execute') {
@@ -177,6 +203,22 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nProduction maintenance job — ${mode}\n`)
+  await runTask({ image, entryPoint, command, environment, database, label: `maintenance-${mode}` })
+}
+
+interface TaskSpec {
+  image: string
+  /** Set only for the fixture, which lives behind the image's default. */
+  entryPoint?: string[]
+  command: string[]
+  environment: Array<{ name: string; value: string }>
+  database: string
+  label: string
+}
+
+/** Register, run, read the logs, deregister. Identical for both jobs. */
+async function runTask(spec: TaskSpec): Promise<void> {
+  const { image, command, environment, database } = spec
   assertProductionAccount()
 
   const svc = aws(['ecs', 'describe-services', '--cluster', CLUSTER, '--services', SERVICE])?.services?.[0]
@@ -190,12 +232,13 @@ async function main(): Promise<void> {
   console.log(`  secrets carried: ${secrets.map(s => s.name).join(', ')}`)
   console.log(`  expected database: ${database}`)
   console.log(`  image ${image}`)
-  console.log(`  plan ${planId}@${planVersion} · project ${projectId} · finding ${findingId}`)
+  console.log(`  command ${command.join(' ')}`)
 
   const container = {
     name: CONTAINER,
     image,
     essential: true,
+    ...(spec.entryPoint ? { entryPoint: spec.entryPoint } : {}),
     command,
     environment,
     secrets,
@@ -231,7 +274,7 @@ async function main(): Promise<void> {
       '--task-definition', taskDefArn,
       '--launch-type', 'FARGATE',
       '--network-configuration', netCfg,
-      '--started-by', `production-maintenance-${mode}`,
+      '--started-by', `production-${spec.label}`,
     ])
     if (started?.failures?.length) throw new Error(`run-task failed: ${JSON.stringify(started.failures)}`)
 

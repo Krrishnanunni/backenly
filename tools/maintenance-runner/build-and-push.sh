@@ -20,7 +20,7 @@ ROOT="$(pwd)"
 [ -f "$ROOT/scripts/run-maintenance-plan.ts" ] || { echo "run from the repository root"; exit 2; }
 
 SHA="$(git rev-parse --short HEAD)"
-if [ -n "$(git status --porcelain -- scripts/run-maintenance-plan.ts lib/autonomy/maintenance tools/maintenance-runner)" ]; then
+if [ -n "$(git status --porcelain -- scripts/run-maintenance-plan.ts scripts/maintenance-acceptance-fixture.ts lib/autonomy/maintenance tools/maintenance-runner)" ]; then
   echo "refusing: the runner inputs have uncommitted changes; commit them so the tag identifies the image"
   exit 2
 fi
@@ -41,8 +41,11 @@ trap 'rm -rf "$CTX"' EXIT
 # for another platform". Bundle on the host, build the image here.
 if [ -n "${MAINTENANCE_BUNDLE:-}" ]; then
   [ -f "$MAINTENANCE_BUNDLE" ] || { echo "MAINTENANCE_BUNDLE does not exist: $MAINTENANCE_BUNDLE"; exit 2; }
-  echo "using prebuilt bundle $MAINTENANCE_BUNDLE"
+  [ -n "${FIXTURE_BUNDLE:-}" ] || { echo "FIXTURE_BUNDLE is not set"; exit 2; }
+  [ -f "$FIXTURE_BUNDLE" ] || { echo "FIXTURE_BUNDLE does not exist: $FIXTURE_BUNDLE"; exit 2; }
+  echo "using prebuilt bundles"
   cp "$MAINTENANCE_BUNDLE" "$CTX/maintenance.cjs"
+  cp "$FIXTURE_BUNDLE" "$CTX/fixture.cjs"
 else
   echo "bundling…"
   node -e '
@@ -55,11 +58,33 @@ else
       logLevel: "warning",
     }).catch(e => { console.error(e); process.exit(1) })
   ' "$CTX/maintenance.cjs"
+  node -e '
+    require("esbuild").build({
+      entryPoints: ["scripts/maintenance-acceptance-fixture.ts"],
+      bundle: true, platform: "node", target: "node20", format: "cjs",
+      outfile: process.argv[1], minify: true,
+      external: ["@prisma/client", ".prisma/client", "pg-native", "pg-cloudflare", "cloudflare:sockets"],
+      alias: { "server-only": "./tools/maintenance-runner/server-only-stub.js" },
+      logLevel: "warning",
+    }).catch(e => { console.error(e); process.exit(1) })
+  ' "$CTX/fixture.cjs"
 fi
 
 # Whatever produced it, it must be a real bundle and not a stub or a stale file.
 grep -q 'run-maintenance-plan\|--plan-version' "$CTX/maintenance.cjs" \
   || { echo "refusing: maintenance.cjs does not look like the maintenance entry point"; exit 2; }
+grep -q 'maintenance-prod-acceptance' "$CTX/fixture.cjs" \
+  || { echo "refusing: fixture.cjs does not look like the acceptance fixture"; exit 2; }
+
+# The fixture must never grow an arbitrary-SQL surface. Checked on the bytes
+# about to be baked into an image that runs against production, not on the
+# source that produced them.
+for forbidden in '"--sql"' '"--query"' '"--table"' '"--schema"' '"--column"' '"--force"'; do
+  if grep -qF -- "$forbidden" "$CTX/fixture.cjs"; then
+    echo "refusing: fixture.cjs accepts $forbidden"
+    exit 2
+  fi
+done
 
 cp "$ROOT/tools/maintenance-runner/Dockerfile.maintenance" "$CTX/"
 echo "context:"
