@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { BASELINE_ID, BASELINE_LOCK_PATH, BASELINE_SQL_PATH, generateBaselineSql, type BaselineLock } from '../../tools/managed-db/generate-baseline'
+import { BASELINE_ID, BASELINE_LOCK_PATH, BASELINE_SQL_PATH, type BaselineLock } from '../../tools/managed-db/generate-baseline'
 import { auditBaselineSql } from '../../tools/managed-db/layers'
 import { assembleMigrationWorkspace, CANONICAL_DIR } from '../../tools/managed-db/migration-workspace'
 
@@ -25,23 +25,38 @@ describe('the canonical baseline', () => {
     expect(lock.migration).toBe(BASELINE_ID)
   })
 
-  it('still matches schema.prisma', () => {
-    // Spawns the pinned Prisma CLI; no database is involved. This is what
-    // notices a schema.prisma change that nobody baselined.
-    const regenerated = generateBaselineSql(ROOT)
-    expect(sha256(regenerated.sql)).toBe(lock.sha256)
-    expect(regenerated.schemaSha256).toBe(lock.schemaSha256)
-  }, 120_000)
-
-  it('owns the canonical schema and nothing else', () => {
-    expect(auditBaselineSql(sql)).toEqual([])
-    expect(sql).toMatch(/CREATE TABLE "projects"/)
-    expect(sql).not.toMatch(/CREATE EXTENSION|CREATE ROLE|\bGRANT\b|EVENT TRIGGER/i)
+  it('records the schema it was squashed from', () => {
+    // A historical fact, not a live invariant: once forward migrations exist,
+    // schema.prisma is baseline PLUS those migrations. Whether the canonical
+    // chain still produces schema.prisma is a database-backed check
+    // (tools/managed-db/verify-canonical-history.ts), because Prisma needs a
+    // shadow database to answer it.
+    expect(lock.schemaSha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(lock.prismaVersion).toBe('5.22.0')
   })
 
-  it('is the only migration in the canonical directory', () => {
-    const entries = readdirSync(join(ROOT, CANONICAL_DIR)).sort()
-    expect(entries).toEqual([BASELINE_ID, 'migration_lock.toml'])
+  it('owns the canonical schema and nothing else, in every migration', () => {
+    const migrations = readdirSync(join(ROOT, CANONICAL_DIR), { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => d.name)
+      .sort()
+    expect(migrations[0]).toBe(BASELINE_ID)
+    for (const id of migrations) {
+      const migrationSql = readFileSync(join(ROOT, CANONICAL_DIR, id, 'migration.sql'), 'utf8')
+      expect({ id, findings: auditBaselineSql(migrationSql) }).toEqual({ id, findings: [] })
+    }
+    expect(sql).toMatch(/CREATE TABLE "projects"/)
+  })
+
+  it('carries the maintenance ledger as a forward migration, not in the baseline', () => {
+    // Phase 6b persistence arrives through the migration runner, which is the
+    // whole point of building it.
+    expect(sql).not.toMatch(/maintenance_executions/)
+    const ledger = readFileSync(join(ROOT, CANONICAL_DIR, '20260916120000_maintenance_ledger', 'migration.sql'), 'utf8')
+    expect(ledger).toMatch(/CREATE TABLE "maintenance_executions"/)
+    expect(ledger).toMatch(/CREATE TABLE "maintenance_step_executions"/)
+    // Retry lifecycle stays in BackgroundJob; the ledger must not grow its own.
+    expect(ledger).not.toMatch(/"attempts"|"maxAttempts"|"runAt"|"timeoutAt"|dead_letter/)
   })
 
   it('does not live in the gitignored working directory', () => {
@@ -58,7 +73,7 @@ describe('the assembled migration workspace', () => {
   it('contains the schema and only the canonical history', () => {
     const workspace = assembleMigrationWorkspace(ROOT)
     try {
-      expect(workspace.migrations).toEqual([BASELINE_ID])
+      expect(workspace.migrations).toEqual([BASELINE_ID, '20260916120000_maintenance_ledger'])
       expect(existsSync(workspace.schemaPath)).toBe(true)
       expect(existsSync(join(workspace.migrationsDir, BASELINE_ID, 'migration.sql'))).toBe(true)
       expect(existsSync(join(workspace.migrationsDir, 'migration_lock.toml'))).toBe(true)
@@ -69,9 +84,9 @@ describe('the assembled migration workspace', () => {
   })
 
   it('can carry a rehearsal-only migration without writing it into the repository', () => {
-    const workspace = assembleMigrationWorkspace(ROOT, [{ id: '20260916000000_fixture', sql: 'SELECT 1;' }])
+    const workspace = assembleMigrationWorkspace(ROOT, [{ id: '29990101000000_fixture', sql: 'SELECT 1;' }])
     try {
-      expect(workspace.migrations).toEqual([BASELINE_ID, '20260916000000_fixture'])
+      expect(workspace.migrations).toEqual([BASELINE_ID, '20260916120000_maintenance_ledger', '29990101000000_fixture'])
       expect(existsSync(join(ROOT, CANONICAL_DIR, '20260916000000_fixture'))).toBe(false)
     } finally {
       workspace.dispose()

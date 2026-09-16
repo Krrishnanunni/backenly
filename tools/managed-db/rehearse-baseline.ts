@@ -1,43 +1,43 @@
 /**
- * LAYER 3 REHEARSAL — establish migration history on an existing database and
- * prove it changed nothing.
+ * LAYER 3 REHEARSAL — baseline an existing database, then move it forward.
  *
  *   LINEAGE_LOCAL_DATABASE_URL=postgresql://user:pass@localhost:5432/db \
  *     npx tsx tools/managed-db/rehearse-baseline.ts [--out file.json]
  *
- * This is the operation we intend to perform on staging, rehearsed on a scratch
- * database first. Staging already HAS the canonical schema and no history, so
- * the rehearsal recreates exactly that shape: materialise the schema without
- * history, then baseline it.
+ * Reproduces staging's exact shape — the canonical schema present, no migration
+ * history — and then does what we intend to do there:
  *
- * The property under test is not "_prisma_migrations has rows". It is:
+ *   phase 1  mark the baseline applied, and prove it changed NOTHING
+ *   phase 2  deploy the migrations after it, and prove they changed exactly
+ *            what they claim, twice being a no-op
  *
- *     establishing history on an already-correct database causes ZERO
- *     semantic schema change
+ * The property in phase 1 is not "_prisma_migrations has rows". It is that
+ * establishing history on an already-correct database causes zero semantic
+ * change, measured with the same catalog diff the lineage investigation used.
+ * The ledger's own tables are reported separately rather than counted as drift
+ * or quietly ignored.
  *
- * so the catalog is captured before and after and compared with the same
- * semantic diff the lineage investigation used. A forward migration is then
- * applied to prove the result is a working migration system rather than a
- * static ledger that merely looks clean.
- *
- * Loopback only. Everything happens inside a scratch database that is dropped in
- * `finally`, and the run reports any that remain.
+ * Loopback only; everything happens in a scratch database dropped in `finally`.
  */
 
 import { execFileSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { diffSnapshots, type Difference } from '../migration-lineage/diff'
-import { captureSnapshot, type Snapshot } from '../migration-lineage/probe/capture'
+import { captureSnapshot } from '../migration-lineage/probe/capture'
 import { clientConfig, connect, isLoopback, parseDatabaseUrl, type PgClient } from '../migration-lineage/probe/connect'
 import { platformSchemas } from '../migration-lineage/probe/inventory'
 import { BASELINE_ID, BASELINE_SQL_PATH } from './generate-baseline'
 import { assembleMigrationWorkspace } from './migration-workspace'
 import { listScratchDatabases, withScratchDatabase } from './scratch-database'
-import { readFileSync } from 'node:fs'
 
-const FIXTURE_ID = '20260916000000_rehearsal_fixture'
-const FIXTURE_SQL = 'CREATE TABLE "_baseline_rehearsal_fixture" ("id" TEXT NOT NULL, CONSTRAINT "_baseline_rehearsal_fixture_pkey" PRIMARY KEY ("id"));\n'
+// Used only when the canonical chain has nothing after the baseline, so the
+// forward half proves a working migration system rather than being skipped.
+const FIXTURE_ID = '29990101000000_rehearsal_fixture'
+const FIXTURE_SQL =
+  'CREATE TABLE "_baseline_rehearsal_fixture" ("id" TEXT NOT NULL, CONSTRAINT "_baseline_rehearsal_fixture_pkey" PRIMARY KEY ("id"));\n'
+
+const LEDGER = /_prisma_migrations/
 
 export interface PrismaRun {
   command: string
@@ -47,25 +47,28 @@ export interface PrismaRun {
 
 export interface BaselineRehearsalResult {
   rehearsal: 'layer3-baseline'
-  version: 1
+  version: 2
   startedAt: string
   finishedAt: string
   verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE'
   failures: string[]
   database: string | null
+  forwardMigrations: string[]
   runs: PrismaRun[]
   historyRows: Array<{ migration_name: string; applied_steps_count: number; finished: boolean }>
-  semanticDelta: Difference[]
-  /** Objects the migration ledger itself introduced, reported not hidden. */
+  /** Canonical-schema change caused by baselining. Must be empty. */
+  baseliningDelta: Difference[]
+  /** Objects the migration ledger itself introduced. Reported, not hidden. */
   ledgerObjects: string[]
-  forward: { applied: boolean; artifactPresent: boolean; secondDeployNoOp: boolean } | null
+  /** What deploying the forward migrations actually added. */
+  forwardDelta: Difference[]
+  forwardSecondDeployNoOp: boolean | null
   scratchDatabasesAfter: string[] | null
   error: string | null
 }
 
 function prisma(root: string, schemaPath: string, url: string, args: string[]): PrismaRun {
   const cli = join(root, 'node_modules', 'prisma', 'build', 'index.js')
-  const command = `prisma ${args.join(' ')}`
   try {
     const stdout = execFileSync(process.execPath, [cli, ...args, '--schema', schemaPath], {
       cwd: root,
@@ -74,11 +77,11 @@ function prisma(root: string, schemaPath: string, url: string, args: string[]): 
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url, PRISMA_HIDE_UPDATE_MESSAGE: '1' },
     })
-    return { command, exitCode: 0, stdout: stdout.trim() }
+    return { command: `prisma ${args.join(' ')}`, exitCode: 0, stdout: stdout.trim() }
   } catch (err) {
     const e = err as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string }
     return {
-      command,
+      command: `prisma ${args.join(' ')}`,
       exitCode: e.status ?? 1,
       stdout: `${String(e.stdout ?? '')}${String(e.stderr ?? '')}`.trim(),
     }
@@ -90,30 +93,36 @@ const NO_PENDING = /No pending migrations|Database schema is up to date/i
 export async function rehearseBaseline(root: string, adminUrl: string): Promise<BaselineRehearsalResult> {
   const r: BaselineRehearsalResult = {
     rehearsal: 'layer3-baseline',
-    version: 1,
+    version: 2,
     startedAt: new Date().toISOString(),
     finishedAt: '',
     verdict: 'INCONCLUSIVE',
     failures: [],
     database: null,
+    forwardMigrations: [],
     runs: [],
     historyRows: [],
-    semanticDelta: [],
+    baseliningDelta: [],
     ledgerObjects: [],
-    forward: null,
-    scratchDatabasesAfter: null,
+    forwardDelta: [],
+    forwardSecondDeployNoOp: null,
     error: null,
+    scratchDatabasesAfter: null,
   }
 
   const { target } = parseDatabaseUrl(adminUrl)
   if (!isLoopback(target.host)) throw new Error('the baseline rehearsal runs against a loopback database only')
   const policy = { mode: 'loopback-plaintext' as const }
   const admin = await connect(clientConfig(target, policy))
-  // Two workspaces on purpose. The baselining phase must see ONLY the canonical
-  // history, or the first `migrate deploy` applies the fixture and the no-op it
-  // is supposed to prove never happens.
-  const workspace = assembleMigrationWorkspace(root)
-  const forwardWorkspace = assembleMigrationWorkspace(root, [{ id: FIXTURE_ID, sql: FIXTURE_SQL }])
+
+  const full = assembleMigrationWorkspace(root)
+  const canonicalForward = full.migrations.filter(id => id !== BASELINE_ID)
+  r.forwardMigrations = canonicalForward.length > 0 ? canonicalForward : [FIXTURE_ID]
+
+  // Phase 1 sees only the baseline, which is the state staging was in.
+  const baselineOnly = assembleMigrationWorkspace(root, [], { only: [BASELINE_ID] })
+  const forwardWorkspace =
+    canonicalForward.length > 0 ? full : assembleMigrationWorkspace(root, [{ id: FIXTURE_ID, sql: FIXTURE_SQL }])
 
   try {
     const out = await withScratchDatabase(admin, 'base', async name => {
@@ -126,58 +135,41 @@ export async function rehearseBaseline(root: string, adminUrl: string): Promise<
 
       const client: PgClient = await connect(clientConfig(target, policy, { database: name }))
       try {
-        // Staging's shape: the canonical schema present, no migration history.
-        const baselineSql = readFileSync(join(root, BASELINE_SQL_PATH), 'utf8')
-        await client.query(baselineSql)
+        // Staging's shape: canonical schema present, no migration history.
+        await client.query(readFileSync(join(root, BASELINE_SQL_PATH), 'utf8'))
         const before = await captureSnapshot(client, await platformSchemas(client))
 
-        // The intended mechanism for an existing database: mark the baseline
-        // applied rather than running it.
-        r.runs.push(prisma(root, workspace.schemaPath, url, ['migrate', 'resolve', '--applied', BASELINE_ID]))
-        r.runs.push(prisma(root, workspace.schemaPath, url, ['migrate', 'status']))
-        r.runs.push(prisma(root, workspace.schemaPath, url, ['migrate', 'deploy']))
-        r.runs.push(prisma(root, workspace.schemaPath, url, ['migrate', 'deploy']))
+        // ── phase 1: baseline an existing database ───────────────────────────
+        r.runs.push(prisma(root, baselineOnly.schemaPath, url, ['migrate', 'resolve', '--applied', BASELINE_ID]))
+        const afterResolve = await captureSnapshot(client, await platformSchemas(client))
+        const introduced = diffSnapshots(before, afterResolve)
+        r.baseliningDelta = introduced.filter(d => !LEDGER.test(d.key))
+        r.ledgerObjects = introduced.filter(d => LEDGER.test(d.key)).map(d => d.key)
 
-        const after = await captureSnapshot(client, await platformSchemas(client))
-        // `_prisma_migrations` is the history being introduced, not a change to
-        // the canonical schema. It is excluded from the delta and asserted
-        // separately, so introducing it cannot be mistaken for drift and
-        // cannot be hidden either.
-        const all = diffSnapshots(before, after)
-        r.semanticDelta = all.filter(d => !/_prisma_migrations/.test(d.key))
-        r.ledgerObjects = all.filter(d => /_prisma_migrations/.test(d.key)).map(d => d.key)
+        r.runs.push(prisma(root, baselineOnly.schemaPath, url, ['migrate', 'status']))
+        r.runs.push(prisma(root, baselineOnly.schemaPath, url, ['migrate', 'deploy']))
+        r.runs.push(prisma(root, baselineOnly.schemaPath, url, ['migrate', 'deploy']))
+
+        // ── phase 2: move forward ────────────────────────────────────────────
+        const forwardDeploy = prisma(root, forwardWorkspace.schemaPath, url, ['migrate', 'deploy'])
+        r.runs.push(forwardDeploy)
+        const afterForward = await captureSnapshot(client, await platformSchemas(client))
+        r.forwardDelta = diffSnapshots(afterResolve, afterForward).filter(d => !LEDGER.test(d.key))
+
+        const secondForward = prisma(root, forwardWorkspace.schemaPath, url, ['migrate', 'deploy'])
+        r.runs.push(secondForward)
+        r.forwardSecondDeployNoOp = secondForward.exitCode === 0 && NO_PENDING.test(secondForward.stdout)
 
         const history = await client.query(
           'SELECT migration_name, applied_steps_count, finished_at IS NOT NULL AS finished FROM _prisma_migrations ORDER BY migration_name',
         )
         r.historyRows = history.rows as BaselineRehearsalResult['historyRows']
-
-        // A working migration system, not a static ledger: the fixture appears
-        // only now, in its own workspace.
-        const forwardDeploy = prisma(root, forwardWorkspace.schemaPath, url, ['migrate', 'deploy'])
-        r.runs.push(forwardDeploy)
-        const artifact = await client.query(
-          "SELECT to_regclass('public._baseline_rehearsal_fixture') IS NOT NULL AS present",
-        )
-        const secondForward = prisma(root, forwardWorkspace.schemaPath, url, ['migrate', 'deploy'])
-        r.runs.push(secondForward)
-
-        return {
-          before,
-          after,
-          forward: {
-            applied: forwardDeploy.exitCode === 0,
-            artifactPresent: artifact.rows[0]?.present === true,
-            secondDeployNoOp: secondForward.exitCode === 0 && NO_PENDING.test(secondForward.stdout),
-          },
-        }
       } finally {
         await client.end().catch(() => {})
       }
     })
 
     if (out.error) r.failures.push(`rehearsal did not complete: ${out.error}`)
-    r.forward = out.value?.forward ?? null
     if (out.cleanup.created && !out.cleanup.dropped) {
       r.failures.push(`scratch database ${out.cleanup.name} was not dropped: ${out.cleanup.error}`)
     }
@@ -186,31 +178,37 @@ export async function rehearseBaseline(root: string, adminUrl: string): Promise<
     r.error = err instanceof Error ? err.message : String(err)
     r.failures.push(`rehearsal error: ${r.error}`)
   } finally {
-    workspace.dispose()
-    forwardWorkspace.dispose()
+    full.dispose()
+    baselineOnly.dispose()
+    if (forwardWorkspace !== full) forwardWorkspace.dispose()
     await admin.end().catch(() => {})
   }
 
-  const [resolve, status, deploy, deployAgain] = r.runs
+  const [resolve, status, deploy, deployAgain, forwardDeploy] = r.runs
   if (resolve?.exitCode !== 0) r.failures.push(`migrate resolve failed: ${resolve?.stdout}`)
-  if (status?.exitCode !== 0) r.failures.push(`migrate status is not clean: ${status?.stdout}`)
+  if (status?.exitCode !== 0) r.failures.push(`migrate status was not clean after baselining: ${status?.stdout}`)
   if (deploy?.exitCode !== 0 || !NO_PENDING.test(deploy?.stdout ?? '')) {
     r.failures.push(`migrate deploy after baselining was not a no-op: ${deploy?.stdout}`)
   }
   if (deployAgain?.exitCode !== 0 || !NO_PENDING.test(deployAgain?.stdout ?? '')) {
     r.failures.push(`the second migrate deploy was not a no-op: ${deployAgain?.stdout}`)
   }
-  if (r.semanticDelta.length > 0) {
-    r.failures.push(`baselining changed ${r.semanticDelta.length} schema object(s); it must change none`)
-  }
-  if (!r.historyRows.some(h => h.migration_name === BASELINE_ID && h.finished)) {
-    r.failures.push('the baseline is not recorded as applied in _prisma_migrations')
+  if (r.baseliningDelta.length > 0) {
+    r.failures.push(`baselining changed ${r.baseliningDelta.length} canonical object(s); it must change none`)
   }
   if (r.ledgerObjects.length === 0) {
     r.failures.push('no migration ledger was introduced; the baseline did not take effect')
   }
-  if (r.forward && !(r.forward.applied && r.forward.artifactPresent && r.forward.secondDeployNoOp)) {
-    r.failures.push(`the forward migration did not behave: ${JSON.stringify(r.forward)}`)
+  if (!r.historyRows.some(h => h.migration_name === BASELINE_ID && h.finished)) {
+    r.failures.push('the baseline is not recorded as applied in _prisma_migrations')
+  }
+  if (forwardDeploy?.exitCode !== 0) r.failures.push(`the forward deploy failed: ${forwardDeploy?.stdout}`)
+  if (r.forwardDelta.length === 0) r.failures.push('the forward migration added nothing')
+  if (r.forwardSecondDeployNoOp !== true) r.failures.push('a repeated forward deploy was not a no-op')
+  for (const id of r.forwardMigrations) {
+    if (!r.historyRows.some(h => h.migration_name === id && h.finished)) {
+      r.failures.push(`${id} is not recorded as applied`)
+    }
   }
   if (r.scratchDatabasesAfter?.length) {
     r.failures.push(`scratch databases still exist: ${r.scratchDatabasesAfter.join(', ')}`)
@@ -232,13 +230,15 @@ async function main(): Promise<void> {
   console.log(`\n  layer 3 baseline rehearsal: ${result.verdict}  (scratch ${result.database})`)
   for (const f of result.failures) console.log(`    FAIL  ${f}`)
   for (const run of result.runs) {
-    console.log(`    ${String(run.exitCode).padEnd(2)} ${run.command.padEnd(34)} ${run.stdout.split('\n').filter(Boolean).slice(-1)[0] ?? ''}`)
+    console.log(`    ${String(run.exitCode).padEnd(2)} ${run.command.padEnd(36)} ${run.stdout.split('\n').filter(Boolean).slice(-1)[0] ?? ''}`)
   }
-  console.log(`    history       ${JSON.stringify(result.historyRows)}`)
-  console.log(`    semantic delta ${result.semanticDelta.length} (canonical schema)`)
-  console.log(`    ledger objects ${result.ledgerObjects.length}`)
-  console.log(`    forward       ${JSON.stringify(result.forward)}`)
-  console.log(`    leftovers     ${JSON.stringify(result.scratchDatabasesAfter)}`)
+  console.log(`    forward migrations   ${JSON.stringify(result.forwardMigrations)}`)
+  console.log(`    baselining delta     ${result.baseliningDelta.length} (canonical schema)`)
+  console.log(`    ledger objects       ${result.ledgerObjects.length}`)
+  console.log(`    forward delta        ${result.forwardDelta.length}: ${result.forwardDelta.slice(0, 6).map(d => d.key).join(', ')}`)
+  console.log(`    second forward no-op ${result.forwardSecondDeployNoOp}`)
+  console.log(`    history              ${result.historyRows.map(h => h.migration_name).join(', ')}`)
+  console.log(`    leftovers            ${JSON.stringify(result.scratchDatabasesAfter)}`)
 
   const i = process.argv.indexOf('--out')
   if (i > 0 && process.argv[i + 1]) writeFileSync(process.argv[i + 1], JSON.stringify(result, null, 2))

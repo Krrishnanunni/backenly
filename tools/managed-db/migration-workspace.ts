@@ -40,6 +40,7 @@ export interface AssembledWorkspace {
 export function assembleMigrationWorkspace(
   root: string,
   extra: Array<{ id: string; sql: string }> = [],
+  options: { only?: string[] } = {},
 ): AssembledWorkspace {
   const canonical = join(root, CANONICAL_DIR)
   if (!existsSync(canonical)) throw new Error(`${CANONICAL_DIR} does not exist; generate the baseline first`)
@@ -48,9 +49,12 @@ export function assembleMigrationWorkspace(
   const migrationsDir = join(dir, 'migrations')
   mkdirSync(migrationsDir, { recursive: true })
 
+  // `only` exists for the baseline rehearsal, which must reproduce the state
+  // staging was in: the canonical schema present and ONLY the baseline known.
   const ids = readdirSync(canonical, { withFileTypes: true })
     .filter(d => d.isDirectory())
     .map(d => d.name)
+    .filter(id => !options.only || options.only.includes(id))
     .sort()
   for (const id of ids) cpSync(join(canonical, id), join(migrationsDir, id), { recursive: true })
 
