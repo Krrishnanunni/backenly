@@ -176,13 +176,27 @@ async function prepare(): Promise<void> {
 
   // Rows and statistics only. Nothing here is structure, so nothing here can
   // disagree with the platform's metadata.
-  const q = (sql: string) => prisma.$executeRawUnsafe(sql)
-  await q(`INSERT INTO "${schema}"."sessions" (id, status, legacy_state)
+  //
+  // The product enables RLS on every tenant table it creates, so a bare INSERT
+  // is refused with 42501 — correctly. This uses the platform's OWN session
+  // contract (lib/services/rls-session.ts) to write as the service role rather
+  // than disabling or working around the policy. `is_local = true`, so the
+  // settings revert with the transaction and never leak onto a pooled
+  // connection, which is why the INSERT has to be inside it.
+  const { rlsSessionSql, rlsSessionParams } = await import('@/lib/services/rls-session')
+  await prisma.$transaction(async tx => {
+    await tx.$executeRawUnsafe(
+      rlsSessionSql(1),
+      ...rlsSessionParams({ isServiceRole: true, userRole: 'service' } as never),
+    )
+    await tx.$executeRawUnsafe(`INSERT INTO "${schema}"."sessions" (id, status, legacy_state)
            SELECT gen_random_uuid(),
                   (ARRAY['active','archived','pending'])[1 + (g % 3)],
                   (ARRAY['ACTIVE','ARCHIVED','PENDING'])[1 + (g % 3)]
              FROM generate_series(1, ${FIXTURE_ROWS}) g`)
-  await q(`ANALYZE "${schema}"."sessions"`)
+  })
+  // ANALYZE reads statistics rather than rows, so it needs no claim.
+  await prisma.$executeRawUnsafe(`ANALYZE "${schema}"."sessions"`)
 
   const counted = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
     `SELECT count(*)::bigint AS n FROM "${schema}"."sessions"`,
