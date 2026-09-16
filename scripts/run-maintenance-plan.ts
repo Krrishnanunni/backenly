@@ -54,6 +54,29 @@ function die(msg: string): never {
   process.exit(2)
 }
 
+/**
+ * Which database did we actually connect to?
+ *
+ * The launcher checks that the secret's ARN names a production resource, but
+ * that is a check on a pointer: it passes whether or not the secret's contents
+ * point where the ARN suggests. This is the check on the connection, and it is
+ * the same guard `tools/managed-db/runner/entrypoint.sh` applies to migrations,
+ * for the same reason — a mutation lands in whatever it reaches.
+ *
+ * Parsed after the LAST '@' so a password containing '/' cannot shift the
+ * fields. A URL with no path yields host:port, which matches nothing and
+ * refuses: the failure direction we want.
+ */
+function assertExpectedDatabase(): void {
+  const expected = process.env.EXPECT_DATABASE?.trim()
+  if (!expected) return
+  const url = process.env.DATABASE_URL ?? ''
+  if (!url) die('EXPECT_DATABASE is set but DATABASE_URL is empty')
+  const actual = url.slice(url.lastIndexOf('@') + 1).replace(/^[^/]*\/?/, '').split('?')[0]
+  if (actual !== expected) die(`connected database is "${actual}", expected "${expected}"`)
+  console.error(`  database: ${actual} (matches EXPECT_DATABASE)`)
+}
+
 async function main(): Promise<void> {
   const projectId = arg('--project')
   const findingId = arg('--finding')
@@ -65,6 +88,10 @@ async function main(): Promise<void> {
     die('--project, --finding, --plan and --plan-version are all required; this script discovers nothing')
   }
   if (mode !== 'dry-run' && mode !== 'execute') die('--mode must be dry-run or execute')
+
+  // Before anything reads or writes. Applies to dry-run too: a report about the
+  // wrong database is worse than no report.
+  assertExpectedDatabase()
 
   // Every precondition that does not need the database is checked FIRST, so a
   // run that cannot proceed never reads a production catalog to find that out.

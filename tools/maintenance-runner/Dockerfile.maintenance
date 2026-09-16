@@ -1,0 +1,29 @@
+# ============================================================================
+# The maintenance runner — the production runtime image plus one file.
+# ============================================================================
+#
+# Phase 6b's entry point cannot ride the pattern the three lineage launchers
+# use. Those carry their payload in a task-definition environment variable, and
+# ECS caps a task definition at 64 KB; the maintenance bundle is ~285 KB
+# brotli+base64 across 2216 modules, because it reaches the subsystem clustering
+# and the whole structural-diagnosis engine. So the code travels in an image.
+#
+# The base is the PRODUCTION RUNTIME IMAGE, pinned by digest and passed in. That
+# is deliberate: it already carries `@prisma/client` and the generated
+# `.prisma` engine, which are the only things the bundle does not contain, and
+# reusing it means this image cannot drift from what production actually runs.
+#
+# What is NOT here, on purpose: no Prisma CLI, no migration tooling, no replay
+# or lineage tooling, no Layer 2/4 provisioning, no scheduler, no shell
+# utilities. One file, one entrypoint. The narrower this stays, the less there
+# is to reason about when it runs against a production database.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# The bundled entry point. `pg` is inside it; `@prisma/client` and `.prisma`
+# resolve from the base image's /app/node_modules, which is why it lands in
+# /app rather than anywhere else.
+COPY maintenance.cjs /app/maintenance.cjs
+
+WORKDIR /app
+ENTRYPOINT ["node", "/app/maintenance.cjs"]
