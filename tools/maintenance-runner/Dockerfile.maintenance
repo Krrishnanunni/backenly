@@ -31,6 +31,20 @@ COPY maintenance.cjs /app/maintenance.cjs
 # guards, and because a second image is a second thing to keep pinned.
 COPY fixture.cjs /app/fixture.cjs
 
+# The pinned AWS RDS CA bundle.
+#
+# Prisma and node-postgres disagree about `sslmode=require`: Prisma follows
+# libpq, where it means "encrypt, do not verify", while node-postgres verifies
+# against the system trust store — which does not contain the RDS chain, so its
+# pools fail with SELF_SIGNED_CERT_IN_CHAIN. Measured against production, not
+# assumed.
+#
+# NODE_EXTRA_CA_CERTS adds this bundle to the trust store rather than disabling
+# verification, so the connection is still authenticated. It is the same pinned
+# bundle the lineage probes verify against.
+COPY rds-ca.pem /app/rds-ca.pem
+ENV NODE_EXTRA_CA_CERTS=/app/rds-ca.pem
+
 WORKDIR /app
 # The fixture is reached by overriding this at task launch, so the default
 # remains the only thing that runs unless a caller asks for the other.
