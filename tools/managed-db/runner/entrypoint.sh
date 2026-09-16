@@ -50,8 +50,54 @@ case "${1:-}" in
     fi
     exec "$PRISMA" migrate resolve --applied "$MIGRATION" --schema "$SCHEMA"
     ;;
+  verify)
+    # Did the objects a migration DECLARES actually land?
+    #
+    # `migrate status` reports that a migration ran, which is a statement about
+    # the history table, not about the schema. These are the objects
+    # themselves, read from the catalog, with the expected set fixed HERE. No
+    # SQL crosses the boundary: this takes a migration id and nothing else, so
+    # it cannot become a query surface on a production database.
+    MIGRATION="${2:-}"
+    [ -n "$MIGRATION" ] || { echo "verify needs a migration id"; exit 2; }
+    case "$MIGRATION" in
+      20260916180000_maintenance_approvals)
+        exec "$PRISMA" db execute --schema "$SCHEMA" --stdin <<'SQL'
+DO $$
+DECLARE missing text := '';
+BEGIN
+  IF to_regclass('public.maintenance_approvals') IS NULL THEN
+    missing := missing || ' table:maintenance_approvals';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                  WHERE schemaname='public'
+                    AND indexname='maintenance_approvals_planId_planVersion_key') THEN
+    missing := missing || ' index:planId_planVersion_key';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                  WHERE schemaname='public'
+                    AND indexname='maintenance_approvals_projectId_revokedAt_idx') THEN
+    missing := missing || ' index:projectId_revokedAt_idx';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname='maintenance_approvals_projectId_fkey' AND contype='f') THEN
+    missing := missing || ' fk:projectId_fkey';
+  END IF;
+  IF missing <> '' THEN
+    RAISE EXCEPTION 'migration 20260916180000 declared objects that are absent:%', missing;
+  END IF;
+  RAISE NOTICE 'verified: table, both indexes and the foreign key are present';
+END $$;
+SQL
+        ;;
+      *)
+        echo "refusing: no verification is defined for \"$MIGRATION\""
+        exit 2
+        ;;
+    esac
+    ;;
   *)
-    echo "usage: status | deploy | baseline <migration-id>"
+    echo "usage: status | deploy | baseline <migration-id> | verify <migration-id>"
     exit 2
     ;;
 esac
