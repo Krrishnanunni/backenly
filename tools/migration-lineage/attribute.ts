@@ -50,7 +50,7 @@ export interface ManifestEntry {
    */
   expect: Record<string, unknown>
   /** A narrower class within the bucket, for entries that need one. */
-  subtype?: 'platform_extension'
+  subtype?: 'platform_extension' | 'migration_ledger'
   /** Who is responsible for creating it. */
   ownership?: string
   /** Whether the platform depends on it, as opposed to tolerating it. */

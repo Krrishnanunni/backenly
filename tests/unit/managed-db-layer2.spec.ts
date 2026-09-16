@@ -21,6 +21,7 @@ import {
   auditProvisionerBundle,
   auditProvisionerModules,
 } from '../../tools/managed-db/provisioner-audit'
+import { checkRepairPreconditions, repairExtensions } from '../../tools/managed-db/repair-extensions'
 
 const ROOT = join(__dirname, '..', '..')
 
@@ -153,6 +154,55 @@ describe('the provisioner executes only what it planned', () => {
     })
     const outcome = await provisionExtensions(client, report(), async () => after)
     expect(outcome.failures).toEqual(['pgstattuple is installed_not_operational after provisioning'])
+  })
+})
+
+describe('the parity repair refuses unless the database is what the plan assumed', () => {
+  const expectations = {
+    availableVersions: { pg_stat_statements: '1.10', pgstattuple: '1.5', vector: '0.8.1' },
+  }
+  const versioned = (patch: Record<string, Partial<ExtensionCapability>> = {}): CapabilityReport => ({
+    sharedPreloadLibraries: { setting: 'rdsutils,pg_stat_statements,rds_casts', source: 'configuration file', context: 'postmaster', pendingRestart: false },
+    extensions: [
+      capability('pg_stat_statements', { availableVersion: '1.10', ...(patch.pg_stat_statements ?? {}) }),
+      capability('pgstattuple', { availableVersion: '1.5', ...(patch.pgstattuple ?? {}) }),
+      capability('vector', { availableVersion: '0.8.1', ...(patch.vector ?? {}) }),
+    ],
+  })
+
+  it('accepts the state discovery measured', () => {
+    expect(checkRepairPreconditions(versioned(), expectations)).toEqual([])
+  })
+
+  it.each([
+    ['an extension already installed', { vector: { installedVersion: '0.8.1', operational: true } }, /vector: expected available_not_installed, measured operational/],
+    ['a version that moved', { vector: { availableVersion: '0.9.0' } }, /vector: available version is 0.9.0, parity expects 0.8.1/],
+    ['a package that vanished', { pgstattuple: { available: false, availableVersion: null } }, /pgstattuple: expected available_not_installed, measured unavailable/],
+    ['a preload that is gone', { pg_stat_statements: { preloaded: false } }, /not preloaded; Layer 1 owns this/],
+  ])('refuses on %s', (_label, patch, reason) => {
+    const reasons = checkRepairPreconditions(versioned(patch as Record<string, Partial<ExtensionCapability>>), expectations)
+    expect(reasons.join(' | ')).toMatch(reason)
+  })
+
+  it('refuses while a restart is pending, because the preload is not settled', () => {
+    const report = versioned()
+    report.sharedPreloadLibraries!.pendingRestart = true
+    expect(checkRepairPreconditions(report, expectations).join(' ')).toMatch(/pending restart/)
+  })
+
+  it('mutates nothing when it refuses', async () => {
+    const queries: string[] = []
+    const client = {
+      query: jest.fn(async (sql: unknown) => {
+        const text = typeof sql === 'string' ? sql : String((sql as { text: string }).text)
+        queries.push(text)
+        return { rows: [{ database: 'backenly' }], rowCount: 1 }
+      }),
+    } as never
+
+    const result = await repairExtensions(client, expectations)
+    expect(result.verdict).toBe('REFUSED')
+    expect(queries.filter(q => /CREATE\s+EXTENSION/i.test(q))).toEqual([])
   })
 })
 

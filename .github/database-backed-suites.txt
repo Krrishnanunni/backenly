@@ -121,3 +121,19 @@ __tests__/edition/fleet-scheduler.test.ts
 # the semantics the comparison depends on rather than object names, that the RLS
 # reads see a policy that exists, and that a scratch database is always dropped.
 tests/integration/migration-lineage-probe-db.spec.ts
+
+# The canonical migration chain against a real engine. Once a forward migration
+# exists, "the baseline equals schema.prisma" is no longer the invariant and is
+# no longer checkable statically: the live property is that baseline plus every
+# migration after it equals the model, and only Prisma can answer it, by
+# replaying the chain into a shadow database. This is the gate that catches a
+# schema.prisma edit shipped without a migration.
+tests/integration/managed-db-canonical-history.spec.ts
+
+# The Phase 6b primitives against a real engine. The executor's governance is
+# decided in TypeScript and is unit tested; these three primitives generate SQL,
+# and nothing about whether that SQL is correct can be learned without
+# PostgreSQL running it. It earned the slot immediately: the first run found
+# that the backfill cursor used max(k), and PostgreSQL has no max() aggregate
+# for uuid — the most common primary key on this platform.
+tests/integration/maintenance-phase6b.spec.ts

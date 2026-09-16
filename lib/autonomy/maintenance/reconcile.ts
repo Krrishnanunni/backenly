@@ -39,6 +39,8 @@
  */
 
 import { queryWorkspaceSchema } from '@/lib/services/workspaceDatabase'
+import { resolveWorkspaceSchema } from '@/lib/services/workspace-pool'
+import { transformProblem, transformSql, type Transform } from './transform'
 
 /**
  * Rows below which every row is compared.
@@ -68,16 +70,13 @@ export const SAMPLE_ROWS = 10_000
  * `lib/services/derived-columns.ts` makes for its trigger bodies: full
  * capability through a governed vocabulary rather than an escape hatch that
  * cannot be reasoned about.
+ *
+ * Now that the dual-write trigger exists, the type and both of its SQL
+ * renderings live in ./transform.ts, so the writer and the checker cannot drift
+ * apart. Re-exported here because this module defined it first and callers
+ * import it from here.
  */
-export type Transform =
-  | { kind: 'identity' }
-  | { kind: 'lower' }
-  | { kind: 'upper' }
-  | { kind: 'trim' }
-  /** Explicit value mapping. Unlisted values are a mismatch, never passed through. */
-  | { kind: 'value_map'; map: Record<string, string> }
-  /** Replace NULL with a constant; non-null values pass through unchanged. */
-  | { kind: 'null_to'; value: string }
+export type { Transform }
 
 export type ReconciliationVerdict = 'consistent' | 'inconsistent' | 'inconclusive'
 export type ReconciliationMethod = 'full_compare' | 'deterministic_sample'
@@ -126,46 +125,6 @@ class Inconclusive extends Error {}
 
 const rowsOf = (res: any): any[] => res?.rows ?? res ?? []
 
-/**
- * SQL that recomputes the expected target value from the source column.
- *
- * Every branch is a closed form over an identifier this function validated.
- * Values reaching `value_map` are parameterised rather than interpolated.
- */
-function transformSql(t: Transform, col: string, params: unknown[]): string {
-  const src = `"${col}"`
-  switch (t.kind) {
-    case 'identity':
-      return src
-    case 'lower':
-      return `lower(${src})`
-    case 'upper':
-      return `upper(${src})`
-    case 'trim':
-      return `btrim(${src})`
-    case 'null_to': {
-      params.push(t.value)
-      return `coalesce(${src}, $${params.length})`
-    }
-    case 'value_map': {
-      // A CASE over the declared pairs. An unlisted value yields NULL, which
-      // will not match a populated target — deliberately: silently passing an
-      // unmapped value through would hide exactly the divergence this exists
-      // to find.
-      const whens: string[] = []
-      for (const [from, to] of Object.entries(t.map)) {
-        params.push(from)
-        const p1 = `$${params.length}`
-        params.push(to)
-        const p2 = `$${params.length}`
-        whens.push(`WHEN ${src} = ${p1} THEN ${p2}`)
-      }
-      if (whens.length === 0) throw new Inconclusive('value_map transform declares no mappings')
-      return `CASE ${whens.join(' ')} ELSE NULL END`
-    }
-  }
-}
-
 /** The primary key column, which the deterministic sample orders by. */
 async function primaryKeyColumn(projectId: string, table: string): Promise<string> {
   const res = await queryWorkspaceSchema(
@@ -179,7 +138,7 @@ async function primaryKeyColumn(projectId: string, table: string): Promise<strin
         AND tc.constraint_type = 'PRIMARY KEY'
       ORDER BY kcu.ordinal_position
       LIMIT 1`,
-    `workspace_${projectId}`,
+    await resolveWorkspaceSchema(projectId),
     table,
   ).catch(() => null)
 
@@ -201,7 +160,7 @@ async function assertColumnsExist(
     projectId,
     `SELECT column_name FROM information_schema.columns
       WHERE table_schema = $1 AND table_name = $2 AND column_name = ANY($3::text[])`,
-    `workspace_${projectId}`,
+    await resolveWorkspaceSchema(projectId),
     table,
     cols,
   ).catch((err: unknown) => {
@@ -248,7 +207,7 @@ export async function reconcileSourceTarget(
     if (![table, sourceColumn, targetColumn].every(x => IDENT.test(x))) {
       throw new Inconclusive('table or column name is not a valid identifier')
     }
-    const schema = `workspace_${projectId}`
+    const schema = await resolveWorkspaceSchema(projectId)
     await assertColumnsExist(projectId, table, [sourceColumn, targetColumn])
 
     const countRes = await queryWorkspaceSchema(
@@ -267,8 +226,14 @@ export async function reconcileSourceTarget(
       return empty('inconclusive', 'table has no rows, so consistency could not be demonstrated')
     }
 
+    // A transform that cannot be rendered cannot be recomputed, so there is
+    // nothing to compare against. Checked here rather than thrown from the
+    // renderer, so the same guard reads identically on the dual-write side.
+    const problem = transformProblem(transform)
+    if (problem) throw new Inconclusive(problem)
+
     const params: unknown[] = []
-    const expected = transformSql(transform, sourceColumn, params)
+    const expected = transformSql(transform, `"${sourceColumn}"`, params)
 
     let method: ReconciliationMethod
     let scope: string

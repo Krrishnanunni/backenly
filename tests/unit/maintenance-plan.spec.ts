@@ -84,11 +84,17 @@ const plan = (d: StructuralDiagnosis, fingerprint = 'cat-v1') =>
 describe('executor capability', () => {
   it('records what the executor can actually do, not what the ladder wants', () => {
     expect(EXECUTOR_CAPABILITY.add_structure).toBe('implemented')
-    // CREATE_TRIGGER writes an AppTrigger row — event automation, not a DB trigger.
-    expect(EXECUTOR_CAPABILITY.dual_write).toBe('not_implemented')
-    // RUN_DATA_MIGRATION's backfill is atomic; maintenance needs resumable.
-    expect(EXECUTOR_CAPABILITY.backfill).toBe('not_implemented_for_maintenance')
-    expect(EXECUTOR_CAPABILITY.verify).toBe('not_implemented')
+    // Phase 6b built these three under lib/autonomy/maintenance/primitives,
+    // none of them by reusing a verb that was the wrong shape: CREATE_TRIGGER
+    // wrote an AppTrigger row rather than a database trigger, and
+    // RUN_DATA_MIGRATION's backfill is atomic where maintenance needs resumable.
+    expect(EXECUTOR_CAPABILITY.dual_write).toBe('implemented')
+    expect(EXECUTOR_CAPABILITY.backfill).toBe('implemented')
+    expect(EXECUTOR_CAPABILITY.verify).toBe('implemented')
+    // Phase 7 owns the reader cutover and the drop. Still not built, and the
+    // point of this table is that it says so.
+    expect(EXECUTOR_CAPABILITY.switch_readers).toBe('future_phase_7')
+    expect(EXECUTOR_CAPABILITY.contract).toBe('future_phase_7')
   })
 
   it('never emits a placeholder verb for an unimplemented step', () => {
@@ -120,8 +126,21 @@ describe('classifyMaintenanceStep is the one decision point', () => {
 
   it('reports executable only for implemented capabilities', () => {
     expect(classifyMaintenanceStep({ kind: 'add_structure' }).executable).toBe(true)
-    expect(classifyMaintenanceStep({ kind: 'dual_write' }).executable).toBe(false)
-    expect(classifyMaintenanceStep({ kind: 'backfill' }).executable).toBe(false)
+    expect(classifyMaintenanceStep({ kind: 'dual_write' }).executable).toBe(true)
+    expect(classifyMaintenanceStep({ kind: 'backfill' }).executable).toBe(true)
+    expect(classifyMaintenanceStep({ kind: 'switch_readers' }).executable).toBe(false)
+    expect(classifyMaintenanceStep({ kind: 'contract' }).executable).toBe(false)
+  })
+
+  it('did not lower a tier when the primitive arrived', () => {
+    // A primitive existing and a primitive being permitted to run are different
+    // events. Tier is blast radius, and dual_write installs a trigger inside the
+    // caller's transaction whether or not this repository can now write one.
+    expect(classifyMaintenanceStep({ kind: 'dual_write' }).tier).toBe(2)
+    expect(classifyMaintenanceStep({ kind: 'backfill' }).tier).toBe(2)
+    expect(classifyMaintenanceStep({ kind: 'verify' }).tier).toBe(0)
+    expect(classifyMaintenanceStep({ kind: 'add_structure' }).tier).toBe(1)
+    expect(classifyMaintenanceStep({ kind: 'contract' }).tier).toBe(3)
   })
 
   it('requires a rollback for everything except contract', () => {
@@ -208,7 +227,14 @@ describe('valid but blocked by capability', () => {
     expect(p.steps.map(s => s.kind)).toEqual([
       'add_structure', 'dual_write', 'backfill', 'verify', 'switch_readers', 'contract',
     ])
-    expect(p.blockedReasons.join(' ')).toMatch(/dual_write/)
+    // Phase 6b implemented the middle rungs, so what blocks the ladder now is
+    // the Phase 7 pair at the end. The middle state still has to exist: a plan
+    // whose last rungs are unbuilt is correct engineering waiting on a tool,
+    // and collapsing it into `executable` would ship a ladder that stops
+    // halfway through a migration.
+    expect(p.blockedReasons.join(' ')).toMatch(/switch_readers/)
+    expect(p.blockedReasons.join(' ')).toMatch(/contract/)
+    expect(p.blockedReasons.join(' ')).not.toMatch(/dual_write|backfill|verify/)
   })
 
   it('is NOT the same as invalid', () => {
@@ -317,6 +343,42 @@ describe('staleness and authorization', () => {
     const v2 = plan(diagnosis(), 'cat-v2')
     expect(approvalStillValid(v1, v1.planVersion)).toBe(true)
     expect(approvalStillValid(v2, v1.planVersion)).toBe(false)
+  })
+
+  it('an approval does not survive the executor gaining a capability', () => {
+    // The hazard this closes: a plan built while dual_write was unimplemented
+    // was `blocked_by_capability`, and an owner could approve it. When Phase 6b
+    // landed the primitive, an unchanged planVersion would have turned consent
+    // for a ladder that could not run into consent for one that can.
+    //
+    // The capability table is part of the version, so the approval lapses on its
+    // own. Re-planning is the only way back, which is the intended cost.
+    const current = plan(diagnosis(), 'cat-v1')
+
+    let previous: string = ''
+    jest.isolateModules(() => {
+      jest.doMock('@/lib/autonomy/maintenance/step', () => {
+        const real = jest.requireActual('@/lib/autonomy/maintenance/step')
+        return {
+          ...real,
+          EXECUTOR_CAPABILITY: { ...real.EXECUTOR_CAPABILITY, dual_write: 'not_implemented' },
+        }
+      })
+      const { buildMaintenancePlan: build } = require('@/lib/autonomy/maintenance/plan')
+      previous = build({
+        findingId: 'f1',
+        diagnosis: diagnosis(),
+        subsystem: SUBSYSTEM,
+        catalogFingerprint: 'cat-v1',
+      }).planVersion
+    })
+    jest.dontMock('@/lib/autonomy/maintenance/step')
+
+    // Non-vacuity: the mock really did produce a different plan version, so this
+    // is measuring the capability table and not a constant.
+    expect(previous).not.toBe('')
+    expect(previous).not.toBe(current.planVersion)
+    expect(approvalStillValid(current, previous)).toBe(false)
   })
 
   it('idempotency keys are stable and distinct per step', () => {

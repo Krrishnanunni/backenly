@@ -3140,3 +3140,70 @@ model McpOAuthRefresh {
   @@index([expiresAt])
   @@map("mcp_oauth_refresh_tokens")
 }
+
+// ─── Phase 6b: maintenance execution ledger ─────────────────────────────────
+//
+// What a structural maintenance run did, durably, so a restart can tell what
+// already happened and an operator can tell what it is doing.
+//
+// Retry lifecycle is NOT here. BackgroundJob owns attempts, maxAttempts, runAt,
+// timeoutAt and the queued/running/completed/failed/dead_letter states; a step
+// points at the job that owns its retries. Duplicating those semantics would
+// create a second retry queue with its own opinion about what "failed" means.
+
+model MaintenanceExecution {
+  id                 String    @id @default(uuid())
+  projectId          String
+  findingId          String // the HealthFinding this maintenance answers
+  planId             String
+  planVersion        Int // approval is bound to this exact version
+  catalogFingerprint String // re-checked immediately before every mutation
+  approvalId         String? // null until a human has approved
+  tier               String // the plan's tier, re-checked at execution
+  status             String    @default("planned") // planned | running | halted | ready_to_switch | failed | completed
+  haltReason         String? // why it stopped, when it stopped
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  steps MaintenanceStepExecution[]
+
+  // One execution per plan version: re-planning produces a new version rather
+  // than mutating the record an approval was bound to.
+  @@unique([planId, planVersion])
+  @@index([projectId, status])
+  @@index([findingId])
+  @@map("maintenance_executions")
+}
+
+model MaintenanceStepExecution {
+  id          String               @id @default(uuid())
+  executionId String
+  execution   MaintenanceExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  stepId   String // the step's id within the plan
+  stepKind String // add_structure | dual_write | backfill | verify
+  ordinal  Int // position within the plan
+
+  // Replaying a completed step must be a no-op, so completion is keyed rather
+  // than inferred from status alone.
+  idempotencyKey String  @unique
+  status         String  @default("pending") // pending | running | succeeded | failed | skipped
+  backgroundJobId String? // the BackgroundJob that owns this step's retries
+
+  preconditionEvidence  Json? // what was true immediately before mutating
+  postconditionEvidence Json? // what was observed immediately after
+  rollback              Json? // rollback spec, and whether it has been applied
+  result                Json? // failure or result evidence, including reconciliation
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([executionId, ordinal])
+  @@index([status])
+  @@index([backgroundJobId])
+  @@map("maintenance_step_executions")
+}

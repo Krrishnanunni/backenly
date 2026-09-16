@@ -32,6 +32,7 @@ import {
   assertProvisionerModules,
 } from '../tools/managed-db/provisioner-audit'
 import type { ExtensionRehearsalResult } from '../tools/managed-db/rehearse-extensions'
+import type { RepairResult } from '../tools/managed-db/repair-extensions'
 import {
   argValue,
   assertStagingOnly,
@@ -108,16 +109,42 @@ async function emit(dir: string): Promise<void> {
     logLevel: 'silent',
   })
 
-  const probeB64 = brotliCompressSync(Buffer.from(code, 'utf8'), {
-    params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
-  }).toString('base64')
+  // The repair entry is the same mechanism pointed at a real database. It is
+  // audited by exactly the same rules: one mutation vocabulary, nothing else.
+  const repair = await build({
+    entryPoints: [join(root, 'tools', 'managed-db', 'repair-task.ts')],
+    bundle: true,
+    platform: 'node',
+    target: 'node20',
+    format: 'cjs',
+    minify: true,
+    external: ['pg-native', 'pg-cloudflare', 'cloudflare:sockets'],
+    write: false,
+    metafile: true,
+    logLevel: 'silent',
+  })
+  const repairCode = repair.outputFiles[0].text
+  const repairModules = Object.keys(repair.metafile?.inputs ?? {})
+  assertProvisionerBundle(repairCode)
+  assertProvisionerModules(repairModules)
+  console.log(`  layer 2 audit: repair bundle ${repairModules.length} modules, same vocabulary`)
+
+  const pack = (text: string) =>
+    brotliCompressSync(Buffer.from(text, 'utf8'), { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }).toString('base64')
+  const probeB64 = pack(code)
+  const repairB64 = pack(repairCode)
   writeFileSync(join(dir, 'probe.b64'), probeB64)
+  writeFileSync(join(dir, 'repair.b64'), repairB64)
   writeFileSync(join(dir, 'launcher.cjs'), launcher.outputFiles[0].text)
   writeFileSync(
     join(dir, 'manifest.json'),
-    JSON.stringify({ createdAt: new Date().toISOString(), sources: digests(root), probeModules: modules }, null, 2),
+    JSON.stringify(
+      { createdAt: new Date().toISOString(), sources: digests(root), probeModules: modules, repairModules },
+      null,
+      2,
+    ),
   )
-  console.log(`  probe ${(probeB64.length / 1024).toFixed(1)} KB of environment`)
+  console.log(`  probe ${(probeB64.length / 1024).toFixed(1)} KB · repair ${(repairB64.length / 1024).toFixed(1)} KB of environment`)
   console.log(`  wrote bundle to ${dir}`)
 }
 
@@ -134,7 +161,28 @@ function summarise(r: ExtensionRehearsalResult): void {
   console.log(`    leftovers     ${JSON.stringify(r.scratchDatabasesAfter)}`)
 }
 
-async function run(from: string, out: string): Promise<void> {
+/** Parity expectations come from the production capture, not from a constant. */
+function expectedVersions(capturePath: string): Record<string, string> {
+  const capture = JSON.parse(readFileSync(capturePath, 'utf8'))
+  const extensions: Array<{ name: string; version: string }> = capture?.snapshot?.extensions ?? []
+  const wanted = Object.fromEntries(
+    extensions.filter(e => e.name !== 'plpgsql').map(e => [e.name, e.version]),
+  )
+  if (Object.keys(wanted).length === 0) die(`${capturePath} holds no extension versions to expect`)
+  return wanted
+}
+
+function summariseRepair(r: RepairResult): void {
+  console.log(`\n  layer 2 parity repair: ${r.verdict}   database=${r.database}`)
+  for (const x of r.refusals) console.log(`    REFUSED       ${x}`)
+  for (const f of r.failures) console.log(`    FAIL          ${f}`)
+  console.log(`    before        ${r.beforeStatuses.map(s => `${s.name}=${s.status}`).join(' ')}`)
+  console.log(`    installed     ${JSON.stringify(r.outcome?.executed ?? [])}`)
+  console.log(`    after         ${r.afterStatuses.map(s => `${s.name}=${s.status}`).join(' ')}`)
+  for (const id of r.identities) console.log(`    identity      ${id.name} ${id.version} in ${id.schema}`)
+}
+
+async function run(from: string, out: string, mode: 'rehearsal' | 'repair'): Promise<void> {
   const root = process.cwd()
   assertRepoRoot(root)
 
@@ -144,25 +192,43 @@ async function run(from: string, out: string): Promise<void> {
     if (manifest.sources[key] !== now[key]) die(`${key} has changed since the bundle was emitted; re-emit it`)
   }
 
-  const probeB64 = readFileSync(join(from, 'probe.b64'), 'utf8')
+  const bundleFile = mode === 'repair' ? 'repair.b64' : 'probe.b64'
+  const probeB64 = readFileSync(join(from, bundleFile), 'utf8')
   assertProvisionerBundle(brotliDecompressSync(Buffer.from(probeB64, 'base64')).toString('utf8'))
-  assertProvisionerModules(manifest.probeModules ?? [])
+  assertProvisionerModules((mode === 'repair' ? manifest.repairModules : manifest.probeModules) ?? [])
 
-  console.log('\nLayer 2 extension rehearsal — staging, scratch database only\n')
+  const environment = [
+    { name: 'LAYER2_BOOTSTRAP', value: BOOTSTRAP },
+    { name: 'PROBE_B64', value: probeB64 },
+  ]
+
+  if (mode === 'repair') {
+    // Writing to the real staging database needs saying so, and needs the
+    // parity reference it is being repaired towards.
+    if (!process.argv.includes('--confirm-staging-write')) {
+      die('repair writes to the real staging database; pass --confirm-staging-write to say so explicitly')
+    }
+    const expectPath = argValue('--expect')
+    if (!expectPath) die('repair needs --expect <production capture json> to state the parity expectations')
+    const versions = expectedVersions(expectPath)
+    environment.push({ name: 'LAYER2_CONFIRM', value: 'repair-staging' })
+    environment.push({ name: 'LAYER2_EXPECTED_VERSIONS', value: JSON.stringify(versions) })
+    console.log('\nLayer 2 parity repair — staging, the REAL database\n')
+    console.log(`  expecting: ${Object.entries(versions).map(([n, v]) => `${n} ${v}`).join(', ')}`)
+  } else {
+    console.log('\nLayer 2 extension rehearsal — staging, scratch database only\n')
+  }
   console.log('  layer 2 audit: shipped bundle is one mutation vocabulary')
   assertStagingOnly()
   const ctx = resolveStagingTaskContext()
 
   const spec: OneShotTaskSpec = {
-    family: FAMILY,
+    family: mode === 'repair' ? `${FAMILY}-repair` : FAMILY,
     containerName: CONTAINER,
     logPrefix: LOG_PREFIX,
-    startedBy: 'layer2-extension-rehearsal',
+    startedBy: mode === 'repair' ? 'layer2-parity-repair' : 'layer2-extension-rehearsal',
     command: ['sh', '-c', 'exec node -e "$LAYER2_BOOTSTRAP"'],
-    environment: [
-      { name: 'LAYER2_BOOTSTRAP', value: BOOTSTRAP },
-      { name: 'PROBE_B64', value: probeB64 },
-    ],
+    environment,
     cpu: '512',
     memory: '1024',
   }
@@ -176,8 +242,15 @@ async function run(from: string, out: string): Promise<void> {
       console.error('\n  no complete result in the task logs')
       return 1
     }
-    const result = decodeResult<ExtensionRehearsalResult>(lines)
     mkdirSync(out, { recursive: true })
+    if (mode === 'repair') {
+      const result = decodeResult<RepairResult>(lines)
+      writeFileSync(join(out, 'layer2-parity-repair.json'), JSON.stringify(result, null, 2))
+      summariseRepair(result)
+      console.log(`\n  wrote ${join(out, 'layer2-parity-repair.json')}`)
+      return result.verdict === 'PASS' ? 0 : result.verdict === 'REFUSED' ? 2 : 1
+    }
+    const result = decodeResult<ExtensionRehearsalResult>(lines)
     writeFileSync(join(out, 'layer2-extension-rehearsal.json'), JSON.stringify(result, null, 2))
     summarise(result)
     console.log(`\n  wrote ${join(out, 'layer2-extension-rehearsal.json')}`)
@@ -190,11 +263,15 @@ async function run(from: string, out: string): Promise<void> {
 async function main(): Promise<void> {
   const emitTo = argValue('--emit')
   if (emitTo) return emit(emitTo)
-  if (!process.argv.includes('--run')) die('usage: --emit <dir> | --run --from <dir> --out <dir>')
+  if (!process.argv.includes('--run')) {
+    die('usage: --emit <dir> | --run [--mode rehearsal|repair] --from <dir> --out <dir>')
+  }
   const from = argValue('--from')
   const out = argValue('--out')
   if (!from || !out) die('--run needs --from <bundle dir> and --out <result dir>')
-  return run(from, out)
+  const mode = (argValue('--mode') ?? 'rehearsal') as 'rehearsal' | 'repair'
+  if (mode !== 'rehearsal' && mode !== 'repair') die(`unknown mode ${mode}`)
+  return run(from, out, mode)
 }
 
 main().catch(err => {

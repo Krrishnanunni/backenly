@@ -18,7 +18,8 @@
  *
  * ── Capability is a fact about the executor, not a wish ─────────────────────
  *
- * The executor capability spike established exactly which primitives exist:
+ * The executor capability spike found that three of the six step kinds had no
+ * implementation at all:
  *
  *   ADD_COLUMN               real verb, real handler
  *   CREATE_TRIGGER           writes an AppTrigger row — event automation, NOT
@@ -26,12 +27,18 @@
  *   RUN_DATA_MIGRATION       has a `backfill` op, but it is explicitly atomic:
  *                            one transaction, no batching, no BackgroundJob
  *                            integration. Wrong shape for a large live table.
- *   reconciliation           does not exist in any form.
+ *   reconciliation           did not exist in any form.
  *
- * So three of the six step kinds have no implementation. Recording that as
- * `not_implemented` is the honest alternative to pointing at a placeholder verb
- * — which is precisely how `schema_not_registered` shipped referencing
- * `REGISTER_POSTGREST_SCHEMA`, a verb that never existed.
+ * Recording that as `not_implemented` was the honest alternative to pointing at
+ * a placeholder verb — which is precisely how `schema_not_registered` shipped
+ * referencing `REGISTER_POSTGREST_SCHEMA`, a verb that never existed.
+ *
+ * Phase 6b built the missing three, under `./primitives/`, none of them by
+ * reusing the verbs above. Two consequences follow, and both are enforced
+ * rather than documented: the capability table is part of `planVersion`, so a
+ * plan approved while blocked does not become executable by this file changing;
+ * and the tiers below did not move, so the primitives existing is not the same
+ * event as them being permitted to run.
  */
 
 import type { AutonomyTier } from '../desired-state'
@@ -67,17 +74,18 @@ export type ExecutorCapability =
 export const EXECUTOR_CAPABILITY: Readonly<Record<MaintenanceStepKind, ExecutorCapability>> = {
   // ADD_COLUMN / ADD CONSTRAINT / CREATE POLICY all route through executeAction.
   add_structure: 'implemented',
-  // CREATE_TRIGGER is the AppTrigger event surface, not a DB trigger.
-  // lib/services/derived-columns.ts is the right template for the real thing
-  // (generated body, SECURITY DEFINER, closed vocabulary) and does not do
-  // same-row mirroring, and has no EXCEPTION handling.
-  dual_write: 'not_implemented',
-  // RUN_DATA_MIGRATION's backfill is atomic by design. Maintenance needs
-  // resumable and batched, dispatched through BackgroundJob.
-  backfill: 'not_implemented_for_maintenance',
-  // lib/verification/* is SELECT-only by hard contract and cannot compare a
-  // source column against a target one under a transform.
-  verify: 'not_implemented',
+  // Phase 6b. `primitives/dual-write.ts` installs a real BEFORE trigger with a
+  // generated body over the closed transform vocabulary, replacing the
+  // AppTrigger surface that was never a database trigger at all.
+  dual_write: 'implemented',
+  // Phase 6b. `primitives/backfill.ts` is batched and resumable, with a
+  // transaction-local lock timeout, and leaves retries to BackgroundJob —
+  // the three properties RUN_DATA_MIGRATION's atomic backfill does not have.
+  backfill: 'implemented',
+  // Phase 6b. `primitives/verify.ts` over reconcile.ts, which does compare a
+  // source column against a target one under a transform. lib/verification/*
+  // still cannot, and is still not what this uses.
+  verify: 'implemented',
   switch_readers: 'future_phase_7',
   contract: 'future_phase_7',
 }

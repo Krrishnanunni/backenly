@@ -199,6 +199,13 @@ export async function processBackgroundJobs(): Promise<{
           case 'cleanup':
             result = await handleCleanupJob(job.payload as any)
             break
+          case 'maintenance_backfill': {
+            const { handleBackfillJob } = await import(
+              '@/lib/autonomy/maintenance/primitives/backfill-job'
+            )
+            result = await handleBackfillJob(job.payload as any)
+            break
+          }
           case 'purge_project':
             // Unreachable by design: purge rows never sit in 'queued', so
             // claimNextJobs cannot return one. If that ever changes, throwing

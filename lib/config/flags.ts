@@ -110,6 +110,27 @@ export const FLAGS = {
   get ENABLE_AUTO_FIX_PLANNER(): boolean { return readBool('ENABLE_AUTO_FIX_PLANNER') },
 
   /**
+   * Phase 6b — structural maintenance MUTATIONS.
+   *
+   * Off by default, and the default is the point: merging this code and
+   * activating it in production are separate decisions, so the ladder can ship,
+   * be deployed, and be exercised in production without writing anything.
+   *
+   * With it off, `executeMaintenancePlan` still classifies every step, applies
+   * every gate and writes the full ledger — it refuses at the write. That makes
+   * "would this ladder have been allowed to run here?" answerable against real
+   * production schemas before anything is permitted to run.
+   *
+   * With it on, nothing else widens: Tier 2 still needs an approval bound to the
+   * plan version, Tier 3 is still never executed, and a blocked ladder is still
+   * refused including its runnable prefix. This flag removes exactly one
+   * refusal, not the floor beneath it.
+   */
+  get ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS(): boolean {
+    return readBool('ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS')
+  },
+
+  /**
    * Phase 12 — Auto-Fix Execution.
    *
    * When on (requires ENABLE_AUTO_FIX_PLANNER also on), safe auto-fixable
