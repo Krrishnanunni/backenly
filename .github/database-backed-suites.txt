@@ -137,3 +137,10 @@ tests/integration/managed-db-canonical-history.spec.ts
 # that the backfill cursor used max(k), and PostgreSQL has no max() aggregate
 # for uuid — the most common primary key on this platform.
 tests/integration/maintenance-phase6b.spec.ts
+
+# Resolving a plan that was never stored. Every step is a database read: the
+# finding, the subsystem clustering, the structural diagnosis and the catalog
+# fingerprint. It also documents what a project must actually look like before
+# a dry run can return anything but WOULD_REFUSE — 50+ analysed rows, and
+# exactly one live hypothesis rather than a tie the diagnosis will not break.
+tests/integration/maintenance-resolve-db.spec.ts
