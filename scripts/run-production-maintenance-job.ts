@@ -261,6 +261,18 @@ async function runTask(spec: TaskSpec): Promise<void> {
   if (!srcDef) die('could not read the production task definition')
   const secrets = productionSecrets(srcDef)
 
+  // The edition seam. `currentEdition()` defaults to single-tenant when this is
+  // unset, and single-tenant refuses to create a second project — so a fixture
+  // task without it cannot use the product's own provisioning path. Read from
+  // the web service's own definition rather than asserted here, so this job
+  // runs as the edition production actually is.
+  const webDef = aws(['ecs', 'describe-task-definition', '--task-definition', 'backenly-production-web'])?.taskDefinition
+  const edition = (webDef?.containerDefinitions?.[0]?.environment ?? [])
+    .find((e: any) => e.name === 'BACKENLY_EDITION')?.value
+  if (!edition) die('backenly-production-web does not declare BACKENLY_EDITION')
+  environment.push({ name: 'BACKENLY_EDITION', value: String(edition) })
+  console.log(`  edition: ${edition} (from backenly-production-web)`)
+
   console.log(`  secrets carried: ${secrets.map(s => s.name).join(', ')}`)
   console.log(`  expected database: ${database}`)
   console.log(`  image ${image}`)
