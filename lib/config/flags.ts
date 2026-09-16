@@ -131,6 +131,18 @@ export const FLAGS = {
   },
 
   /**
+   * Run maintenance ladders without anybody typing the command.
+   *
+   * Separate from the mutations flag, and useless without it. Two switches
+   * because they answer different questions: whether this deployment may write
+   * at all, and whether it may decide for itself when to. Turning the first on
+   * for a hand-run plan must not also start a sweep.
+   */
+  get ENABLE_MAINTENANCE_SCHEDULER(): boolean {
+    return readBool('ENABLE_MAINTENANCE_SCHEDULER')
+  },
+
+  /**
    * Phase 12 — Auto-Fix Execution.
    *
    * When on (requires ENABLE_AUTO_FIX_PLANNER also on), safe auto-fixable

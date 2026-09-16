@@ -214,6 +214,7 @@ model Project {
   organizationId         String?
   organization           Organization?             @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   projectMembers         ProjectMember[]
+  maintenanceApprovals   MaintenanceApproval[]
 
   @@index([userId])
   @@index([updatedAt])
@@ -3177,6 +3178,46 @@ model MaintenanceExecution {
   @@map("maintenance_executions")
 }
 
+/// A human's consent to run ONE maintenance plan, at ONE version.
+///
+/// Approval was an environment variable, which works for an operator running a
+/// single plan by hand and cannot work for a scheduler: there is no per-project
+/// consent in a process-wide variable, and no way to withdraw one.
+///
+/// Bound to planVersion, never to planId. planVersion covers the ladder, the
+/// catalog fingerprint and the executor capability table, so approving version
+/// N is not consent for N+1 - the schema moved, the ladder changed, or the
+/// executor gained a capability. A re-plan produces a new version and needs a
+/// new approval, which is the property that makes unattended execution safe.
+model MaintenanceApproval {
+  id          String    @id @default(uuid())
+  projectId   String
+  findingId   String
+  planId      String
+  /// The exact version consented to. Nothing else may run under it.
+  planVersion String
+  /// Highest tier this consent covers. `contract` is Tier 3 and is never
+  /// approvable here: it is performed by a person, not authorised for a robot.
+  maxTier     Int       @default(2)
+  approvedBy  String
+  reason      String?
+  /// What the ladder operates on, in real identifiers, as the approver stated
+  /// it. Bindings travel WITH consent because they are part of what is being
+  /// consented to: approving "consolidate the lifecycle column" without saying
+  /// which column is not an approval anybody could give. A scheduler that
+  /// derived them instead would be guessing which column to migrate.
+  bindings    Json
+  /// Set when withdrawn. A revoked approval stops future runs immediately.
+  revokedAt   DateTime?
+  revokedBy   String?
+  createdAt   DateTime  @default(now())
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, planVersion])
+  @@index([projectId, revokedAt])
+  @@map("maintenance_approvals")
+}
+
 model MaintenanceStepExecution {
   id          String               @id @default(uuid())
   executionId String
@@ -3188,8 +3229,8 @@ model MaintenanceStepExecution {
 
   // Replaying a completed step must be a no-op, so completion is keyed rather
   // than inferred from status alone.
-  idempotencyKey String  @unique
-  status         String  @default("pending") // pending | running | succeeded | failed | skipped
+  idempotencyKey  String  @unique
+  status          String  @default("pending") // pending | running | succeeded | failed | skipped
   backgroundJobId String? // the BackgroundJob that owns this step's retries
 
   preconditionEvidence  Json? // what was true immediately before mutating
