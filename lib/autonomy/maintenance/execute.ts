@@ -42,15 +42,20 @@
  *
  * ── Mutations are off by default ────────────────────────────────────────────
  *
- * `mutationsEnabled` defaults to false, so reaching production early is not the
- * same event as executing there. A run with it off still classifies every step,
- * checks every gate and writes the ledger — it just refuses at the write. That
- * makes "would this ladder have been allowed to run?" answerable in production
+ * Mutations are gated by `FLAGS.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS`, which is
+ * off by default, so reaching production is not the same event as executing
+ * there. A run with it off still classifies every step, checks every gate and
+ * writes the ledger — it just refuses at the write. That makes "would this
+ * ladder have been allowed to run?" answerable against real production schemas
  * without anything running.
+ *
+ * `mutationsEnabled` on the input ANDs with the flag. A caller can narrow what
+ * the environment permits and can never widen it.
  */
 
 import { prisma } from '@/lib/db'
 import { enqueue } from '@/lib/queue'
+import { FLAGS } from '@/lib/config/flags'
 import { isTierAutoAllowed, type AutonomyLevel } from '../autonomy-level'
 import { approvalStillValid, isPlanStale, type MaintenancePlan } from './plan'
 import { classifyMaintenanceStep, type MaintenanceStep, type MaintenanceStepKind } from './step'
@@ -94,7 +99,15 @@ export interface ExecuteMaintenanceInput {
   /** The approved plan version, when an owner approved one. */
   approvedPlanVersion?: string | null
   approvalId?: string | null
-  /** Off by default. See the header. */
+  /**
+   * Off unless BOTH this and the deployment flag say otherwise.
+   *
+   * Omitted, it falls back to `FLAGS.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS`,
+   * which is itself off by default. Passing `true` does not override the flag:
+   * a caller cannot enable mutations in an environment that has not enabled
+   * them, which is what keeps "the code is deployed" and "it may write here"
+   * separate decisions.
+   */
   mutationsEnabled?: boolean
 }
 
@@ -193,7 +206,10 @@ export async function executeMaintenancePlan(
   input: ExecuteMaintenanceInput,
 ): Promise<MaintenanceExecutionOutcome> {
   const { plan, projectId } = input
-  const mutationsEnabled = input.mutationsEnabled ?? false
+  // AND, not OR. The caller may narrow what the environment permits; it may
+  // never widen it.
+  const mutationsEnabled =
+    (input.mutationsEnabled ?? true) && FLAGS.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS
 
   const refusal = refuseLadder(input)
   if (refusal) {

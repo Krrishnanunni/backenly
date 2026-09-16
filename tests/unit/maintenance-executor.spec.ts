@@ -174,6 +174,10 @@ const run = (over: Partial<Parameters<typeof executeMaintenancePlan>[0]> = {}) =
 }
 
 beforeEach(() => {
+  // The deployment gate is off by default, which is asserted in its own block
+  // below. Every other test here is about a different decision, so it runs in
+  // an environment that has enabled mutations.
+  process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS = 'true'
   jest.clearAllMocks()
   executionRows.clear()
   stepRows.clear()
@@ -259,11 +263,31 @@ describe('tier gates', () => {
 
 // ── Mutations are off by default ─────────────────────────────────────────────
 
-describe('mutations are disabled unless asked for', () => {
-  it('halts at the first mutating step when the flag is absent', async () => {
-    const r = await run({ mutationsEnabled: undefined })
+describe('mutations are disabled unless the environment enables them', () => {
+  const ORIGINAL = process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS
+    else process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS = ORIGINAL
+  })
+
+  it('halts at the first mutating step when the deployment flag is off', async () => {
+    delete process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS
+    const r = await run({ mutationsEnabled: true })
     expect(r.status).toBe('halted')
     expect(r.haltReason).toMatch(/mutations are disabled/)
+    expect(mockExecuteAction).not.toHaveBeenCalled()
+  })
+
+  it('does not let a caller widen what the environment permits', async () => {
+    // The property that keeps "the code is deployed" and "it may write here"
+    // separate: passing true is not consent, the environment is.
+    delete process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS
+    expect((await run({ mutationsEnabled: true })).status).toBe('halted')
+  })
+
+  it('lets a caller narrow what the environment permits', async () => {
+    process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS = 'true'
+    expect((await run({ mutationsEnabled: false })).status).toBe('halted')
     expect(mockExecuteAction).not.toHaveBeenCalled()
   })
 
@@ -271,7 +295,8 @@ describe('mutations are disabled unless asked for', () => {
     // The value of running with mutations off is learning whether the ladder
     // WOULD have been allowed. A refusal that skipped the gates would not
     // answer that.
-    const r = await run({ mutationsEnabled: undefined })
+    delete process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS
+    const r = await run({ mutationsEnabled: true })
     expect(mockCreateExecution).toHaveBeenCalledTimes(1)
     expect(mockCreateExecution.mock.calls[0][0].data.status).toBe('running')
     expect(r.executionId).toBeTruthy()
