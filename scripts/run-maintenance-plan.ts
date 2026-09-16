@@ -1,10 +1,12 @@
 /**
- * THE MAINTENANCE ENTRY POINT — one plan, named explicitly, two modes
- * ===================================================================
+ * THE MAINTENANCE ENTRY POINT — one plan, named explicitly, three modes
+ * =====================================================================
  *
  *   npx tsx scripts/run-maintenance-plan.ts \
  *     --project <id> --finding <id> --plan <id> --plan-version <hash> \
  *     --mode dry-run
+ *
+ *   npx tsx scripts/run-maintenance-plan.ts  *     --project <id> --finding <id> --plan <id> --plan-version <hash>  *     --mode observe --execution <id> [--window-ms <ms>]
  *
  *   ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS=true \
  *   npx tsx scripts/run-maintenance-plan.ts \
@@ -87,7 +89,17 @@ async function main(): Promise<void> {
   if (!projectId || !findingId || !planId || !planVersion) {
     die('--project, --finding, --plan and --plan-version are all required; this script discovers nothing')
   }
-  if (mode !== 'dry-run' && mode !== 'execute') die('--mode must be dry-run or execute')
+  if (mode !== 'dry-run' && mode !== 'execute' && mode !== 'observe') {
+    die('--mode must be dry-run, execute or observe')
+  }
+  // observe's own arguments, checked here with the rest of the database-free
+  // preconditions. A run that cannot proceed must not read a production
+  // catalog to discover that.
+  if (mode === 'observe') {
+    if (!arg('--execution')) die('--execution <id> is required for --mode observe')
+    const w = Number(arg('--window-ms') ?? 15 * 60 * 1000)
+    if (!Number.isFinite(w) || w <= 0) die('--window-ms must be a positive number')
+  }
   if (arg('--bindings') && arg('--bindings-json')) die('pass --bindings or --bindings-json, not both')
 
   // Before anything reads or writes. Applies to dry-run too: a report about the
@@ -177,6 +189,87 @@ async function main(): Promise<void> {
 
   // ── execute ────────────────────────────────────────────────────────────────
   //
+  // ── observe ────────────────────────────────────────────────────────────────
+  //
+  // The window after a reader switch, and the repair's effect on the subsystem.
+  //
+  // Phase 7 asks whether moving the readers made anything worse and restores
+  // the recorded bytes if it did. Phase 8 asks whether the repair helped at
+  // all. Both were built and neither had a caller, which meant the switch had
+  // no observation window in practice and no outcome was ever measured — the
+  // two properties that make a reader switch reversible and a remedy learnable.
+  //
+  // One execution, named explicitly, like everything else here. It resolves the
+  // plan first, so it inherits every identity assertion the other modes get.
+  if (mode === 'observe') {
+    // Both already validated above, before any database read.
+    const executionId = arg('--execution')!
+    const windowMs = Number(arg('--window-ms') ?? 15 * 60 * 1000)
+
+    const { prisma } = await import('@/lib/db')
+    const execution = await prisma.maintenanceExecution.findUnique({
+      where: { id: executionId },
+      select: { id: true, projectId: true, planId: true, completedAt: true, createdAt: true },
+    })
+    if (!execution) die(`execution ${executionId} does not exist`)
+    if (execution.projectId !== projectId) {
+      die(`execution ${executionId} belongs to project ${execution.projectId}, not ${projectId}`)
+    }
+    if (execution.planId !== planId) {
+      die(`execution ${executionId} is for plan ${execution.planId}, not ${planId}`)
+    }
+
+    const switchStep = await prisma.maintenanceStepExecution.findFirst({
+      where: { executionId, stepKind: 'switch_readers', status: 'completed' },
+      select: { result: true, completedAt: true },
+    })
+    if (!switchStep) die(`execution ${executionId} has no completed switch_readers step to observe`)
+
+    const switched = ((switchStep.result as { switchedReaders?: unknown })?.switchedReaders ?? []) as Array<{
+      id: string
+      name: string
+      previousCode: string
+    }>
+    const switchedAt = switchStep.completedAt ?? execution.completedAt ?? execution.createdAt
+
+    const { observeSwitch } = await import('@/lib/autonomy/maintenance/observe')
+    const { measureRepairOutcome } = await import('@/lib/autonomy/maintenance/outcome')
+
+    const observation = await observeSwitch(projectId, switchedAt, windowMs)
+    const outcome = await measureRepairOutcome(projectId, switchedAt, windowMs)
+
+    // A regression reverts. The bytes come from the ledger row the switch
+    // wrote, so this restores exactly what was there and never regenerates it.
+    let reverted: { reverted: number; failures: string[] } | null = null
+    if (observation.verdict === 'regressed') {
+      if (!FLAGS.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS) {
+        console.log('  regression observed, and mutations are disabled here, so nothing was reverted')
+      } else {
+        const { revertReaders } = await import('@/lib/autonomy/maintenance/primitives/switch-readers')
+        reverted = await revertReaders(switched)
+      }
+    }
+
+    console.log(
+      JSON.stringify(
+        {
+          executionId,
+          switchedAt,
+          windowMs,
+          readersObserved: switched.length,
+          observation,
+          // Phase 8. Ranking and priors only; it can never change detection
+          // truth, an approval requirement, or a safety tier.
+          outcome,
+          reverted,
+        },
+        null,
+        2,
+      ),
+    )
+    process.exit(observation.verdict === 'regressed' && !reverted ? 1 : 0)
+  }
+
   // The environment flag and the confirmation were checked above, before the
   // database was touched. What is left needs the resolved plan.
 

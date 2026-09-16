@@ -87,7 +87,21 @@ describe('the entry point discovers nothing', () => {
   it('refuses a mode it does not have', () => {
     const r = run([...IDS, '--mode', 'all-eligible'])
     expect(r.status).toBe(2)
-    expect(r.output).toMatch(/--mode must be dry-run or execute/)
+    expect(r.output).toMatch(/--mode must be dry-run, execute or observe/)
+  })
+
+  it('refuses observe without an execution to observe', () => {
+    // observe reports on ONE named execution. Without one it would have to go
+    // looking for the latest, which is discovery by another name.
+    const r = run([...IDS, '--mode', 'observe'])
+    expect(r.status).toBe(2)
+    expect(r.output).toMatch(/--execution <id> is required/)
+  })
+
+  it('refuses a window that is not a positive duration', () => {
+    const r = run([...IDS, '--mode', 'observe', '--execution', 'e1', '--window-ms', '0'])
+    expect(r.status).toBe(2)
+    expect(r.output).toMatch(/--window-ms must be a positive number/)
   })
 })
 
