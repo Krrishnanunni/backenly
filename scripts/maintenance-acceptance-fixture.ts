@@ -214,10 +214,18 @@ async function prepare(): Promise<void> {
   // ANALYZE reads statistics rather than rows, so it needs no claim.
   await prisma.$executeRawUnsafe(`ANALYZE "${schema}"."sessions"`)
 
-  const counted = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
+  // AS OWNER, both of them. These read TENANT ROWS, and the product enables RLS
+  // on every table it creates — so an unclaimed count returns 0 on the 80 rows
+  // just inserted and prepare refuses its own seeding. Measured: rows 0 against
+  // a planner estimate of 80, the planner being the only one of the two that
+  // RLS does not filter.
+  const { queryWorkspaceAsOwner } = await import('@/lib/services/workspace-pool')
+  const counted = await queryWorkspaceAsOwner<{ n: bigint }>(
+    projectId,
     `SELECT count(*)::bigint AS n FROM "${schema}"."sessions"`,
   )
-  const covariation = await prisma.$queryRawUnsafe<Array<{ pairs: bigint; distinct_status: bigint }>>(
+  const covariation = await queryWorkspaceAsOwner<{ pairs: bigint; distinct_status: bigint }>(
+    projectId,
     `SELECT count(*)::bigint AS pairs, count(DISTINCT status)::bigint AS distinct_status
        FROM (SELECT DISTINCT status, legacy_state FROM "${schema}"."sessions") s`,
   )
