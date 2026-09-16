@@ -71,20 +71,22 @@ describe('the surface is two arguments wide', () => {
     expect(run(['--mode', 'seed', '--project', PROJECT]).output).toMatch(/--mode must be prepare, cleanup or inspect/)
   })
 
-  it('refuses without a project', () => {
-    expect(run(['--mode', 'prepare']).output).toMatch(/--project <id> is required/)
+  it('refuses without a project, for the modes that need one', () => {
+    // `prepare` no longer takes one: the product mints the id.
+    expect(run(['--mode', 'inspect']).output).toMatch(/--project <id> is required/)
+    expect(run(['--mode', 'cleanup']).output).toMatch(/--project <id> is required/)
   })
 
   it('refuses a project id that is not a uuid', () => {
-    const r = run(['--mode', 'prepare', '--project', 'sessions', '--confirm', 'sessions'])
+    const r = run(['--mode', 'inspect', '--project', 'sessions'])
     expect(r.status).toBe(2)
     expect(r.output).toMatch(/--project must be a uuid/)
   })
 
-  it('refuses a confirmation that does not name the project', () => {
-    const r = run(['--mode', 'prepare', '--project', PROJECT, '--confirm', 'yes'])
+  it('refuses a confirmation that does not name the acceptance project', () => {
+    const r = run(['--mode', 'prepare', '--confirm', 'yes'])
     expect(r.status).toBe(2)
-    expect(r.output).toMatch(/--confirm must be exactly/)
+    expect(r.output).toMatch(/--confirm must be exactly "maintenance-prod-acceptance"/)
   })
 
   it('will not destroy on the preparation confirmation alone', () => {
@@ -96,7 +98,7 @@ describe('the surface is two arguments wide', () => {
   })
 
   it('applies the connection guard before anything else', () => {
-    const r = run(['--mode', 'prepare', '--project', PROJECT, '--confirm', PROJECT], {
+    const r = run(['--mode', 'prepare', '--confirm', 'maintenance-prod-acceptance'], {
       EXPECT_DATABASE: 'backenly',
       DATABASE_URL: 'postgresql://u:p@h:5432/some_other_db',
     })
@@ -109,8 +111,10 @@ describe('it only ever touches the acceptance project', () => {
   it('pins the marker name as an exact string', () => {
     expect(SOURCE).toMatch(/ACCEPTANCE_PROJECT_NAME = 'maintenance-prod-acceptance'/)
     // Compared with ===, never with includes or a regex that a real project
-    // name could satisfy.
-    expect(SOURCE).toMatch(/existing\.name !== ACCEPTANCE_PROJECT_NAME/)
+    // name could satisfy. Preparation now creates the project through the
+    // product, so the name is what it MINTS with; cleanup still refuses any
+    // project carrying a different one.
+    expect(SOURCE).toMatch(/name: ACCEPTANCE_PROJECT_NAME/)
     expect(SOURCE).toMatch(/project\.name !== ACCEPTANCE_PROJECT_NAME/)
   })
 
@@ -129,11 +133,31 @@ describe('the fixture shape is the measured one', () => {
     expect(rows).toBeGreaterThanOrEqual(50)
   })
 
-  it('constrains both lifecycle columns', () => {
+  it('constrains both lifecycle columns, through the product path', () => {
     // Without CHECK constraints the subsystem shows a missing-constraint
     // symptom as well, and the diagnosis correctly refuses to break the tie.
-    expect(SOURCE).toMatch(/status text CHECK \(status IN \('active','archived','pending'\)\)/)
-    expect(SOURCE).toMatch(/legacy_state text CHECK \(legacy_state IN \('ACTIVE','ARCHIVED','PENDING'\)\)/)
+    expect(SOURCE).toMatch(/constraintType: 'check'/)
+    expect(SOURCE).toMatch(/status IN \('active','archived','pending'\)/)
+    expect(SOURCE).toMatch(/legacy_state IN \('ACTIVE','ARCHIVED','PENDING'\)/)
+  })
+
+  it('creates the project and tables through the product lifecycle, not raw DDL', () => {
+    // The first production run failed because this used raw DDL, leaving a
+    // table with no Table metadata row — which is what made add_structure
+    // expand into a CREATE_TABLE that destroyed 80 rows.
+    expect(SOURCE).toMatch(/createProvisionedProject/)
+    expect(SOURCE).toMatch(/act\('CREATE_TABLE'/)
+    expect(SOURCE).not.toMatch(/CREATE TABLE "/)
+    expect(SOURCE).not.toMatch(/CREATE SCHEMA/)
+  })
+
+  it('asserts the Table metadata row exists afterwards', () => {
+    expect(SOURCE).toMatch(/has no Table metadata row after the product path created it/)
+  })
+
+  it('refuses to reuse an existing acceptance project', () => {
+    // Reusing one hides whether the product path still works from a cold start.
+    expect(SOURCE).toMatch(/an acceptance project already exists/)
   })
 
   it('analyses the table, because the coverage assessor reads planner statistics', () => {

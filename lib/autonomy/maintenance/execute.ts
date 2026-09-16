@@ -64,6 +64,7 @@ import {
   type MaintenanceStep,
   type MaintenanceStepKind,
 } from './step'
+import { executeMaintenanceAddStructure } from './primitives/add-structure'
 import { installDualWrite } from './primitives/dual-write'
 import { switchReaders, type SwitchedReader } from './primitives/switch-readers'
 import { runVerify } from './primitives/verify'
@@ -118,7 +119,19 @@ export interface ExecuteMaintenanceInput {
   mutationsEnabled?: boolean
 }
 
-export type ExecutionStatus = 'completed' | 'halted' | 'refused'
+export type ExecutionStatus =
+  | 'completed'
+  | 'halted'
+  | 'refused'
+  /**
+   * A rung handed work to BackgroundJob and the ladder stopped there.
+   *
+   * NOT a failure and NOT a completion. `dispatched` is not `complete`: the
+   * first production run walked straight from dispatching a backfill into
+   * `verify`, which then reported on a table the backfill had not touched. The
+   * ladder resumes by being run again once the job finishes.
+   */
+  | 'awaiting_background_work'
 
 export interface StepOutcome {
   ordinal: number
@@ -271,6 +284,36 @@ export async function executeMaintenancePlan(
       continue
     }
 
+    // A rung that already dispatched work resumes from the job, never by
+    // dispatching a second one.
+    if (existing?.status === 'dispatched' && existing.backgroundJobId) {
+      const progress = await inspectBackgroundJob(existing.backgroundJobId)
+      if (progress.state === 'pending') {
+        steps.push({
+          ordinal: step.ordinal,
+          kind: step.kind,
+          status: 'dispatched',
+          detail: `background job ${existing.backgroundJobId} is ${progress.detail}`,
+          backgroundJobId: existing.backgroundJobId,
+        })
+        return awaiting(executionId, steps, `step ${step.ordinal} (${step.kind}) is waiting on job ${existing.backgroundJobId}`)
+      }
+      if (progress.state === 'failed') {
+        await prisma.maintenanceStepExecution.update({
+          where: { id: existing.id },
+          data: { status: 'failed', completedAt: new Date(), result: { error: progress.detail } },
+        })
+        steps.push({ ordinal: step.ordinal, kind: step.kind, status: 'failed', detail: progress.detail })
+        return halt(executionId, steps, `step ${step.ordinal} (${step.kind}) failed: ${progress.detail}`)
+      }
+      await prisma.maintenanceStepExecution.update({
+        where: { id: existing.id },
+        data: { status: 'completed', completedAt: new Date(), result: { resumed: true, detail: progress.detail } },
+      })
+      steps.push({ ordinal: step.ordinal, kind: step.kind, status: 'completed', detail: progress.detail })
+      continue
+    }
+
     const binding = input.bindings[step.ordinal]
     const isMutation = step.kind !== 'verify'
     if (isMutation && !mutationsEnabled) {
@@ -325,6 +368,17 @@ export async function executeMaintenancePlan(
     })
     steps.push(outcome)
 
+    // Dispatched is not complete. The ladder stops here and resumes when the
+    // job has actually finished, rather than running `verify` against a table
+    // the backfill has not reached.
+    if (outcome.status === 'dispatched') {
+      return awaiting(
+        executionId,
+        steps,
+        `step ${step.ordinal} (${step.kind}) dispatched job ${outcome.backgroundJobId}; run again once it completes`,
+      )
+    }
+
     if (outcome.status === 'failed') {
       // No substitution, no continuation, no automatic undo. The rollback spec
       // is on the row; acting on it is a separate decision.
@@ -350,24 +404,27 @@ async function runStep(
 
   switch (binding.kind) {
     case 'add_structure': {
-      const { executeAction } = await import('@/lib/ai/minimal-executor')
-      const result = await executeAction(
-        {
-          action: binding.verb,
-          params: { tableName: binding.table, columnName: binding.column, columnType: binding.columnType },
-        } as any,
+      // NOT executeAction directly. `allowReplan: false` disables replanning
+      // but not dependency expansion, and on 2026-09-16 an approved "add one
+      // column" expanded into a CREATE_TABLE that recreated a production table
+      // and destroyed its rows. `executeMaintenanceAddStructure` refuses the
+      // condition that causes that, and proves afterwards from the catalog that
+      // the table was not recreated.
+      const r = await executeMaintenanceAddStructure({
         projectId,
-        undefined,
-        0,
-        undefined,
-        // Deterministic. A maintenance step that fails must not be replanned
-        // into a different action — that is how a failed CREATE_INDEX once got
-        // reported as a fix that never happened.
-        false,
-      )
-      return result.success
-        ? { ...base, status: 'completed', detail: result.message || `${binding.verb} applied` }
-        : { ...base, status: 'failed', detail: result.message || `${binding.verb} failed` }
+        table: binding.table,
+        column: binding.column,
+        columnType: binding.columnType,
+      })
+      return r.added
+        ? {
+            ...base,
+            status: 'completed',
+            detail:
+              `added ${binding.table}.${r.observed!.column} ${r.observed!.dataType} ` +
+              `(nullable, table oid ${r.identity!.oidBefore} unchanged, ${r.identity!.rowsBefore} row(s) preserved)`,
+          }
+        : { ...base, status: 'failed', detail: r.refusal ?? 'add_structure refused' }
     }
 
     case 'dual_write': {
@@ -462,6 +519,65 @@ async function nextAttempt(planId: string): Promise<number> {
     select: { planVersion: true },
   })
   return (last?.planVersion ?? 0) + 1
+}
+
+/**
+ * What a dispatched BackgroundJob is actually doing.
+ *
+ * `status: 'completed'` is NOT sufficient. The worker's default branch marks an
+ * unknown job type completed with `{ skipped: true }`, and that is exactly what
+ * production did on 2026-09-16 when it ran an image without the
+ * `maintenance_backfill` handler. A skipped job that reads as success would let
+ * `verify` run against rows nothing had backfilled.
+ */
+async function inspectBackgroundJob(
+  jobId: string,
+): Promise<{ state: 'pending' | 'done' | 'failed'; detail: string }> {
+  const job = await prisma.backgroundJob
+    .findUnique({ where: { id: jobId }, select: { status: true, result: true, error: true, attempts: true } })
+    .catch(() => null)
+  if (!job) return { state: 'failed', detail: `background job ${jobId} no longer exists` }
+
+  if (job.status === 'failed' || job.status === 'dead_letter') {
+    return { state: 'failed', detail: `job ${jobId} is ${job.status}: ${job.error ?? 'no error recorded'}` }
+  }
+  if (job.status !== 'completed') {
+    return { state: 'pending', detail: `${job.status} (attempt ${job.attempts})` }
+  }
+
+  const result = (job.result ?? {}) as Record<string, unknown>
+  if (result.skipped) {
+    return {
+      state: 'failed',
+      detail:
+        `job ${jobId} was recorded completed but SKIPPED: ${String(result.reason ?? 'no reason given')}. ` +
+        'A skipped job did no work, and treating it as success would verify rows nothing backfilled.',
+    }
+  }
+  if (result.refusal) {
+    return { state: 'failed', detail: `job ${jobId} refused: ${String(result.refusal)}` }
+  }
+  if (result.done !== true) {
+    // A batch chain re-queues itself; the chain is finished only when a batch
+    // reports done.
+    return { state: 'pending', detail: `batch ${String(result.batches ?? '?')} complete, more remain` }
+  }
+  return {
+    state: 'done',
+    detail: `backfill complete: ${String(result.updated ?? 0)} row(s) updated over ${String(result.batches ?? 0)} batch(es)`,
+  }
+}
+
+async function awaiting(
+  executionId: string,
+  steps: StepOutcome[],
+  reason: string,
+): Promise<MaintenanceExecutionOutcome> {
+  await prisma.maintenanceExecution.update({
+    where: { id: executionId },
+    data: { status: 'awaiting_background_work', haltReason: reason },
+  })
+  return { status: 'awaiting_background_work', executionId, haltReason: reason, steps }
 }
 
 async function halt(

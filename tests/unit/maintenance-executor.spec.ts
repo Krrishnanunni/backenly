@@ -42,6 +42,7 @@ const mockUpdateExecution = jest.fn(async ({ where, data }: any) => {
   return row
 })
 const mockFindFirstExecution = jest.fn(async () => null)
+const mockJobFindUnique = jest.fn(async () => null as any)
 const mockFindUniqueStep = jest.fn(async ({ where }: any) => stepRows.get(where.idempotencyKey) ?? null)
 const mockUpsertStep = jest.fn(async ({ where, create, update }: any) => {
   const existing = stepRows.get(where.idempotencyKey)
@@ -68,6 +69,7 @@ jest.mock('@/lib/db', () => ({
       update: (...a: any[]) => mockUpdateExecution(...(a as [any])),
       findFirst: (...a: any[]) => mockFindFirstExecution(...(a as [])),
     },
+    backgroundJob: { findUnique: (...a: any[]) => mockJobFindUnique(...(a as [any])) },
     maintenanceStepExecution: {
       findUnique: (...a: any[]) => mockFindUniqueStep(...(a as [any])),
       upsert: (...a: any[]) => mockUpsertStep(...(a as [any])),
@@ -78,6 +80,11 @@ jest.mock('@/lib/db', () => ({
 
 const mockEnqueue = jest.fn(async () => ({ id: 'job-1' }))
 jest.mock('@/lib/queue', () => ({ enqueue: (...a: any[]) => mockEnqueue(...(a as [])) }))
+
+const mockAddStructure = jest.fn()
+jest.mock('@/lib/autonomy/maintenance/primitives/add-structure', () => ({
+  executeMaintenanceAddStructure: (...a: any[]) => mockAddStructure(...(a as [])),
+}))
 
 const mockExecuteAction = jest.fn(async () => ({ success: true, message: 'column added' }))
 jest.mock('@/lib/ai/minimal-executor', () => ({
@@ -255,6 +262,13 @@ beforeEach(() => {
     refusal: null,
   })
   mockExecuteAction.mockResolvedValue({ success: true, message: 'column added' })
+  mockAddStructure.mockResolvedValue({
+    added: true,
+    refusal: null,
+    observed: { column: 'state', dataType: 'text', isNullable: true },
+    identity: { oidBefore: '1', oidAfter: '1', rowsBefore: 80, rowsAfter: 80 },
+  })
+  mockJobFindUnique.mockResolvedValue(null)
 })
 
 // ── The ladder is all-or-nothing ─────────────────────────────────────────────
@@ -269,7 +283,7 @@ describe('a blocked ladder does not run, including its runnable prefix', () => {
     expect(result.steps).toEqual([])
     // The first rung IS implemented and would have succeeded. Running it would
     // leave a new column nothing fills and a dual-write never installed.
-    expect(mockExecuteAction).not.toHaveBeenCalled()
+    expect(mockAddStructure).not.toHaveBeenCalled()
   })
 
   it('still records the refusal, so a refusal is not a silent no-op', async () => {
@@ -295,7 +309,7 @@ describe('a stale plan never executes', () => {
     const r = await run({ currentCatalogFingerprint: 'cat-v2' })
     expect(r.status).toBe('refused')
     expect(r.haltReason).toMatch(/catalog moved/)
-    expect(mockExecuteAction).not.toHaveBeenCalled()
+    expect(mockAddStructure).not.toHaveBeenCalled()
   })
 })
 
@@ -327,7 +341,7 @@ describe('tier gates', () => {
     const r = await run({ plan, approvedPlanVersion: 'some-older-version' })
     expect(r.status).toBe('refused')
     expect(r.haltReason).toMatch(/different plan version/)
-    expect(mockExecuteAction).not.toHaveBeenCalled()
+    expect(mockAddStructure).not.toHaveBeenCalled()
   })
 })
 
@@ -345,7 +359,7 @@ describe('mutations are disabled unless the environment enables them', () => {
     const r = await run({ mutationsEnabled: true })
     expect(r.status).toBe('halted')
     expect(r.haltReason).toMatch(/mutations are disabled/)
-    expect(mockExecuteAction).not.toHaveBeenCalled()
+    expect(mockAddStructure).not.toHaveBeenCalled()
   })
 
   it('does not let a caller widen what the environment permits', async () => {
@@ -358,7 +372,7 @@ describe('mutations are disabled unless the environment enables them', () => {
   it('lets a caller narrow what the environment permits', async () => {
     process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS = 'true'
     expect((await run({ mutationsEnabled: false })).status).toBe('halted')
-    expect(mockExecuteAction).not.toHaveBeenCalled()
+    expect(mockAddStructure).not.toHaveBeenCalled()
   })
 
   it('classified and recorded the step anyway, so the dry run is informative', async () => {
@@ -415,7 +429,7 @@ describe('classification is re-asked immediately before every mutation', () => {
     expect(outcome.haltReason).toMatch(/not_implemented/)
     // Non-vacuity: the first rung DID run, so the halt came from re-asking at
     // the second one rather than from refusing the ladder up front.
-    expect(mockExecuteAction).toHaveBeenCalledTimes(1)
+    expect(mockAddStructure).toHaveBeenCalledTimes(1)
     expect(mockRunVerify).not.toHaveBeenCalled()
   })
 })
@@ -435,7 +449,7 @@ describe('a completed step is not applied twice', () => {
 
     expect(r.status).toBe('completed')
     expect(r.steps[0]).toMatchObject({ status: 'skipped', detail: 'already applied' })
-    expect(mockExecuteAction).not.toHaveBeenCalled()
+    expect(mockAddStructure).not.toHaveBeenCalled()
     // The rest of the ladder still ran: resuming is not the same as skipping.
     expect(mockRunVerify).toHaveBeenCalledTimes(1)
   })
@@ -445,7 +459,7 @@ describe('a completed step is not applied twice', () => {
 
 describe('a failed step halts the ladder', () => {
   it('does not continue past a failed mutation', async () => {
-    mockExecuteAction.mockResolvedValue({ success: false, message: 'column already exists' })
+    mockAddStructure.mockResolvedValue({ added: false, refusal: 'column already exists', observed: null, identity: null })
     const r = await run()
 
     expect(r.status).toBe('halted')
@@ -471,7 +485,7 @@ describe('a failed step halts the ladder', () => {
   })
 
   it('records the halt reason on the execution row', async () => {
-    mockExecuteAction.mockResolvedValue({ success: false, message: 'nope' })
+    mockAddStructure.mockResolvedValue({ added: false, refusal: 'nope', observed: null, identity: null })
     await run()
     const halted = [...executionRows.values()].find(e => e.status === 'halted')
     expect(halted?.haltReason).toMatch(/nope/)
@@ -496,3 +510,114 @@ describe('a backfill is dispatched, not looped', () => {
   })
 })
 
+
+// ── Dispatched is not complete ───────────────────────────────────────────────
+
+describe('a dispatched backfill stops the ladder', () => {
+  const withBackfill = () => {
+    const plan = fullLadder()
+    return { plan, over: { plan, approvedPlanVersion: plan.planVersion, approvalId: 'a1' } }
+  }
+
+  const completed = (plan: MaintenancePlan, ...ordinals: number[]) => {
+    for (const i of ordinals) {
+      stepRows.set(plan.steps[i].idempotencyKey, {
+        id: `s${i}`,
+        status: 'completed',
+        idempotencyKey: plan.steps[i].idempotencyKey,
+      })
+    }
+  }
+
+  const dispatched = (plan: MaintenancePlan, ordinal: number) => {
+    stepRows.set(plan.steps[ordinal].idempotencyKey, {
+      id: `s${ordinal}`,
+      status: 'dispatched',
+      backgroundJobId: 'job-1',
+      idempotencyKey: plan.steps[ordinal].idempotencyKey,
+    })
+  }
+
+  it('does not run verify in the same pass that dispatched the job', async () => {
+    // The first production run walked from dispatch straight into verify, which
+    // then reported on rows nothing had touched.
+    const { over } = withBackfill()
+    const r = await run(over)
+
+    expect(r.status).toBe('awaiting_background_work')
+    expect(r.haltReason).toMatch(/dispatched job job-1; run again once it completes/)
+    expect(r.steps.map(s => s.kind)).toEqual(['add_structure', 'dual_write', 'backfill'])
+    expect(mockRunVerify).not.toHaveBeenCalled()
+  })
+
+  it('waits while the job is still queued, without dispatching a second one', async () => {
+    const { plan, over } = withBackfill()
+    completed(plan, 0, 1)
+    dispatched(plan, 2)
+    mockJobFindUnique.mockResolvedValue({ status: 'queued', result: null, error: null, attempts: 0 })
+
+    const r = await run(over)
+    expect(r.status).toBe('awaiting_background_work')
+    expect(mockEnqueue).not.toHaveBeenCalled()
+    expect(mockRunVerify).not.toHaveBeenCalled()
+  })
+
+  it('treats a SKIPPED job as a failure, not a completion', async () => {
+    // Production's worker ran an image without the handler and marked the job
+    // completed with { skipped: true }. "The job completed" was true while no
+    // work had been done at all.
+    const { plan, over } = withBackfill()
+    completed(plan, 0, 1)
+    dispatched(plan, 2)
+    mockJobFindUnique.mockResolvedValue({
+      status: 'completed',
+      result: { skipped: true, reason: 'No handler for job type maintenance_backfill' },
+      error: null,
+      attempts: 0,
+    })
+
+    const r = await run(over)
+    expect(r.status).toBe('halted')
+    expect(r.haltReason).toMatch(/SKIPPED/)
+    expect(mockRunVerify).not.toHaveBeenCalled()
+  })
+
+  it('waits while a batch chain is still re-queueing itself', async () => {
+    const { plan, over } = withBackfill()
+    completed(plan, 0, 1)
+    dispatched(plan, 2)
+    // done:false means another batch is queued behind this one.
+    mockJobFindUnique.mockResolvedValue({ status: 'completed', result: { done: false, batches: 3 }, error: null, attempts: 0 })
+
+    expect((await run(over)).status).toBe('awaiting_background_work')
+    expect(mockRunVerify).not.toHaveBeenCalled()
+  })
+
+  it('resumes into verify once the job really finished', async () => {
+    const { plan, over } = withBackfill()
+    completed(plan, 0, 1)
+    dispatched(plan, 2)
+    mockJobFindUnique.mockResolvedValue({
+      status: 'completed',
+      result: { done: true, updated: 80, batches: 1 },
+      error: null,
+      attempts: 0,
+    })
+
+    const r = await run(over)
+    expect(mockRunVerify).toHaveBeenCalledTimes(1)
+    expect(r.steps.find(s => s.kind === 'backfill')).toMatchObject({ status: 'completed' })
+    expect(r.status).toBe('completed')
+  })
+
+  it('halts when the job dead-lettered', async () => {
+    const { plan, over } = withBackfill()
+    completed(plan, 0, 1)
+    dispatched(plan, 2)
+    mockJobFindUnique.mockResolvedValue({ status: 'dead_letter', result: null, error: 'lock timeout', attempts: 5 })
+
+    const r = await run(over)
+    expect(r.status).toBe('halted')
+    expect(r.haltReason).toMatch(/dead_letter/)
+  })
+})

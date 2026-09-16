@@ -117,77 +117,66 @@ const schemaFor = (projectId: string) => `workspace_${projectId}`
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/**
- * The project must be the acceptance project, or not exist at all.
- *
- * A project that exists under a different name is somebody's real project and
- * is refused. A project id that names nothing is created here with the fixed
- * marker name — it cannot collide with anything real, and it is the difference
- * between this job being runnable and needing a console session first.
- */
-async function requireAcceptanceProject(projectId: string): Promise<'existing' | 'created'> {
-  const existing = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { id: true, name: true },
+async function prepare(): Promise<void> {
+  const { createProvisionedProject } = await import('@/lib/projects/provision')
+  const { executeAction } = await import('@/lib/ai/minimal-executor')
+
+  // The product requires an owner. The founder account is the oldest user; this
+  // reads one rather than taking it as an argument, which would widen a surface
+  // that is deliberately two flags across.
+  const owner = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } })
+  if (!owner) die('no user exists to own the acceptance project')
+
+  const existing = await prisma.project.findFirst({
+    where: { name: ACCEPTANCE_PROJECT_NAME },
+    select: { id: true },
   })
   if (existing) {
-    if (existing.name !== ACCEPTANCE_PROJECT_NAME) {
-      die(
-        `project ${projectId} is named "${existing.name}", not "${ACCEPTANCE_PROJECT_NAME}". ` +
-          'This job only ever touches the disposable acceptance project.',
-      )
-    }
-    return 'existing'
-  }
-  await prisma.project.create({ data: { id: projectId, name: ACCEPTANCE_PROJECT_NAME } })
-  return 'created'
-}
-
-async function prepare(projectId: string): Promise<void> {
-  const schema = schemaFor(projectId)
-  const q = (sql: string) => prisma.$executeRawUnsafe(sql)
-
-  const origin = await requireAcceptanceProject(projectId)
-  console.log(`  project ${projectId} (${origin}) name=${ACCEPTANCE_PROJECT_NAME}`)
-
-  // Refuse a half-built or already-used fixture rather than layering onto it.
-  const existingTables = await prisma.$queryRawUnsafe<Array<{ table_name: string }>>(
-    `SELECT table_name FROM information_schema.tables WHERE table_schema = $1`,
-    schema,
-  )
-  const names = new Set(existingTables.map(t => t.table_name))
-  if (names.size > 0 && !(names.size === 2 && names.has('users') && names.has('sessions'))) {
-    die(`${schema} holds unexpected tables (${[...names].join(', ')}); clean up before preparing`)
-  }
-  if (names.size > 0) {
-    const target = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
-      `SELECT column_name FROM information_schema.columns
-        WHERE table_schema = $1 AND table_name = 'sessions' AND column_name = $2`,
-      schema,
-      TARGET_COLUMN,
+    die(
+      `an acceptance project already exists (${existing.id}). Clean it up first: ` +
+        'reusing one hides whether the product path still works from a cold start.',
     )
-    if (target.length > 0) {
-      die(
-        `${schema}.sessions already has "${TARGET_COLUMN}". add_structure requires the target to be ` +
-          'absent, so this fixture has already been executed against. Clean up first.',
-      )
-    }
-    console.log('  fixture tables already present; re-seeding rows')
-    await q(`TRUNCATE "${schema}"."sessions"`)
-  } else {
-    await q(`CREATE SCHEMA IF NOT EXISTS "${schema}"`)
-    await q(`CREATE TABLE "${schema}"."users" (id uuid PRIMARY KEY, email text)`)
-    // The CHECK constraints are the point: without them the diagnosis sees a
-    // missing-constraint symptom too and refuses to break the tie.
-    await q(`CREATE TABLE "${schema}"."sessions" (
-               id uuid PRIMARY KEY,
-               user_id uuid REFERENCES "${schema}"."users"(id),
-               status text CHECK (status IN ('active','archived','pending')),
-               legacy_state text CHECK (legacy_state IN ('ACTIVE','ARCHIVED','PENDING')))`)
   }
 
-  // status and legacy_state move together: the same state recorded twice, which
-  // is the hypothesis the ladder exists to resolve.
+  const project = await createProvisionedProject({ name: ACCEPTANCE_PROJECT_NAME, userId: owner.id })
+  const projectId = project.id
+  const schema = schemaFor(projectId)
+  console.log(`  project ${projectId} created through createProvisionedProject`)
+
+  const act = async (action: string, params: Record<string, unknown>) => {
+    const r = await executeAction({ action, params } as never, projectId, undefined, 0, undefined, false)
+    if (!r.success) die(`${action} ${JSON.stringify(params)} failed: ${r.message}`)
+    return r
+  }
+
+  // Two tables joined by a foreign key, so they cluster into one subsystem.
+  await act('CREATE_TABLE', { tableName: 'users', columns: [{ name: 'email', type: 'text' }] })
+  await act('CREATE_TABLE', {
+    tableName: 'sessions',
+    columns: [
+      { name: 'user_id', type: 'uuid' },
+      { name: 'status', type: 'text' },
+      { name: 'legacy_state', type: 'text' },
+    ],
+  })
+
+  // The CHECK constraints are deliberate: without them the subsystem shows a
+  // missing-constraint symptom as well as a duplicated-state one, and the
+  // diagnosis correctly refuses to break the tie.
+  await act('ADD_CONSTRAINT', {
+    tableName: 'sessions',
+    constraintType: 'check',
+    expression: "status IN ('active','archived','pending')",
+  })
+  await act('ADD_CONSTRAINT', {
+    tableName: 'sessions',
+    constraintType: 'check',
+    expression: "legacy_state IN ('ACTIVE','ARCHIVED','PENDING')",
+  })
+
+  // Rows and statistics only. Nothing here is structure, so nothing here can
+  // disagree with the platform's metadata.
+  const q = (sql: string) => prisma.$executeRawUnsafe(sql)
   await q(`INSERT INTO "${schema}"."sessions" (id, status, legacy_state)
            SELECT gen_random_uuid(),
                   (ARRAY['active','archived','pending'])[1 + (g % 3)],
@@ -207,48 +196,44 @@ async function prepare(projectId: string): Promise<void> {
       WHERE n.nspname = $1 AND c.relname = 'sessions'`,
     schema,
   )
+  const checks = await prisma.$queryRawUnsafe<Array<{ conname: string }>>(
+    `SELECT conname FROM pg_constraint co
+       JOIN pg_class c ON c.oid = co.conrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1 AND c.relname = 'sessions' AND co.contype = 'c'`,
+    schema,
+  )
 
-  // One finding, labelled as what it is.
-  const existingFinding = await prisma.healthFinding.findFirst({
-    where: { projectId, type: 'subsystem_repeat_failure' },
+  // The metadata row that had to exist. Its absence is what broke the first run.
+  const metadata = await prisma.table.findFirst({ where: { projectId, name: 'sessions' }, select: { id: true } })
+  if (!metadata) die('sessions has no Table metadata row after the product path created it')
+
+  const finding = await prisma.healthFinding.create({
+    data: {
+      projectId,
+      type: 'subsystem_repeat_failure',
+      severity: 'warning',
+      source: 'acceptance_fixture',
+      details: {
+        table: 'sessions',
+        acceptanceFixture: true,
+        note: 'Created by scripts/maintenance-acceptance-fixture.ts. NOT produced by the recurrence detector.',
+      },
+    },
     select: { id: true },
   })
-  const finding =
-    existingFinding ??
-    (await prisma.healthFinding.create({
-      data: {
-        projectId,
-        type: 'subsystem_repeat_failure',
-        severity: 'warning',
-        source: 'acceptance_fixture',
-        details: {
-          table: 'sessions',
-          // Stated in the row itself, so nothing downstream can mistake this for
-          // a detector result. It proves the execution path, not detection.
-          acceptanceFixture: true,
-          note: 'Created by scripts/maintenance-acceptance-fixture.ts. NOT produced by the recurrence detector.',
-        },
-      },
-      select: { id: true },
-    }))
 
-  const existingFn = await prisma.aiFunction.findFirst({
-    where: { projectId, name: FIXTURE_FUNCTION_NAME },
+  const fn = await prisma.aiFunction.create({
+    data: {
+      projectId,
+      name: FIXTURE_FUNCTION_NAME,
+      description: 'Acceptance fixture: a Backenly-authored reader of the legacy lifecycle column.',
+      generatedCode: FIXTURE_FUNCTION_CODE,
+      triggerType: 'manual',
+      status: 'active',
+    },
     select: { id: true, generatedCode: true },
   })
-  const fn =
-    existingFn ??
-    (await prisma.aiFunction.create({
-      data: {
-        projectId,
-        name: FIXTURE_FUNCTION_NAME,
-        description: 'Acceptance fixture: a Backenly-authored reader of the legacy lifecycle column.',
-        generatedCode: FIXTURE_FUNCTION_CODE,
-        triggerType: 'manual',
-        status: 'active',
-      },
-      select: { id: true, generatedCode: true },
-    }))
 
   const readsStatus = /\bstatus\b/.test(fn.generatedCode)
   const readsTarget = new RegExp(`\\b${TARGET_COLUMN}\\b`).test(fn.generatedCode)
@@ -259,24 +244,20 @@ async function prepare(projectId: string): Promise<void> {
         projectId,
         findingId: finding.id,
         workspaceSchema: schema,
+        createdVia: 'createProvisionedProject + executeAction(CREATE_TABLE, ADD_CONSTRAINT)',
+        tableMetadataPresent: true,
         rows: Number(counted[0]?.n ?? 0),
         analyzeCompleted: Number(analysed[0]?.reltuples ?? 0) > 0,
         plannerRowEstimate: Number(analysed[0]?.reltuples ?? 0),
+        checkConstraints: checks.map(c => c.conname),
         covariation: {
           distinctPairs: Number(covariation[0]?.pairs ?? 0),
           distinctStatusValues: Number(covariation[0]?.distinct_status ?? 0),
-          // One pair per status value means status determines legacy_state.
           statusDeterminesLegacyState:
             Number(covariation[0]?.pairs ?? 0) === Number(covariation[0]?.distinct_status ?? 0),
         },
         targetColumnAbsent: true,
         reader: { id: fn.id, name: FIXTURE_FUNCTION_NAME, readsStatus, readsTarget },
-        objects: [
-          `${schema}.users`,
-          `${schema}.sessions`,
-          `HealthFinding ${finding.id}`,
-          `AiFunction ${fn.id}`,
-        ],
       },
       null,
       2,
@@ -286,6 +267,8 @@ async function prepare(projectId: string): Promise<void> {
   if (!readsStatus || readsTarget) {
     die('the fixture reader does not reference status, or already references the target column')
   }
+  if (checks.length < 2) die(`expected two CHECK constraints, found ${checks.length}`)
+  if (Number(counted[0]?.n ?? 0) !== FIXTURE_ROWS) die('row count does not match the fixture size')
 }
 
 /**
@@ -309,6 +292,8 @@ async function cleanup(projectId: string): Promise<void> {
   const fns = await prisma.aiFunction.deleteMany({ where: { projectId } })
   const findings = await prisma.healthFinding.deleteMany({ where: { projectId } })
   await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+  // The project row and everything the product hung off it. Cascades take the
+  // graph, the workspace and the Table metadata the product created.
   await prisma.project.delete({ where: { id: projectId } })
 
   console.log(
@@ -410,22 +395,27 @@ async function main(): Promise<void> {
   if (mode !== 'prepare' && mode !== 'cleanup' && mode !== 'inspect') {
     die('--mode must be prepare, cleanup or inspect')
   }
-  if (!projectId) die('--project <id> is required')
-  if (!UUID.test(projectId)) die('--project must be a uuid')
 
-  if (mode === 'prepare' && arg('--confirm') !== projectId) {
-    die(`--confirm must be exactly "${projectId}"`)
-  }
-  if (mode === 'cleanup' && arg('--confirm-destroy') !== projectId) {
-    die(`--confirm-destroy must be exactly "${projectId}"`)
+  if (mode === 'prepare') {
+    // The product mints the id, so there is none to name yet. The confirmation
+    // is the marker name, which is also the only project this file will touch.
+    if (arg('--confirm') !== ACCEPTANCE_PROJECT_NAME) {
+      die(`--confirm must be exactly "${ACCEPTANCE_PROJECT_NAME}"`)
+    }
+  } else {
+    if (!projectId) die('--project <id> is required')
+    if (!UUID.test(projectId)) die('--project must be a uuid')
+    if (mode === 'cleanup' && arg('--confirm-destroy') !== projectId) {
+      die(`--confirm-destroy must be exactly "${projectId}"`)
+    }
   }
 
   assertExpectedDatabase()
 
   console.log(`\nMaintenance acceptance fixture — ${mode}\n`)
-  if (mode === 'prepare') await prepare(projectId)
-  else if (mode === 'inspect') await inspect(projectId)
-  else await cleanup(projectId)
+  if (mode === 'prepare') await prepare()
+  else if (mode === 'inspect') await inspect(projectId!)
+  else await cleanup(projectId!)
 
   await prisma.$disconnect().catch(() => {})
 }
