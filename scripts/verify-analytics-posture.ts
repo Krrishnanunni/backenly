@@ -197,7 +197,7 @@ for (const dir of SCAN_DIRS) {
 if (existsSync(join(ROOT, INITIALIZER))) {
   const initializer = stripComments(readFileSync(join(ROOT, INITIALIZER), 'utf8'))
 
-  if (/autocapture\s*:\s*(true|false)/.test(initializer)) {
+  if (/autocapture\s*:\s*(true|false)\b/.test(initializer)) {
     fail(
       `${INITIALIZER}: autocapture is a boolean. The SDK short-circuits every ` +
         `capability gate on a boolean, enabling elementInteractions, ` +

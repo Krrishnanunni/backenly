@@ -152,7 +152,7 @@ export function buildConnection(): { args: string[]; env: NodeJS.ProcessEnv } {
 export function sanitizeError(message: string): string {
   let out = String(message ?? '')
   // postgres://user:secret@host -> postgres://user:***@host
-  out = out.replace(/([a-z]+:\/\/[^:\s/]+:)[^@\s]*(@)/gi, '$1***$2')
+  out = out.replace(/(\b[a-z]+:\/\/[^:\s/]+:)[^@\s]*(@)/gi, '$1***$2')
   // Any literal occurrence of the live password, however it got there.
   for (const key of ['PGPASSWORD', 'BACKUP_DATABASE_URL', 'DATABASE_URL', 'DIRECT_URL']) {
     const raw = process.env[key]
