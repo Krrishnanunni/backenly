@@ -462,12 +462,93 @@ async function inspect(projectId: string): Promise<void> {
   )
 }
 
+/**
+ * Make the observation window see a regression, so the revert can be proven.
+ *
+ * ── Why this has to exist ──────────────────────────────────────────────────
+ *
+ * The observation window reads real traffic and returns `insufficient_sample`
+ * when there is none — "zero traffic demonstrates nothing" is the rule, and it
+ * held in production on this very fixture. Which means a silent project can
+ * never produce a `regressed` verdict, and the automatic revert can never be
+ * observed doing its job on one.
+ *
+ * So the traffic is synthesised, HERE, for this fixture's own project, in the
+ * shape the window measures: healthy requests before the switch, failing ones
+ * after. Every row is fixed in this file and marked in its path.
+ *
+ * ── What this is not ───────────────────────────────────────────────────────
+ *
+ * It is not evidence that a regression occurred, and nothing may read it as
+ * such. The rows are labelled `/acceptance-fixture/induced` precisely so they
+ * cannot be mistaken for production traffic later. What the run proves is the
+ * MECHANISM: that a regressed verdict reverts the readers, and that the bytes
+ * restored are the bytes recorded. It proves nothing about whether switching
+ * readers is safe in general, which only real traffic can say.
+ */
+async function induceRegression(projectId: string): Promise<void> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true, userId: true },
+  })
+  if (!project) die(`project ${projectId} does not exist`)
+  if (project.name !== ACCEPTANCE_PROJECT_NAME) {
+    die(`project ${projectId} is named "${project.name}"; this only touches the acceptance project`)
+  }
+
+  const step = await prisma.maintenanceStepExecution.findFirst({
+    where: { stepKind: 'switch_readers', status: 'completed', execution: { projectId } },
+    select: { completedAt: true },
+    orderBy: { completedAt: 'desc' },
+  })
+  if (!step?.completedAt) die(`project ${projectId} has no completed switch_readers step to observe around`)
+  const switchedAt = step.completedAt
+
+  // Comfortably over the 20 the window needs on each side, so the verdict is
+  // about the error rate rather than about the sample.
+  const N = 40
+  const rows: Array<{
+    projectId: string; userId: string; method: string; path: string
+    statusCode: number; duration: number; timestamp: Date
+  }> = []
+  for (let i = 0; i < N; i++) {
+    // Before: healthy.
+    rows.push({
+      projectId, userId: project.userId, method: 'GET', path: '/acceptance-fixture/induced',
+      statusCode: 200, duration: 20, timestamp: new Date(switchedAt.getTime() - (i + 1) * 1000),
+    })
+    // After: failing, which is the regression the window is meant to catch.
+    rows.push({
+      projectId, userId: project.userId, method: 'GET', path: '/acceptance-fixture/induced',
+      statusCode: 500, duration: 900, timestamp: new Date(switchedAt.getTime() + (i + 1) * 1000),
+    })
+  }
+  await prisma.apiRequestLog.createMany({ data: rows })
+
+  console.log(
+    JSON.stringify(
+      {
+        projectId,
+        switchedAt,
+        inserted: rows.length,
+        shape: `${N} healthy before (200), ${N} failing after (500)`,
+        path: '/acceptance-fixture/induced',
+        note:
+          'SYNTHETIC. Proves the revert mechanism fires on a regressed verdict. ' +
+          'Not evidence that a regression occurred, and never to be read as production traffic.',
+      },
+      null,
+      2,
+    ),
+  )
+}
+
 async function main(): Promise<void> {
   const mode = arg('--mode')
   const projectId = arg('--project')
 
-  if (mode !== 'prepare' && mode !== 'cleanup' && mode !== 'inspect') {
-    die('--mode must be prepare, cleanup or inspect')
+  if (mode !== 'prepare' && mode !== 'cleanup' && mode !== 'inspect' && mode !== 'induce-regression') {
+    die('--mode must be prepare, cleanup, inspect or induce-regression')
   }
 
   if (mode === 'prepare') {
@@ -482,6 +563,9 @@ async function main(): Promise<void> {
     if (mode === 'cleanup' && arg('--confirm-destroy') !== projectId) {
       die(`--confirm-destroy must be exactly "${projectId}"`)
     }
+    if (mode === 'induce-regression' && arg('--confirm') !== projectId) {
+      die(`--confirm must be exactly "${projectId}"`)
+    }
   }
 
   assertExpectedDatabase()
@@ -489,6 +573,7 @@ async function main(): Promise<void> {
   console.log(`\nMaintenance acceptance fixture — ${mode}\n`)
   if (mode === 'prepare') await prepare()
   else if (mode === 'inspect') await inspect(projectId!)
+  else if (mode === 'induce-regression') await induceRegression(projectId!)
   else await cleanup(projectId!)
 
   await prisma.$disconnect().catch(() => {})
