@@ -157,9 +157,13 @@ WITH batch AS (
      AND t."${targetColumn}" IS DISTINCT FROM ${expected}
   RETURNING 1
 )
-SELECT (SELECT count(*) FROM batch)::bigint      AS scanned,
-       (SELECT count(*) FROM upd)::bigint        AS updated,
-       (SELECT max(k)::text FROM batch)          AS next_cursor`
+SELECT (SELECT count(*) FROM batch)::bigint                  AS scanned,
+       (SELECT count(*) FROM upd)::bigint                    AS updated,
+       -- The last key of the ordered window, NOT max(k): PostgreSQL has no
+       -- max() aggregate for uuid, which is the most common primary key here,
+       -- so an aggregate would fail on exactly the tables this runs against.
+       -- ORDER BY works for every type that can be paged through at all.
+       (SELECT k::text FROM batch ORDER BY k DESC LIMIT 1)   AS next_cursor`
 
   const rows = await prisma.$transaction(async tx => {
     // Same transaction, same connection, bounding the UPDATE below it.

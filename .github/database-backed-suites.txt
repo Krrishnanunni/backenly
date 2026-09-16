@@ -129,3 +129,11 @@ tests/integration/migration-lineage-probe-db.spec.ts
 # replaying the chain into a shadow database. This is the gate that catches a
 # schema.prisma edit shipped without a migration.
 tests/integration/managed-db-canonical-history.spec.ts
+
+# The Phase 6b primitives against a real engine. The executor's governance is
+# decided in TypeScript and is unit tested; these three primitives generate SQL,
+# and nothing about whether that SQL is correct can be learned without
+# PostgreSQL running it. It earned the slot immediately: the first run found
+# that the backfill cursor used max(k), and PostgreSQL has no max() aggregate
+# for uuid — the most common primary key on this platform.
+tests/integration/maintenance-phase6b.spec.ts
