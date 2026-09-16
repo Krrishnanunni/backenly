@@ -39,7 +39,7 @@
  */
 
 import { queryWorkspaceSchema } from '@/lib/services/workspaceDatabase'
-import { resolveWorkspaceSchema } from '@/lib/services/workspace-pool'
+import { queryWorkspaceAsOwner, resolveWorkspaceSchema } from '@/lib/services/workspace-pool'
 import { transformProblem, transformSql, type Transform } from './transform'
 
 /**
@@ -210,7 +210,16 @@ export async function reconcileSourceTarget(
     const schema = await resolveWorkspaceSchema(projectId)
     await assertColumnsExist(projectId, table, [sourceColumn, targetColumn])
 
-    const countRes = await queryWorkspaceSchema(
+    // AS OWNER. The product enables RLS on every tenant table it creates, and
+    // an ordinary workspace query sets no claim — so this counted ZERO on a
+    // table holding 80 rows, and reconciliation reported "table has no rows"
+    // for a table that was full. Measured in production 2026-09-16, where the
+    // planner's own estimate said 80 while count(*) said 0.
+    //
+    // `queryWorkspaceAsOwner` applies the service-role claim inside a
+    // transaction with `set_config(..., true)`, so the elevated context reverts
+    // at commit and cannot leak onto the pooled connection.
+    const countRes = await queryWorkspaceAsOwner(
       projectId,
       `SELECT count(*)::bigint AS n FROM "${schema}"."${table}"`,
     ).catch((err: unknown) => {
@@ -257,7 +266,9 @@ export async function reconcileSourceTarget(
                 LIMIT ${sampleSize}`
     }
 
-    const res = await queryWorkspaceSchema(
+    // AS OWNER, for the same reason as the count above. Without a claim this
+    // compares an empty set and reports agreement about nothing.
+    const res = await queryWorkspaceAsOwner(
       projectId,
       `WITH scoped AS (${scope})
        SELECT count(*)::bigint AS compared,
@@ -266,7 +277,9 @@ export async function reconcileSourceTarget(
                          ORDER BY key)
                  FILTER (WHERE tgt IS DISTINCT FROM exp))[1:5] AS examples
          FROM scoped`,
-      ...params,
+      // An array, not a spread: queryWorkspaceAsOwner takes its parameters as
+      // one, since it has to bind the claim's own parameters first.
+      params,
     ).catch((err: unknown) => {
       throw new Inconclusive(
         `comparison query failed: ${err instanceof Error ? err.message : String(err)}`,

@@ -165,7 +165,24 @@ SELECT (SELECT count(*) FROM batch)::bigint                  AS scanned,
        -- ORDER BY works for every type that can be paged through at all.
        (SELECT k::text FROM batch ORDER BY k DESC LIMIT 1)   AS next_cursor`
 
+  const { rlsSessionSql, rlsSessionParams } = await import('@/lib/services/rls-session')
+
   const rows = await prisma.$transaction(async tx => {
+    // The service-role claim, in THIS transaction.
+    //
+    // The product enables RLS on every tenant table it creates, so without a
+    // claim the UPDATE matches no rows and reports `updated: 0` as success —
+    // a backfill that silently does nothing. It cannot be delegated to
+    // `queryWorkspaceAsOwner`, which opens a transaction of its own: the claim,
+    // the lock timeout and the UPDATE have to share one transaction, or
+    // `SET LOCAL` bounds a statement on a different connection.
+    //
+    // `set_config(..., true)` is transaction-local, so the elevated context
+    // reverts at commit and never reaches the next borrower of this connection.
+    await tx.$executeRawUnsafe(
+      rlsSessionSql(1),
+      ...rlsSessionParams({ userId: '', isServiceRole: true, userRole: 'service' }),
+    )
     // Same transaction, same connection, bounding the UPDATE below it.
     await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`)
     return tx.$queryRawUnsafe<Array<{ scanned: bigint; updated: bigint; next_cursor: string | null }>>(
