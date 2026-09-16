@@ -61,6 +61,7 @@
 
 import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/db'
+import { columnReferenceCount } from '@/lib/autonomy/maintenance/readers'
 
 /** The only project this file will ever touch. */
 export const ACCEPTANCE_PROJECT_NAME = 'maintenance-prod-acceptance'
@@ -358,7 +359,13 @@ async function inspect(projectId: string): Promise<void> {
       WHERE table_schema = $1 AND table_name = 'sessions' ORDER BY ordinal_position`,
     schema,
   )
-  const counted = await q<{ n: bigint }>(`SELECT count(*)::bigint AS n FROM "${schema}"."sessions"`)
+  // As owner. The product's tables are RLS-protected, so a plain read counts
+  // zero rows in a full table — the same defect this phase just fixed in
+  // reconcile.ts, and an inspection that reproduced it would be lying to me.
+  const { queryWorkspaceAsOwner } = await import('@/lib/services/workspace-pool')
+  const counted = await queryWorkspaceAsOwner<{ n: bigint }>(
+    projectId, `SELECT count(*)::bigint AS n FROM "${schema}"."sessions"`,
+  )
   const triggers = await q<{ tgname: string }>(
     `SELECT tgname FROM pg_trigger tg
        JOIN pg_class c ON c.oid = tg.tgrelid
@@ -367,7 +374,8 @@ async function inspect(projectId: string): Promise<void> {
     schema,
   )
   const agree = columns.some(c => c.column_name === TARGET_COLUMN)
-    ? await q<{ n: bigint }>(
+    ? await queryWorkspaceAsOwner<{ n: bigint }>(
+        projectId,
         `SELECT count(*)::bigint AS n FROM "${schema}"."sessions"
           WHERE "${TARGET_COLUMN}" IS DISTINCT FROM upper(status)`,
       )
