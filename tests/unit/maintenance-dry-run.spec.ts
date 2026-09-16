@@ -67,6 +67,7 @@ const bindingsFor = (plan: MaintenancePlan): Record<number, StepBinding> => {
   const cols = { table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'identity' as const } }
   for (const s of plan.steps) {
     if (s.kind === 'add_structure') out[s.ordinal] = { kind: 'add_structure', verb: 'ADD_COLUMN', table: 'sessions', column: 'state', columnType: 'text' }
+    else if (s.kind === 'carry_constraints') out[s.ordinal] = { kind: 'carry_constraints', ...cols, allowedValues: ['ACTIVE'] }
     else if (s.kind === 'dual_write') out[s.ordinal] = { kind: 'dual_write', ...cols }
     else if (s.kind === 'backfill') out[s.ordinal] = { kind: 'backfill', ...cols }
     else if (s.kind === 'verify') out[s.ordinal] = { kind: 'verify', ...cols }
@@ -107,6 +108,7 @@ describe('the happy path an operator is looking for', () => {
     expect(r.verdict).toBe('WOULD_STOP_AWAITING_HUMAN_CONTRACT')
     expect(r.steps.map(s => [s.kind, s.classification, s.wouldExecute])).toEqual([
       ['add_structure', 'implemented', true],
+      ['carry_constraints', 'implemented', true],
       ['dual_write', 'implemented', true],
       ['backfill', 'implemented', true],
       ['verify', 'implemented', true],
@@ -131,13 +133,15 @@ describe('the happy path an operator is looking for', () => {
     expect(r.ledgerWritten).toBe(false)
   })
 
-  it('reports all six rungs, which the executor never could', async () => {
+  it('reports every rung, which the executor never could', async () => {
     // The executor halts at the FIRST mutating step, so running it with
-    // mutations off answers only about rung one. Reporting on rungs two
-    // through six is the whole reason this is a separate evaluation.
+    // mutations off answers only about rung one. Reporting on the rest is the
+    // whole reason this is a separate evaluation.
     const r = await run({ mutationsEnvironmentEnabled: false })
-    expect(r.steps).toHaveLength(6)
-    expect(r.steps.filter(s => s.blockedBy?.includes('mutations are not enabled'))).toHaveLength(4)
+    expect(r.steps).toHaveLength(7)
+    // Every rung but verify (reads only) and contract (human-only, blocked
+    // earlier for that reason).
+    expect(r.steps.filter(s => s.blockedBy?.includes('mutations are not enabled'))).toHaveLength(5)
   })
 })
 
@@ -153,7 +157,11 @@ describe('each gate shows up as a reason, on the rung it affects', () => {
     const r = await run({ approvedPlanVersion: 'some-older-version' })
     expect(r.approvalValid).toBe(false)
     const blocked = r.steps.filter(s => s.blockedBy?.includes('tier 2 requires an approval'))
-    expect(blocked.map(s => s.kind)).toEqual(['dual_write', 'backfill', 'switch_readers'])
+    // carry_constraints is Tier 2 for dual_write's reason: a CHECK is additive
+    // to the schema and restrictive to behaviour, and only the second decides.
+    expect(blocked.map(s => s.kind)).toEqual([
+      'carry_constraints', 'dual_write', 'backfill', 'switch_readers',
+    ])
     expect(r.verdict).toBe('WOULD_HALT_MID_LADDER')
   })
 

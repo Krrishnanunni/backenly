@@ -116,6 +116,51 @@ export function transformSql(t: Transform, expr: string, params: unknown[]): str
 }
 
 /**
+ * The transform applied to ONE value, in TypeScript.
+ *
+ * The third rendering of the same definition. `carry_constraints` needs the
+ * target column's domain, which is the source column's declared domain with the
+ * transform applied to each member — computed here rather than by asking the
+ * database, so the answer can be compared against what the operator declared
+ * BEFORE any constraint is written.
+ *
+ * ── Where this agrees with SQL, and where it must not be trusted ────────────
+ *
+ * `lower` and `upper` are locale- and collation-dependent in PostgreSQL and
+ * Unicode-defined in JavaScript. They agree on ASCII and may not agree outside
+ * it — Turkish dotless i is the standard counterexample. `asciiOnly` below is
+ * how callers that depend on the agreement enforce their side of it, rather
+ * than assuming a correspondence that holds for most inputs.
+ *
+ * `trim` removes spaces only, matching `btrim`'s default, NOT JavaScript's
+ * `String.prototype.trim`, which also removes tabs and newlines.
+ */
+export function transformValue(t: Transform, value: string | null): string | null {
+  switch (t.kind) {
+    case 'identity':
+      return value
+    case 'lower':
+      return value === null ? null : value.toLowerCase()
+    case 'upper':
+      return value === null ? null : value.toUpperCase()
+    case 'trim':
+      // Spaces only. btrim's default is ' ', not "whitespace".
+      return value === null ? null : value.replace(/^ +| +$/g, '')
+    case 'null_to':
+      return value === null ? t.value : value
+    case 'value_map':
+      // An unlisted value yields NULL, exactly as the CASE does.
+      return value === null ? null : (t.map[value] ?? null)
+  }
+}
+
+/** True when every character is ASCII, so SQL and JS case folding agree. */
+export function asciiOnly(value: string): boolean {
+  // eslint-disable-next-line no-control-regex
+  return /^[\x00-\x7F]*$/.test(value)
+}
+
+/**
  * A single-quoted SQL literal.
  *
  * Only ever applied to strings from a typed `Transform`, never to user input

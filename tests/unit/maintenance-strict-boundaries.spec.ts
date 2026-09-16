@@ -34,8 +34,14 @@ jest.mock('@/lib/db', () => ({
 }))
 
 const mockResolveSchema = jest.fn(async () => 'workspace_p1')
+// The row count reads AS OWNER: the product enables RLS on every table it
+// creates, and an unclaimed count returns 0 on a full table, which is the same
+// reading a destroyed table gives. Mocked separately from $queryRawUnsafe so
+// the catalog queue below stays in the order the primitive issues it.
+const mockQueryAsOwner = jest.fn()
 jest.mock('@/lib/services/workspace-pool', () => ({
   resolveWorkspaceSchema: (...a: any[]) => mockResolveSchema(...(a as [])),
+  queryWorkspaceAsOwner: (...a: any[]) => mockQueryAsOwner(...(a as [any])),
 }))
 
 const mockExecuteAction = jest.fn()
@@ -65,13 +71,15 @@ function catalog(opts: {
   } = opts
   const queue: any[] = [
     oidBefore === null ? [] : [{ oid: oidBefore }],
-    [{ n: BigInt(rowsBefore) }],
     columnBefore ? [{ data_type: 'text', is_nullable: 'YES' }] : [],
     oidAfter === null ? [] : [{ oid: oidAfter }],
-    [{ n: BigInt(rowsAfter) }],
     columnAfter ? [{ data_type: 'text', is_nullable: columnAfter.nullable ? 'YES' : 'NO' }] : [],
   ]
   mockQueryRawUnsafe.mockImplementation(async () => queue.shift() ?? [])
+
+  // Only reached when the table exists, which is what the oid queue decides.
+  const counts: any[] = [[{ n: BigInt(rowsBefore) }], [{ n: BigInt(rowsAfter) }]]
+  mockQueryAsOwner.mockImplementation(async () => counts.shift() ?? [{ n: BigInt(-1) }])
 }
 
 beforeEach(() => {

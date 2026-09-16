@@ -91,6 +91,11 @@ jest.mock('@/lib/ai/minimal-executor', () => ({
   executeAction: (...a: any[]) => mockExecuteAction(...(a as [])),
 }))
 
+const mockCarryConstraints = jest.fn()
+jest.mock('@/lib/autonomy/maintenance/primitives/carry-constraints', () => ({
+  carryConstraints: (...a: any[]) => mockCarryConstraints(...(a as [])),
+}))
+
 const mockRunVerify = jest.fn()
 jest.mock('@/lib/autonomy/maintenance/primitives/verify', () => ({
   runVerify: (...a: any[]) => mockRunVerify(...(a as [])),
@@ -214,6 +219,8 @@ function bindingsFor(plan: MaintenancePlan): Record<number, StepBinding> {
     const cols = { table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'identity' as const } }
     if (s.kind === 'add_structure') {
       out[s.ordinal] = { kind: 'add_structure', verb: 'ADD_COLUMN', table: 'sessions', column: 'state', columnType: 'text' }
+    } else if (s.kind === 'carry_constraints') {
+      out[s.ordinal] = { kind: 'carry_constraints', ...cols, allowedValues: ['active'] }
     } else if (s.kind === 'verify') out[s.ordinal] = { kind: 'verify', ...cols }
     else if (s.kind === 'dual_write') out[s.ordinal] = { kind: 'dual_write', ...cols }
     else if (s.kind === 'backfill') out[s.ordinal] = { kind: 'backfill', ...cols }
@@ -255,6 +262,12 @@ beforeEach(() => {
     reconciliation: {},
   })
   mockInstallDualWrite.mockResolvedValue({ installed: true, objectName: 'bkn_dw_sessions_state', refusal: null })
+  mockCarryConstraints.mockResolvedValue({
+    applied: true,
+    constraintName: 'bkn_cc_sessions_state',
+    sourceDomain: ['active'],
+    derivedDomain: ['active'],
+  })
   mockSwitchReaders.mockResolvedValue({
     switched: [{ kind: 'ai_function', id: 'fn1', name: 'notify', replacements: 2, previousCode: 'old' }],
     skipped: [],
@@ -529,6 +542,15 @@ describe('a dispatched backfill stops the ladder', () => {
     }
   }
 
+  /**
+   * The ordinal of a step, by kind.
+   *
+   * Positional ordinals broke silently when `carry_constraints` was inserted
+   * into the ladder: `dispatched(plan, 2)` went on marking "step 2" while step
+   * 2 had become a different rung, and the tests failed somewhere else.
+   */
+  const at = (plan: MaintenancePlan, kind: string) => plan.steps.findIndex(s => s.kind === kind)
+
   const dispatched = (plan: MaintenancePlan, ordinal: number) => {
     stepRows.set(plan.steps[ordinal].idempotencyKey, {
       id: `s${ordinal}`,
@@ -546,14 +568,16 @@ describe('a dispatched backfill stops the ladder', () => {
 
     expect(r.status).toBe('awaiting_background_work')
     expect(r.haltReason).toMatch(/dispatched job job-1; run again once it completes/)
-    expect(r.steps.map(s => s.kind)).toEqual(['add_structure', 'dual_write', 'backfill'])
+    expect(r.steps.map(s => s.kind)).toEqual([
+      'add_structure', 'carry_constraints', 'dual_write', 'backfill',
+    ])
     expect(mockRunVerify).not.toHaveBeenCalled()
   })
 
   it('waits while the job is still queued, without dispatching a second one', async () => {
     const { plan, over } = withBackfill()
-    completed(plan, 0, 1)
-    dispatched(plan, 2)
+    completed(plan, ...plan.steps.slice(0, at(plan, 'backfill')).map(x => x.ordinal))
+    dispatched(plan, at(plan, 'backfill'))
     mockJobFindUnique.mockResolvedValue({ status: 'queued', result: null, error: null, attempts: 0 })
 
     const r = await run(over)
@@ -567,8 +591,8 @@ describe('a dispatched backfill stops the ladder', () => {
     // completed with { skipped: true }. "The job completed" was true while no
     // work had been done at all.
     const { plan, over } = withBackfill()
-    completed(plan, 0, 1)
-    dispatched(plan, 2)
+    completed(plan, ...plan.steps.slice(0, at(plan, 'backfill')).map(x => x.ordinal))
+    dispatched(plan, at(plan, 'backfill'))
     mockJobFindUnique.mockResolvedValue({
       status: 'completed',
       result: { skipped: true, reason: 'No handler for job type maintenance_backfill' },
@@ -584,8 +608,8 @@ describe('a dispatched backfill stops the ladder', () => {
 
   it('waits while a batch chain is still re-queueing itself', async () => {
     const { plan, over } = withBackfill()
-    completed(plan, 0, 1)
-    dispatched(plan, 2)
+    completed(plan, ...plan.steps.slice(0, at(plan, 'backfill')).map(x => x.ordinal))
+    dispatched(plan, at(plan, 'backfill'))
     // done:false means another batch is queued behind this one.
     mockJobFindUnique.mockResolvedValue({ status: 'completed', result: { done: false, batches: 3 }, error: null, attempts: 0 })
 
@@ -595,8 +619,8 @@ describe('a dispatched backfill stops the ladder', () => {
 
   it('resumes into verify once the job really finished', async () => {
     const { plan, over } = withBackfill()
-    completed(plan, 0, 1)
-    dispatched(plan, 2)
+    completed(plan, ...plan.steps.slice(0, at(plan, 'backfill')).map(x => x.ordinal))
+    dispatched(plan, at(plan, 'backfill'))
     mockJobFindUnique.mockResolvedValue({
       status: 'completed',
       result: { done: true, updated: 80, batches: 1 },
@@ -612,8 +636,8 @@ describe('a dispatched backfill stops the ladder', () => {
 
   it('halts when the job dead-lettered', async () => {
     const { plan, over } = withBackfill()
-    completed(plan, 0, 1)
-    dispatched(plan, 2)
+    completed(plan, ...plan.steps.slice(0, at(plan, 'backfill')).map(x => x.ordinal))
+    dispatched(plan, at(plan, 'backfill'))
     mockJobFindUnique.mockResolvedValue({ status: 'dead_letter', result: null, error: 'lock timeout', attempts: 5 })
 
     const r = await run(over)

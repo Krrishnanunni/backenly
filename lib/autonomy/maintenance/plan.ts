@@ -136,6 +136,23 @@ function ladderFor(
           rollbackSpec: { strategy: 'drop_object', description: 'Drop the added column.' },
         },
         {
+          // Before dual_write, so the catalog never rests with an unconstrained
+          // state column. That is not tidiness: the structural diagnosis reads
+          // the live catalog, an unconstrained state column raises
+          // missing_constraint_permits_invalid_state, and a ladder that halts
+          // for a backfill then could not be resumed, because its own expand
+          // rung had changed the diagnosis underneath it.
+          //
+          // It is also when validation is cheapest — the target is entirely
+          // NULL until the backfill, and NULL satisfies a CHECK.
+          kind: 'carry_constraints',
+          action: 'ADD_CONSTRAINT',
+          params: { tableName: table, purpose: "the source column's domain under the transform" },
+          preconditions: ['target column exists', 'source column declares an enumerable domain'],
+          expectedPostconditions: ['target column is constrained to the transformed source domain'],
+          rollbackSpec: { strategy: 'drop_object', description: 'Drop the added constraint.' },
+        },
+        {
           kind: 'dual_write',
           action: null,
           params: { tableName: table },

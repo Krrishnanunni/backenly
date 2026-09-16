@@ -49,7 +49,7 @@
  */
 
 import { prisma } from '@/lib/db'
-import { resolveWorkspaceSchema } from '@/lib/services/workspace-pool'
+import { queryWorkspaceAsOwner, resolveWorkspaceSchema } from '@/lib/services/workspace-pool'
 
 const IDENT = /^[a-zA-Z_][a-zA-Z0-9_]*$/
 
@@ -78,7 +78,7 @@ interface TableFacts {
   rows: number
 }
 
-async function liveTable(schema: string, table: string): Promise<TableFacts | null> {
+async function liveTable(projectId: string, schema: string, table: string): Promise<TableFacts | null> {
   const rows = await prisma.$queryRawUnsafe<Array<{ oid: string }>>(
     `SELECT c.oid::text AS oid FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -88,7 +88,16 @@ async function liveTable(schema: string, table: string): Promise<TableFacts | nu
   ).catch(() => [])
   if (rows.length === 0) return null
 
-  const counted = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
+  // AS OWNER. This count is half of the proof that the table was not recreated,
+  // and the product enables RLS on every table it creates — so an unclaimed
+  // read returned 0 on a full table and the check compared 0 before with 0
+  // after, agreeing every time. Production reported "0 row(s) preserved" for a
+  // table holding 80, which is the reading a destroyed table would also give.
+  //
+  // The oid comparison still carries the other half, and it is the half that
+  // caught the real incident. Both now measure something.
+  const counted = await queryWorkspaceAsOwner<{ n: bigint }>(
+    projectId,
     `SELECT count(*)::bigint AS n FROM "${schema}"."${table}"`,
   ).catch(() => [{ n: BigInt(-1) }])
   return { oid: rows[0].oid, rows: Number(counted[0]?.n ?? -1) }
@@ -129,7 +138,7 @@ export async function executeMaintenanceAddStructure(spec: AddStructureSpec): Pr
   const schema = await resolveWorkspaceSchema(projectId)
 
   // 1. The live catalog decides whether the table exists.
-  const before = await liveTable(schema, table)
+  const before = await liveTable(projectId, schema, table)
   if (!before) return refuse(`table "${table}" does not exist in ${schema}`)
 
   // 2. The target must be absent — that is this rung's precondition, and it is
@@ -166,7 +175,7 @@ export async function executeMaintenanceAddStructure(spec: AddStructureSpec): Pr
 
   // 5. Read back from the catalog. `success` is the executor's opinion; the
   //    column's existence is a fact.
-  const after = await liveTable(schema, table)
+  const after = await liveTable(projectId, schema, table)
   const seen = await liveColumn(schema, table, column)
   const observed = seen ? { column, ...seen } : null
   const identity = {

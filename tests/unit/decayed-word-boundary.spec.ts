@@ -28,7 +28,10 @@ import { join } from 'path'
 import { sanitizeError } from '@/lib/services/workspace-backup'
 
 const ROOT = join(__dirname, '..', '..')
-const BACKSPACE = ''
+// Built by code point, never written as an escape. An escape for this
+// character is exactly what decays into the character, and a guard that
+// contained the byte it searches for would flag itself - which it did.
+const BACKSPACE = String.fromCharCode(8)
 
 function trackedSourceFiles(): string[] {
   const out = execFileSync(

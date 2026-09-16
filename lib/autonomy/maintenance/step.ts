@@ -45,6 +45,7 @@ import type { AutonomyTier } from '../desired-state'
 
 export type MaintenanceStepKind =
   | 'add_structure'
+  | 'carry_constraints'
   | 'dual_write'
   | 'backfill'
   | 'verify'
@@ -84,6 +85,11 @@ export type ExecutorCapability =
 export const EXECUTOR_CAPABILITY: Readonly<Record<MaintenanceStepKind, ExecutorCapability>> = {
   // ADD_COLUMN / ADD CONSTRAINT / CREATE POLICY all route through executeAction.
   add_structure: 'implemented',
+  // `primitives/carry-constraints.ts`. Derives the target's domain by applying
+  // the transform to the source's declared domain and refuses unless the
+  // binding says the same thing. Without it `contract` drops a constrained
+  // column and leaves an unconstrained one.
+  carry_constraints: 'implemented',
   // Phase 6b. `primitives/dual-write.ts` installs a real BEFORE trigger with a
   // generated body over the closed transform vocabulary, replacing the
   // AppTrigger surface that was never a database trigger at all.
@@ -190,6 +196,20 @@ export function classifyMaintenanceStep(step: {
         reason:
           'Adds a column, constraint or policy. Additive, snapshotted, and reversible by ' +
           'dropping what was added.',
+      }
+
+    case 'carry_constraints':
+      return {
+        // Tier 2, for dual_write's reason rather than add_structure's. A CHECK
+        // is additive to the SCHEMA and restrictive to BEHAVIOUR: once it
+        // exists, a write the customer's application used to make is rejected.
+        // Adding it also takes ACCESS EXCLUSIVE and validates the table.
+        tier: 2,
+        executable,
+        capability,
+        reason:
+          'Constrains a column to the source domain under the declared transform. ' +
+          'Schema-additive and behaviour-restricting, and only the second one decides this tier.',
       }
 
     case 'verify':

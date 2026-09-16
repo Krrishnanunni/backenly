@@ -65,6 +65,7 @@ import {
   type MaintenanceStepKind,
 } from './step'
 import { executeMaintenanceAddStructure } from './primitives/add-structure'
+import { carryConstraints } from './primitives/carry-constraints'
 import { installDualWrite } from './primitives/dual-write'
 import { switchReaders, type SwitchedReader } from './primitives/switch-readers'
 import { runVerify } from './primitives/verify'
@@ -83,6 +84,22 @@ import type { Transform } from './transform'
  */
 export type StepBinding =
   | { kind: 'add_structure'; verb: 'ADD_COLUMN'; table: string; column: string; columnType: string }
+  | {
+      kind: 'carry_constraints'
+      table: string
+      sourceColumn: string
+      targetColumn: string
+      transform: Transform
+      /**
+       * The target's domain as the operator states it.
+       *
+       * Checked against the domain derived from the source's own CHECK under
+       * the transform, and a disagreement refuses. Neither route is trusted
+       * alone: a derivation nobody checked is a guess, a declaration nobody
+       * derived is a value someone typed.
+       */
+      allowedValues: string[]
+    }
   | { kind: 'dual_write'; table: string; sourceColumn: string; targetColumn: string; transform: Transform }
   | {
       kind: 'backfill'
@@ -431,6 +448,20 @@ async function runStep(
               `(nullable, table oid ${r.identity!.oidBefore} unchanged, ${r.identity!.rowsBefore} row(s) preserved)`,
           }
         : { ...base, status: 'failed', detail: r.refusal ?? 'add_structure refused' }
+    }
+
+    case 'carry_constraints': {
+      const r = await carryConstraints({ projectId, ...binding })
+      return r.applied
+        ? {
+            ...base,
+            status: 'completed',
+            detail:
+              `constraint ${r.constraintName} applied: ${binding.targetColumn} IN ` +
+              `{${(r.derivedDomain ?? []).join(', ')}}, derived from ${binding.sourceColumn} ` +
+              `{${(r.sourceDomain ?? []).join(', ')}} under ${binding.transform.kind}`,
+          }
+        : { ...base, status: 'failed', detail: r.refusal ?? 'carry_constraints refused' }
     }
 
     case 'dual_write': {

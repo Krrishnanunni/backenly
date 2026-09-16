@@ -269,7 +269,11 @@ describe('valid but blocked by capability', () => {
     withCapability({ dual_write: 'not_implemented' }, p => {
       expect(p.validity).toBe('blocked_by_capability')
       expect(p.steps.map((s: any) => s.kind)).toEqual([
-        'add_structure', 'dual_write', 'backfill', 'verify', 'switch_readers', 'contract',
+        // carry_constraints sits between add_structure and dual_write so the
+        // catalog never rests with an unconstrained state column, which would
+        // change the diagnosis and stop the ladder resuming after a backfill.
+        'add_structure', 'carry_constraints', 'dual_write', 'backfill', 'verify',
+        'switch_readers', 'contract',
       ])
       expect(p.blockedReasons.join(' ')).toMatch(/dual_write/)
     })
