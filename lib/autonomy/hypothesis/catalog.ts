@@ -507,6 +507,8 @@ const SUBSYSTEM_REPEAT_FAILURE: SymptomDefinition = {
       statement:
         'More than one writer maintains this data and they disagree. Suspected only — the evidence that would confirm it needs analysis of function source this platform cannot perform.',
       prior: 0.1,
+      // Nothing this platform can measure settles it. See `Hypothesis.confirmable`.
+      confirmable: false,
       predicts: { write_statement_shapes: 'multiple_writers' },
       remedy: {
         summary:

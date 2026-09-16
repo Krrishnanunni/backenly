@@ -260,6 +260,11 @@ export function buildMaintenancePlan(input: PlanInput): MaintenancePlan {
     `verdict=${diagnosis.kind}`,
     ...diagnosis.report.observations.map(o => `${o.testId}=${o.outcome}`),
     ...diagnosis.blockedBy.map(b => `${b.test}=unavailable(${b.reason})`),
+    // Raised, never concluded on, and no longer able to veto a confirmed
+    // leader — so it has to travel with the plan as a standing caveat. A
+    // possibility the platform cannot settle is still a possibility, and the
+    // person reading this plan is the one who can settle it.
+    ...diagnosis.raisedOnly.map(id => `${id}=raised-but-unconfirmable`),
   ]
 
   const hypothesis = diagnosis.hypothesis?.id ?? '(none)'

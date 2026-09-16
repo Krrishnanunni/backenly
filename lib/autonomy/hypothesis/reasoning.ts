@@ -225,8 +225,32 @@ export function concludeInvestigation(
 
   const sorted = [...live].sort((a, b) => b.confidence - a.confidence)
   const leader = sorted[0]
+
+  // The margin is measured against the closest rival that evidence could still
+  // separate from the leader.
+  //
+  // A hypothesis marked `confirmable: false` cannot be settled by anything this
+  // platform can gather, so as a blocking runner-up it is not uncertainty
+  // awaiting evidence — it is a permanent veto, and one that applies to nearly
+  // every project, since its deciding observation is true of any table with
+  // more than two write shapes. Vetoing every confirmed diagnosis forever is
+  // not caution; it is the loop never concluding anything.
+  //
+  // It stays in `candidates`, is still reported, and may still never be
+  // concluded ON — `structural.ts` enforces that for the leader. It simply does
+  // not get to hold a confirmed rival at ambiguous.
+  //
+  // The leader itself must be confirmable. Without this an unconfirmable
+  // hypothesis at the top would sail through on an empty field, which is the
+  // exact opposite of the rule.
+  const separableRunnerUp = sorted.slice(1).find(h => h.confirmable !== false)
   const runnerUp = sorted[1]
-  const margin = runnerUp ? leader.confidence - runnerUp.confidence : 1
+  const margin =
+    leader.confirmable === false
+      ? 0
+      : separableRunnerUp
+        ? leader.confidence - separableRunnerUp.confidence
+        : 1
 
   // A leader may only be concluded on once the evidence that COULD refute it has
   // been gathered. Skipping this produced a real wrong answer: PostgREST was
