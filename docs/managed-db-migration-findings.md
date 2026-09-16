@@ -344,6 +344,60 @@ not quietly become a provisioning-mutation project.
 
 ---
 
+## Production is migration-managed (2026-09-16)
+
+Both environments now have migration history, delivered by the same runner image
+and verified the same way. Production was baselined only after the mechanism was
+proven end to end on staging, which is the order the gate below requires.
+
+**Before.** A fresh read-only capture reconciled completely against the
+pre-ledger projection: 0 missing, 0 defined differently, 36 provisioning extras
+all attributed, **0 unexplained**, capability parity PASS (`pg_stat_statements`
+1.10, `pgstattuple` 1.5, `vector` 0.8.1 in both). The eleven
+`provisioning/prisma-migration-ledger` manifest entries were reported as *not
+observed*, which was correct: production had no `_prisma_migrations` yet.
+
+**Baselining.** `migrate resolve --applied 00000000000000_baseline`. A
+`migrate deploy` first would have tried to APPLY the baseline against a database
+that already holds all 120 tables, which is the whole reason resolve exists.
+
+| | before | after baseline | after ledger |
+|---|---|---|---|
+| tables | 120 | 121 | 123 |
+| columns | 1332 | 1340 | 1370 |
+| constraints | 230 | 231 | 234 |
+| indexes | 531 | 532 | 541 |
+
+Measured as diffs rather than read off the counts:
+
+- baselining changed **11 objects, all `_prisma_migrations`**; canonical delta
+  **0**.
+- the ledger migration changed **44 objects, all `maintenance_executions` and
+  `maintenance_step_executions`** (2 tables, 30 columns, 3 constraints, 9
+  indexes), every one `extra_in_right`; **nothing else moved**.
+- second `migrate deploy` a no-op, `migrate status` clean, all three production
+  services ACTIVE 1/1.
+- the full report then returns **PRODUCTION_LINEAGE_EXPLAINED, 0 unexplained, 0
+  manifest entries unobserved**.
+
+Production and staging now hold identical platform schemas — 123 tables / 1370
+columns / 234 constraints / 541 indexes / 21 routines / 5 event triggers / 0
+public policies — having arrived there from opposite provenance (pg_restore of
+the Hetzner dump vs `db push`).
+
+**A third guard, at the connection.** `scripts/run-production-migration-job.ts`
+is its own launcher rather than a `--target production` flag on the staging one,
+for the reason the read-only capture gives: the staging surface also carries
+arbitrary bundled payloads for the lineage replays. It checks the AWS account and
+checks that the secret's ARN names a production resource — but both are checks on
+POINTERS, and both pass whether or not the secret's contents point where the ARN
+suggests. So `EXPECT_DATABASE` is passed into the container, where the runner
+parses the URL it actually connected with and refuses if the database is not that
+one. It matters for `baseline`, which writes history into whatever it reaches and
+is not undone by re-running it somewhere else.
+
+---
+
 ## Staging is migration-managed (2026-09-16)
 
 Finding 1 below is now historical. Staging has migration history, applied by the

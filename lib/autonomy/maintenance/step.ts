@@ -58,8 +58,18 @@ export type ExecutorCapability =
   | 'not_implemented'
   /** A primitive exists but its semantics are wrong for maintenance. */
   | 'not_implemented_for_maintenance'
-  /** Deliberately deferred — Phase 7 owns the reader cutover and the drop. */
+  /** Deliberately deferred — a later phase owns it. */
   | 'future_phase_7'
+  /**
+   * Built as far as software can take it, and finished by a person.
+   *
+   * Not a missing primitive: `contract` drops the legacy column, and doing that
+   * safely requires knowing nobody reads it. On a platform that hands out
+   * connection strings and serves PostgREST clients that pick their own columns,
+   * that is not a fact software can establish — see ../readers.ts. So the step
+   * exists, is planned, and is never executed by the executor.
+   */
+  | 'human_only'
 
 /**
  * What the executor can actually do today, per step kind.
@@ -86,9 +96,28 @@ export const EXECUTOR_CAPABILITY: Readonly<Record<MaintenanceStepKind, ExecutorC
   // source column against a target one under a transform. lib/verification/*
   // still cannot, and is still not what this uses.
   verify: 'implemented',
-  switch_readers: 'future_phase_7',
-  contract: 'future_phase_7',
+  // Phase 7. `primitives/switch-readers.ts` moves the readers Backenly wrote and
+  // refuses to guess at the rest; ../readers.ts names the consumer classes that
+  // cannot be enumerated at all, which is why a switch is never "complete".
+  switch_readers: 'implemented',
+  // Not deferred — finished by a person, permanently. See `human_only`.
+  contract: 'human_only',
 }
+
+/**
+ * Steps a ladder may end without, and still be worth running.
+ *
+ * Only `contract`. Expand/contract is complete and safe the moment readers have
+ * moved and held: the legacy column simply stays. Dropping it is an
+ * optimisation, and one whose precondition ("nobody reads this") this platform
+ * cannot establish.
+ *
+ * Which makes it the single exception to all-or-nothing. Without it the ladder
+ * would be permanently `blocked_by_capability` and Phase 6b could never run end
+ * to end — the capability table would be describing a plan nobody can execute
+ * rather than one waiting on a tool.
+ */
+export const OPTIONAL_TERMINAL_STEPS: readonly MaintenanceStepKind[] = ['contract']
 
 export interface MaintenanceStep {
   ordinal: number

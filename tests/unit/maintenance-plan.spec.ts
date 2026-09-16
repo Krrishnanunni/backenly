@@ -91,10 +91,12 @@ describe('executor capability', () => {
     expect(EXECUTOR_CAPABILITY.dual_write).toBe('implemented')
     expect(EXECUTOR_CAPABILITY.backfill).toBe('implemented')
     expect(EXECUTOR_CAPABILITY.verify).toBe('implemented')
-    // Phase 7 owns the reader cutover and the drop. Still not built, and the
-    // point of this table is that it says so.
-    expect(EXECUTOR_CAPABILITY.switch_readers).toBe('future_phase_7')
-    expect(EXECUTOR_CAPABILITY.contract).toBe('future_phase_7')
+    // Phase 7 built the reader switch, for the readers Backenly wrote.
+    expect(EXECUTOR_CAPABILITY.switch_readers).toBe('implemented')
+    // NOT deferred: contract drops the legacy column, which needs "nobody reads
+    // this" to be established, and this platform cannot establish it. A person
+    // does it. See lib/autonomy/maintenance/readers.ts.
+    expect(EXECUTOR_CAPABILITY.contract).toBe('human_only')
   })
 
   it('never emits a placeholder verb for an unimplemented step', () => {
@@ -128,7 +130,8 @@ describe('classifyMaintenanceStep is the one decision point', () => {
     expect(classifyMaintenanceStep({ kind: 'add_structure' }).executable).toBe(true)
     expect(classifyMaintenanceStep({ kind: 'dual_write' }).executable).toBe(true)
     expect(classifyMaintenanceStep({ kind: 'backfill' }).executable).toBe(true)
-    expect(classifyMaintenanceStep({ kind: 'switch_readers' }).executable).toBe(false)
+    expect(classifyMaintenanceStep({ kind: 'switch_readers' }).executable).toBe(true)
+    // human_only is not executable, and never becomes so.
     expect(classifyMaintenanceStep({ kind: 'contract' }).executable).toBe(false)
   })
 
@@ -220,50 +223,96 @@ describe('a plan requires a decision-quality diagnosis', () => {
 // ── The middle state ─────────────────────────────────────────────────────────
 
 describe('valid but blocked by capability', () => {
-  it('produces the full ladder and marks it non-executable', () => {
-    const p = plan(diagnosis())
+  /**
+   * Phases 6b and 7 implemented every step kind the planner emits, so no real
+   * ladder is blocked any more. The state must still be reachable: the next
+   * step kind to be invented arrives unimplemented, and a ladder containing it
+   * must not run.
+   *
+   * So the capability table is mocked rather than a real gap being relied on.
+   * Deleting these tests because nothing is blocked today would remove the
+   * guard exactly when it stops being self-testing.
+   */
+  const withCapability = (over: Record<string, string>, fn: (built: any) => void) => {
+    jest.isolateModules(() => {
+      jest.doMock('@/lib/autonomy/maintenance/step', () => {
+        const real = jest.requireActual('@/lib/autonomy/maintenance/step')
+        const table = { ...real.EXECUTOR_CAPABILITY, ...over }
+        return {
+          ...real,
+          EXECUTOR_CAPABILITY: table,
+          // The real classifier reads the real table from its own module scope,
+          // so overriding the exported constant alone changes nothing it
+          // returns. Capability is re-derived here from the overridden table;
+          // tier still comes from the real classifier, because tier is a
+          // property of the step and must not move when capability does.
+          classifyMaintenanceStep: (s: any) => {
+            const c = real.classifyMaintenanceStep(s)
+            return { ...c, capability: table[s.kind], executable: table[s.kind] === 'implemented' }
+          },
+        }
+      })
+      const { buildMaintenancePlan: build } = require('@/lib/autonomy/maintenance/plan')
+      fn(
+        build({
+          findingId: 'f1',
+          diagnosis: diagnosis(),
+          subsystem: SUBSYSTEM,
+          catalogFingerprint: 'cat-v1',
+        }),
+      )
+    })
+    jest.dontMock('@/lib/autonomy/maintenance/step')
+  }
 
-    expect(p.validity).toBe('blocked_by_capability')
-    expect(p.steps.map(s => s.kind)).toEqual([
-      'add_structure', 'dual_write', 'backfill', 'verify', 'switch_readers', 'contract',
-    ])
-    // Phase 6b implemented the middle rungs, so what blocks the ladder now is
-    // the Phase 7 pair at the end. The middle state still has to exist: a plan
-    // whose last rungs are unbuilt is correct engineering waiting on a tool,
-    // and collapsing it into `executable` would ship a ladder that stops
-    // halfway through a migration.
-    expect(p.blockedReasons.join(' ')).toMatch(/switch_readers/)
-    expect(p.blockedReasons.join(' ')).toMatch(/contract/)
-    expect(p.blockedReasons.join(' ')).not.toMatch(/dual_write|backfill|verify/)
+  it('produces the full ladder and marks it non-executable', () => {
+    withCapability({ dual_write: 'not_implemented' }, p => {
+      expect(p.validity).toBe('blocked_by_capability')
+      expect(p.steps.map((s: any) => s.kind)).toEqual([
+        'add_structure', 'dual_write', 'backfill', 'verify', 'switch_readers', 'contract',
+      ])
+      expect(p.blockedReasons.join(' ')).toMatch(/dual_write/)
+    })
   })
 
   it('is NOT the same as invalid', () => {
-    const blocked = plan(diagnosis())
     const bad = plan(diagnosis({ kind: 'inconclusive', hypothesis: undefined }))
-
-    expect(blocked.validity).toBe('blocked_by_capability')
-    expect(bad.validity).toBe('invalid')
-    // The blocked plan is real engineering waiting on a tool; the invalid one
-    // should never have existed. Phase 6 must be able to tell them apart.
-    expect(blocked.steps.length).toBeGreaterThan(0)
-    expect(bad.steps).toEqual([])
+    withCapability({ dual_write: 'not_implemented' }, blocked => {
+      expect(blocked.validity).toBe('blocked_by_capability')
+      expect(bad.validity).toBe('invalid')
+      // The blocked plan is real engineering waiting on a tool; the invalid one
+      // should never have existed. The executor must tell them apart.
+      expect(blocked.steps.length).toBeGreaterThan(0)
+      expect(bad.steps).toEqual([])
+    })
   })
 
   /**
    * The rule that keeps a half-migrated schema from ever existing.
    *
-   * `add_structure` is implemented and `dual_write` is not, so a prefix IS
-   * runnable. Running it would leave a new column nothing fills and a
-   * dual-write that was never installed.
+   * With `dual_write` unavailable a prefix IS runnable. Running it would leave a
+   * new column nothing fills and a dual-write that was never installed.
    */
   it('exposes an executable prefix as a diagnostic, never as permission', () => {
-    const p = plan(diagnosis())
-    const prefix = executablePrefix(p)
+    withCapability({ dual_write: 'not_implemented' }, p => {
+      const prefix = executablePrefix(p)
+      expect(prefix.length).toBeGreaterThan(0)
+      expect(prefix.length).toBeLessThan(p.steps.length)
+      expect(p.validity).toBe('blocked_by_capability')
+    })
+  })
 
-    expect(prefix.length).toBeGreaterThan(0)
-    expect(prefix.length).toBeLessThan(p.steps.length)
-    // The plan as a whole still refuses.
-    expect(p.validity).toBe('blocked_by_capability')
+  it('does not let the human-only contract step block the ladder', () => {
+    // The single exception to all-or-nothing, and the reason the six-rung
+    // ladder can run at all. `contract` drops the legacy column, which requires
+    // knowing nobody reads it — not a fact this platform can establish. The
+    // ladder is complete and safe without it; the old column simply stays.
+    const p = plan(diagnosis())
+    expect(p.validity).toBe('executable')
+    expect(p.steps.map(s => s.kind)).toContain('contract')
+    expect(p.blockedReasons).toEqual([])
+    // Reported, not hidden: a person still has to do it.
+    expect(p.humanOnlySteps.join(' ')).toMatch(/contract: human_only/)
   })
 
   it('a ladder whose every step is implemented is executable', () => {

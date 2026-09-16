@@ -58,8 +58,14 @@ import { enqueue } from '@/lib/queue'
 import { FLAGS } from '@/lib/config/flags'
 import { isTierAutoAllowed, type AutonomyLevel } from '../autonomy-level'
 import { approvalStillValid, isPlanStale, type MaintenancePlan } from './plan'
-import { classifyMaintenanceStep, type MaintenanceStep, type MaintenanceStepKind } from './step'
+import {
+  classifyMaintenanceStep,
+  OPTIONAL_TERMINAL_STEPS,
+  type MaintenanceStep,
+  type MaintenanceStepKind,
+} from './step'
 import { installDualWrite } from './primitives/dual-write'
+import { switchReaders, type SwitchedReader } from './primitives/switch-readers'
 import { runVerify } from './primitives/verify'
 import type { Transform } from './transform'
 
@@ -87,6 +93,7 @@ export type StepBinding =
       lockTimeoutMs?: number
     }
   | { kind: 'verify'; table: string; sourceColumn: string; targetColumn: string; transform: Transform }
+  | { kind: 'switch_readers'; table: string; sourceColumn: string; targetColumn: string }
 
 export interface ExecuteMaintenanceInput {
   plan: MaintenancePlan
@@ -116,10 +123,18 @@ export type ExecutionStatus = 'completed' | 'halted' | 'refused'
 export interface StepOutcome {
   ordinal: number
   kind: MaintenanceStepKind
-  status: 'completed' | 'dispatched' | 'skipped' | 'failed'
+  status: 'completed' | 'dispatched' | 'skipped' | 'failed' | 'awaiting_human'
   detail: string
   /** Set for a backfill, which continues under BackgroundJob. */
   backgroundJobId?: string
+  /**
+   * Set for a reader switch, carrying the previous code of everything moved.
+   *
+   * The observation window's revert restores these bytes, so they have to
+   * survive the step that produced them — which is why they are on the outcome
+   * and in the ledger row rather than held in memory.
+   */
+  switchedReaders?: SwitchedReader[]
 }
 
 export interface MaintenanceExecutionOutcome {
@@ -156,6 +171,12 @@ function refuseLadder(input: ExecuteMaintenanceInput): string | null {
   // this ladder ever have been allowed", so a ladder needing consent it does not
   // have is refused before anything is written rather than halfway down.
   for (const step of plan.steps) {
+    // A human-only terminal step is not this executor's to run, so it is not
+    // this executor's to refuse over either. Sweeping it through the tier gate
+    // would refuse every expand/contract ladder before the first rung, because
+    // `contract` is Tier 3 and Tier 3 is never executed here.
+    if (OPTIONAL_TERMINAL_STEPS.includes(step.kind)) continue
+
     const { tier } = classifyMaintenanceStep(step)
     const gate = tierGate(tier, autonomyLevel, input)
     if (gate) return `step ${step.ordinal} (${step.kind}): ${gate}`
@@ -221,6 +242,18 @@ export async function executeMaintenancePlan(
   const steps: StepOutcome[] = []
 
   for (const step of plan.steps) {
+    // Reached, recorded, and left for a person. Not executed, not skipped
+    // silently, and not a halt: the ladder did everything software may do.
+    if (OPTIONAL_TERMINAL_STEPS.includes(step.kind)) {
+      steps.push({
+        ordinal: step.ordinal,
+        kind: step.kind,
+        status: 'awaiting_human',
+        detail: `${step.kind} is performed by a person; ${classifyMaintenanceStep(step).reason}`,
+      })
+      continue
+    }
+
     // Immediately before mutating. Not once at the top.
     const classification = classifyMaintenanceStep(step)
 
@@ -284,7 +317,10 @@ export async function executeMaintenancePlan(
         completedAt: new Date(),
         backgroundJobId: outcome.backgroundJobId ?? null,
         postconditionEvidence: { declared: step.expectedPostconditions, detail: outcome.detail },
-        result: { ...outcome },
+        // Through JSON so the ledger stores plain data. `switchedReaders`
+        // carries the bytes a revert restores, so it has to land in the row
+        // rather than only in the return value.
+        result: JSON.parse(JSON.stringify(outcome)),
       },
     })
     steps.push(outcome)
@@ -362,6 +398,23 @@ async function runStep(
         { projectId },
       )
       return { ...base, status: 'dispatched', detail: `backfill queued as job ${job.id}`, backgroundJobId: job.id }
+    }
+
+    case 'switch_readers': {
+      const r = await switchReaders({ projectId, ...binding })
+      if (r.refusal) return { ...base, status: 'failed', detail: r.refusal }
+      // Reported on every switch, not only when it is zero. The consumers that
+      // cannot be enumerated are the reason `contract` stays human-only, and a
+      // summary that omitted them would read like the cutover was complete.
+      return {
+        ...base,
+        status: 'completed',
+        detail:
+          `${r.switched.length} Backenly-authored reader(s) switched; ` +
+          `${r.inventory.unobservable.length} consumer class(es) cannot be enumerated and still read ` +
+          `${binding.table}.${binding.sourceColumn}`,
+        switchedReaders: r.switched,
+      }
     }
 
     case 'verify': {
