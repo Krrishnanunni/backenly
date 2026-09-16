@@ -328,6 +328,18 @@ export function buildMaintenancePlan(input: PlanInput): MaintenancePlan {
     base.planId,
     catalogFingerprint,
     steps.map(s => [s.kind, s.action, s.params, s.idempotencyKey]),
+    // What the executor could do when this plan was built.
+    //
+    // Without this, a plan built while `dual_write` was `not_implemented` keeps
+    // its version when the primitive lands, and an approval granted against a
+    // ladder that could not run silently becomes consent for one that can.
+    // Including it re-versions every plan the moment the capability table moves,
+    // which is what "they are re-planned into a new planVersion" means in
+    // ./step.ts — enforced here rather than left as an instruction.
+    //
+    // Steps whose kind does not appear in the plan are included too: the table
+    // is a property of the executor, not of this ladder.
+    Object.entries(EXECUTOR_CAPABILITY).sort(([a], [b]) => a.localeCompare(b)),
   ])
 
   return {

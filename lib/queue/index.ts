@@ -36,7 +36,18 @@ const DEFAULT_JOB_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes
 // storage objects after its database rows are already gone. It is enqueued
 // inside the deletion transaction (lib/projects/delete.ts) rather than through
 // `enqueue()`, because it must commit atomically with the schema drops.
-export type JobType = 'email' | 'webhook_delivery' | 'cleanup' | 'custom' | 'purge_project'
+export type JobType =
+  | 'email'
+  | 'webhook_delivery'
+  | 'cleanup'
+  | 'custom'
+  | 'purge_project'
+  /**
+   * One batch of a Phase 6b backfill, re-queued with a cursor until the table
+   * ends. It lives here rather than in a maintenance-owned loop so that
+   * attempts, backoff and dead-lettering have exactly one implementation.
+   */
+  | 'maintenance_backfill'
 
 export const PURGE_JOB_TYPE = 'purge_project' as const
 
