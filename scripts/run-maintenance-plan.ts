@@ -241,7 +241,12 @@ async function main(): Promise<void> {
     // A regression reverts. The bytes come from the ledger row the switch
     // wrote, so this restores exactly what was there and never regenerates it.
     let reverted: { reverted: number; failures: string[] } | null = null
-    if (observation.verdict === 'regressed') {
+    // `shouldRevert`, not a re-derivation of it. observe.ts documents it as
+    // "the revert trigger, stated once", and deciding again here is how the
+    // caller and the module come to disagree. The first version of this read
+    // `observation.verdict`, which does not exist, so it was silently never
+    // true and a regressed production run reverted nothing.
+    if (observation.shouldRevert) {
       if (!FLAGS.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS) {
         console.log('  regression observed, and mutations are disabled here, so nothing was reverted')
       } else {
@@ -267,7 +272,7 @@ async function main(): Promise<void> {
         2,
       ),
     )
-    process.exit(observation.verdict === 'regressed' && !reverted ? 1 : 0)
+    process.exit(observation.shouldRevert && !reverted ? 1 : 0)
   }
 
   // The environment flag and the confirmation were checked above, before the
