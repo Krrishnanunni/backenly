@@ -262,6 +262,52 @@ describe('reconciliation compares real rows', () => {
   })
 })
 
+describe('the structural probe samples real rows', () => {
+  // The probe that decides `duplicated_lifecycle_state` needs 50 rows before it
+  // will answer. Read without a claim it counts 0 on this full table, throws
+  // "insufficient sample", and the diagnosis collapses to `inconclusive` — so
+  // no plan can ever be built for an RLS-protected project, which is every
+  // project the product creates.
+  //
+  // Production showed this as a contradiction inside one report:
+  // `assessStructuralCoverage` reads `pg_class.reltuples`, which RLS does not
+  // filter, and reported 80 rows with the sample sufficient, while this probe
+  // reported 0. The blinded reading is the one that decided the verdict.
+  //
+  // ── What these two tests do NOT prove ──────────────────────────────────────
+  //
+  // They do not pin that defect. The probe reaches the database through the
+  // application pool, which here connects as the local development superuser,
+  // and a superuser bypasses RLS entirely — FORCE included. So the unclaimed
+  // read sees all 80 rows locally and these assertions hold whether or not the
+  // probe carries a claim. Reverting the fix was measured: they still passed.
+  //
+  // The tests above use `countAsUnprivileged`, a throwaway NOSUPERUSER role,
+  // which is why they can tell the difference and these cannot. Pinning this
+  // one the same way needs the pool itself pointed at a non-superuser, which is
+  // a change to the pool, not to a test.
+  //
+  // They are kept because a probe that throws for any other reason still fails
+  // here. The evidence that the claim is actually carried is the production
+  // dry-run, where the role is not a superuser.
+  it('finds the covariation instead of refusing for want of rows', async () => {
+    const { columnCoVariation } = await import('@/lib/autonomy/hypothesis/structural-probes')
+    const out = await columnCoVariation({ projectId, membership: ['sessions'] } as never)
+
+    expect(out.outcome).toBe('co_varying')
+    expect(out.detail).toContain('sessions')
+  })
+
+  it('reports the sample as sufficient, agreeing with the probe', async () => {
+    const { assessStructuralCoverage } = await import('@/lib/autonomy/hypothesis/structural-probes')
+    const coverage = await assessStructuralCoverage({ projectId, membership: ['sessions'] } as never)
+
+    // The two readings of one table must not disagree.
+    expect(coverage.sampleSufficient).toBe(true)
+    expect(coverage.largestSampleRows).toBeGreaterThanOrEqual(50)
+  })
+})
+
 describe('the elevated context does not leak', () => {
   it('leaves no claim behind for the next borrower of the connection', async () => {
     // `set_config(..., true)` is transaction-local. If it were session-local,

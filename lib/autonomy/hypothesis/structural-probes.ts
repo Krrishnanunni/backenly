@@ -24,6 +24,7 @@
  */
 
 import { queryWorkspaceSchema } from '@/lib/services/workspaceDatabase'
+import { queryWorkspaceAsOwner } from '@/lib/services/workspace-pool'
 import { notReservedTableSql } from '@/lib/security/workspace-schema'
 import { MIN_ROWS_FOR_DESIGN_CLAIM } from '@/lib/autonomy/schema-design'
 import type { ProbeContext, ProbeFn } from './probes'
@@ -208,7 +209,19 @@ export const columnCoVariation: ProbeFn = async ctx => {
 
   let bestSample = 0
   for (const [table, a, b] of pairs) {
-    const res = await queryWorkspaceSchema(
+    // AS OWNER. This is the one query in this file that reads TENANT ROWS
+    // rather than a catalog, and the product enables RLS on every table it
+    // creates. Without a claim the count is 0 on a full table, the probe
+    // throws "insufficient sample", and the whole diagnosis degrades to
+    // inconclusive — so no plan can ever be built for an RLS-protected
+    // project, which is all of them.
+    //
+    // This was visible as a contradiction inside a single report:
+    // `assessStructuralCoverage` reads `pg_class.reltuples`, a planner
+    // estimate that RLS does not filter, and said 80 rows with the sample
+    // sufficient, while this probe said 0. One table, two answers, and the
+    // blinded one decided the verdict.
+    const res = await queryWorkspaceAsOwner(
       ctx.projectId,
       `SELECT count(*)::int AS rows,
               count(DISTINCT "${a}")::int AS da,
