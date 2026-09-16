@@ -143,8 +143,24 @@ describe('executing needs the exact confirmation', () => {
   it('refuses without bindings, rather than generating any SQL', () => {
     const r = run([...IDS, '--mode', 'execute', '--confirm', 'p1:plan-abc:ver-abc'], ON)
     expect(r.status).toBe(2)
-    expect(r.output).toMatch(/--bindings <file\.json> is required/)
+    expect(r.output).toMatch(/--bindings <file\.json> or --bindings-json <json> is required/)
     expect(r.output).toMatch(/typed data, never generated SQL/)
+  })
+
+  it('accepts inline bindings, which is the only form a container can use', () => {
+    // The container has no file to read. Bindings are the operator's mapping,
+    // not the plan — the plan is still rebuilt from the database.
+    const r = run([...IDS, '--mode', 'execute', '--confirm', 'p1:plan-abc:ver-abc', '--bindings-json', '{}'], ON)
+    expect(r.output).not.toMatch(/is required to execute/)
+  })
+
+  it('refuses both binding forms at once, rather than picking one', () => {
+    const r = run(
+      [...IDS, '--mode', 'execute', '--confirm', 'p1:plan-abc:ver-abc', '--bindings', 'b.json', '--bindings-json', '{}'],
+      ON,
+    )
+    expect(r.status).toBe(2)
+    expect(r.output).toMatch(/not both/)
   })
 
   it('gets past the argument gates with everything correct, and only then reads', () => {
@@ -154,5 +170,54 @@ describe('executing needs the exact confirmation', () => {
     const r = run([...IDS, '--mode', 'execute', '--confirm', 'p1:plan-abc:ver-abc', '--bindings', 'b.json'], ON)
     expect(r.output).not.toMatch(/--confirm must be exactly/)
     expect(r.output).not.toMatch(/ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS is not set/)
+  })
+})
+
+describe('the connection guard, in the entry point itself', () => {
+  // The launcher's ARN check is a check on a pointer. This is the check on the
+  // connection, and it is the same guard the migration runner applies in shell.
+  const url = (db: string, password = 'pw') =>
+    `postgresql://backenly_user:${password}@db.example.internal:5432/${db}?sslmode=require`
+
+  it('refuses when the connected database is not the expected one', () => {
+    const r = run([...IDS, '--mode', 'dry-run'], {
+      EXPECT_DATABASE: 'backenly',
+      DATABASE_URL: url('backenly_staging'),
+    })
+    expect(r.status).toBe(2)
+    expect(r.output).toMatch(/connected database is "backenly_staging", expected "backenly"/)
+  })
+
+  it('is not confused by a password containing a slash or an at-sign', () => {
+    const r = run([...IDS, '--mode', 'dry-run'], {
+      EXPECT_DATABASE: 'backenly',
+      DATABASE_URL: url('backenly', 'a/b@c'),
+    })
+    expect(r.output).toMatch(/database: backenly \(matches EXPECT_DATABASE\)/)
+    expect(r.output).not.toMatch(/connected database is/)
+  })
+
+  it('refuses a URL with no database path rather than guessing', () => {
+    const r = run([...IDS, '--mode', 'dry-run'], {
+      EXPECT_DATABASE: 'backenly',
+      DATABASE_URL: 'postgresql://backenly_user:pw@db.example.internal:5432',
+    })
+    expect(r.status).toBe(2)
+    expect(r.output).toMatch(/connected database is/)
+  })
+
+  it('applies to dry-run too, not only to execute', () => {
+    // A report about the wrong database is worse than no report.
+    const r = run([...IDS, '--mode', 'dry-run'], {
+      EXPECT_DATABASE: 'backenly',
+      DATABASE_URL: url('some_other_db'),
+    })
+    expect(r.status).toBe(2)
+  })
+
+  it('skips the check when no database was named', () => {
+    const r = run([...IDS, '--mode', 'dry-run'])
+    expect(r.output).not.toMatch(/matches EXPECT_DATABASE/)
+    expect(r.output).not.toMatch(/connected database is/)
   })
 })

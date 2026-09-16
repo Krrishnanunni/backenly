@@ -54,6 +54,29 @@ function die(msg: string): never {
   process.exit(2)
 }
 
+/**
+ * Which database did we actually connect to?
+ *
+ * The launcher checks that the secret's ARN names a production resource, but
+ * that is a check on a pointer: it passes whether or not the secret's contents
+ * point where the ARN suggests. This is the check on the connection, and it is
+ * the same guard `tools/managed-db/runner/entrypoint.sh` applies to migrations,
+ * for the same reason — a mutation lands in whatever it reaches.
+ *
+ * Parsed after the LAST '@' so a password containing '/' cannot shift the
+ * fields. A URL with no path yields host:port, which matches nothing and
+ * refuses: the failure direction we want.
+ */
+function assertExpectedDatabase(): void {
+  const expected = process.env.EXPECT_DATABASE?.trim()
+  if (!expected) return
+  const url = process.env.DATABASE_URL ?? ''
+  if (!url) die('EXPECT_DATABASE is set but DATABASE_URL is empty')
+  const actual = url.slice(url.lastIndexOf('@') + 1).replace(/^[^/]*\/?/, '').split('?')[0]
+  if (actual !== expected) die(`connected database is "${actual}", expected "${expected}"`)
+  console.error(`  database: ${actual} (matches EXPECT_DATABASE)`)
+}
+
 async function main(): Promise<void> {
   const projectId = arg('--project')
   const findingId = arg('--finding')
@@ -65,6 +88,11 @@ async function main(): Promise<void> {
     die('--project, --finding, --plan and --plan-version are all required; this script discovers nothing')
   }
   if (mode !== 'dry-run' && mode !== 'execute') die('--mode must be dry-run or execute')
+  if (arg('--bindings') && arg('--bindings-json')) die('pass --bindings or --bindings-json, not both')
+
+  // Before anything reads or writes. Applies to dry-run too: a report about the
+  // wrong database is worse than no report.
+  assertExpectedDatabase()
 
   // Every precondition that does not need the database is checked FIRST, so a
   // run that cannot proceed never reads a production catalog to find that out.
@@ -79,8 +107,8 @@ async function main(): Promise<void> {
     }
     const expected = `${projectId}:${planId}:${planVersion}`
     if (arg('--confirm') !== expected) die(`--confirm must be exactly "${expected}"`)
-    if (!arg('--bindings')) {
-      die('--bindings <file.json> is required to execute: the executor takes typed data, never generated SQL')
+    if (!arg('--bindings') && !arg('--bindings-json')) {
+      die('--bindings <file.json> or --bindings-json <json> is required to execute: the executor takes typed data, never generated SQL')
     }
   }
 
@@ -104,10 +132,19 @@ async function main(): Promise<void> {
   const approvedPlanVersion = process.env.MAINTENANCE_APPROVED_PLAN_VERSION?.trim() || null
   const approvalId = process.env.MAINTENANCE_APPROVAL_ID?.trim() || null
 
+  // A file locally; inline JSON in a container, which has no file to read.
+  //
+  // Bindings are the one thing that cannot be rebuilt from the database: they
+  // are the operator's mapping from a plan's abstract params to real columns.
+  // The PLAN is still rebuilt rather than transported — only this mapping
+  // crosses the boundary, and it is typed data, never SQL.
   const bindingsPath = arg('--bindings')
-  const bindings: Record<number, StepBinding> | undefined = bindingsPath
-    ? JSON.parse(readFileSync(bindingsPath, 'utf8'))
-    : undefined
+  const bindingsJson = arg('--bindings-json')
+  const bindings: Record<number, StepBinding> | undefined = bindingsJson
+    ? JSON.parse(bindingsJson)
+    : bindingsPath
+      ? JSON.parse(readFileSync(bindingsPath, 'utf8'))
+      : undefined
 
   // The column the ladder is about, used to inventory readers. Taken from the
   // binding rather than guessed, so the report describes the same column the
@@ -143,7 +180,7 @@ async function main(): Promise<void> {
   // The environment flag and the confirmation were checked above, before the
   // database was touched. What is left needs the resolved plan.
 
-  if (!bindings) die('--bindings <file.json> is required to execute')
+  if (!bindings) die('--bindings <file.json> or --bindings-json <json> is required to execute')
 
   const needed = plan.steps.filter(s => !OPTIONAL_TERMINAL_STEPS.includes(s.kind))
   for (const s of needed) {
