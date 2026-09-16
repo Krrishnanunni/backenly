@@ -31,6 +31,37 @@ COPY maintenance.cjs /app/maintenance.cjs
 # guards, and because a second image is a second thing to keep pinned.
 COPY fixture.cjs /app/fixture.cjs
 
+# Regenerate the Prisma client from the CURRENT schema.
+#
+# The base image carries a client generated when that image was built, which
+# predates the Phase 6b ledger models — so `prisma.maintenanceExecution` is
+# undefined and the executor dies on its first write. Measured against
+# production, not assumed.
+#
+# Generated here, inside the image, so the engine matches the image's platform.
+# The version is pinned to the one the canonical baseline was produced with.
+# The base image runs as `node` and its /app is not writable by that user, so
+# generation needs root. Dropped back immediately afterwards: this image must
+# run with exactly the privileges the runtime image chose for itself.
+USER root
+COPY schema.prisma /app/prisma/schema.prisma
+RUN npx --yes prisma@5.22.0 generate --schema=/app/prisma/schema.prisma  && node -e "const{PrismaClient}=require('/app/node_modules/@prisma/client'); const c=new PrismaClient(); if(!c.maintenanceExecution||!c.maintenanceStepExecution) {console.error('generated client lacks the ledger models');process.exit(1)} console.log('prisma client has the ledger models')"
+USER node
+
+# The pinned AWS RDS CA bundle.
+#
+# Prisma and node-postgres disagree about `sslmode=require`: Prisma follows
+# libpq, where it means "encrypt, do not verify", while node-postgres verifies
+# against the system trust store — which does not contain the RDS chain, so its
+# pools fail with SELF_SIGNED_CERT_IN_CHAIN. Measured against production, not
+# assumed.
+#
+# NODE_EXTRA_CA_CERTS adds this bundle to the trust store rather than disabling
+# verification, so the connection is still authenticated. It is the same pinned
+# bundle the lineage probes verify against.
+COPY rds-ca.pem /app/rds-ca.pem
+ENV NODE_EXTRA_CA_CERTS=/app/rds-ca.pem
+
 WORKDIR /app
 # The fixture is reached by overriding this at task launch, so the default
 # remains the only thing that runs unless a caller asks for the other.

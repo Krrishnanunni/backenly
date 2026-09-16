@@ -145,11 +145,19 @@ async function main(): Promise<void> {
     // reaches it: the schema, the tables, the columns and every statement are
     // fixed in scripts/maintenance-acceptance-fixture.ts.
     if (!projectId) die('--project is required')
-    if (mode !== 'prepare' && mode !== 'cleanup') die('--mode must be prepare or cleanup for --job fixture')
-    const confirmFlag = mode === 'prepare' ? '--confirm' : '--confirm-destroy'
-    if (argValue(confirmFlag) !== projectId) die(`${confirmFlag} must be exactly "${projectId}"`)
+    if (mode !== 'prepare' && mode !== 'cleanup' && mode !== 'inspect') {
+      die('--mode must be prepare, cleanup or inspect for --job fixture')
+    }
     entryPoint = ['node', '/app/fixture.cjs']
-    command = ['--mode', mode, '--project', projectId, confirmFlag, projectId]
+    command = ['--mode', mode, '--project', projectId]
+    // `inspect` writes nothing, so it needs no confirmation. The two that do
+    // write take different ones, so a shell-history re-run of prepare cannot
+    // delete the evidence it created.
+    if (mode !== 'inspect') {
+      const confirmFlag = mode === 'prepare' ? '--confirm' : '--confirm-destroy'
+      if (argValue(confirmFlag) !== projectId) die(`${confirmFlag} must be exactly "${projectId}"`)
+      command.push(confirmFlag, projectId)
+    }
 
     console.log(`
 Production acceptance fixture — ${mode}
@@ -172,29 +180,42 @@ Production acceptance fixture — ${mode}
     '--mode', mode,
   ]
 
-  if (mode === 'execute') {
-    const expected = `${projectId}:${planId}:${planVersion}`
-    if (argValue('--confirm') !== expected) die(`--confirm must be exactly "${expected}"`)
-    command.push('--confirm', expected)
-
-    // Inline JSON, on the command rather than in the environment: the
-    // container has no file to read, and this is the operator's mapping, not
-    // the plan. The plan itself is still rebuilt inside the container.
-    const bindings = argValue('--bindings-json')
-    if (!bindings) die('--bindings-json <json> is required to execute')
+  // Inline JSON, on the command rather than in the environment: the container
+  // has no file to read, and this is the operator's mapping, not the plan. The
+  // plan itself is still rebuilt inside the container.
+  //
+  // Carried for BOTH modes. A dry run without bindings cannot report whether
+  // they are complete, and cannot name the column whose readers it inventories,
+  // which is most of what the report is for.
+  const bindings = argValue('--bindings-json')
+  if (bindings) {
     try {
       JSON.parse(bindings)
     } catch {
       die('--bindings-json is not valid JSON')
     }
     command.push('--bindings-json', bindings)
+  }
 
-    // Passed through from this shell, never invented here. The container's own
-    // flag check is what actually decides, and it reads this value.
+  // Passed through from this shell, never invented here. The container's own
+  // flag check is what actually decides, and it reads this value.
+  //
+  // A dry run reads it too, and must: "would this rung execute" is a different
+  // question from "would it execute in an environment that forbids writing",
+  // and the first is the one an operator is asking. The dry run still writes
+  // nothing — the flag changes what it REPORTS, not what it does.
+  if (process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS) {
+    environment.push({ name: 'ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS', value: 'true' })
+  }
+
+  if (mode === 'execute') {
+    const expected = `${projectId}:${planId}:${planVersion}`
+    if (argValue('--confirm') !== expected) die(`--confirm must be exactly "${expected}"`)
+    command.push('--confirm', expected)
+    if (!bindings) die('--bindings-json <json> is required to execute')
     if (!process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS) {
       die('ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS is not set in this shell; nothing here can turn mutations on')
     }
-    environment.push({ name: 'ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS', value: 'true' })
   }
 
   for (const name of ['AUTONOMY_LEVEL', 'MAINTENANCE_APPROVED_PLAN_VERSION', 'MAINTENANCE_APPROVAL_ID']) {

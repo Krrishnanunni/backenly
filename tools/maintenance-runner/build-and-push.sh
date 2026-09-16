@@ -87,6 +87,9 @@ for forbidden in '"--sql"' '"--query"' '"--table"' '"--schema"' '"--column"' '"-
 done
 
 cp "$ROOT/tools/maintenance-runner/Dockerfile.maintenance" "$CTX/"
+cp "$ROOT/tools/maintenance-runner/rds-ca.pem" "$CTX/"
+cp "$ROOT/prisma/schema.prisma" "$CTX/schema.prisma"
+grep -q 'BEGIN CERTIFICATE' "$CTX/rds-ca.pem" || { echo "refusing: rds-ca.pem is not a certificate bundle"; exit 2; }
 echo "context:"
 find "$CTX" -maxdepth 1 -printf '  %P\n' | sort | sed '/^  $/d'
 
