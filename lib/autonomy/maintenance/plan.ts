@@ -294,8 +294,15 @@ export function buildMaintenancePlan(input: PlanInput): MaintenancePlan {
   // the diagnosis that produced it, so the gate is applied before any ladder is
   // constructed rather than as a property of one.
   if (diagnosis.kind !== 'structural_cause_identified') {
+    // The diagnosis's own reason travels with the verdict. Without it the
+    // refusal names the gate but not the cause, and the only way to learn why
+    // a plan will not build is to rebuild the runner image and ask again.
     return invalid([
       `diagnosis is ${diagnosis.kind}; only a confirmed structural cause may be planned from`,
+      `diagnosis reason: ${diagnosis.reason}`,
+      ...(diagnosis.blockedBy.length > 0
+        ? [`deciding probes unavailable: ${diagnosis.blockedBy.map(b => `${b.test}(${b.reason})`).join('; ')}`]
+        : []),
     ])
   }
 

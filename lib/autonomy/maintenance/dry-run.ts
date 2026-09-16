@@ -66,6 +66,14 @@ export interface DryRunReport {
   approvalValid: boolean
   mutationsEnvironmentEnabled: boolean
   planValidity: MaintenancePlan['validity']
+  /**
+   * What the planner concluded and what its instruments could see.
+   *
+   * A dry run that reports only a verdict makes every "why" question a new
+   * deployment. The diagnosis is already part of the plan; printing it costs
+   * nothing and is the first thing anyone reads after a refusal.
+   */
+  diagnosis: MaintenancePlan['diagnosis']
   steps: DryRunStep[]
   controllableReaders: number
   /** Never a number. See the header. */
@@ -175,6 +183,7 @@ export async function dryRunPlan(input: DryRunInput): Promise<DryRunReport> {
     approvalValid,
     mutationsEnvironmentEnabled: input.mutationsEnvironmentEnabled,
     planValidity: plan.validity,
+    diagnosis: plan.diagnosis,
     steps,
     controllableReaders: inventory?.controllable.length ?? 0,
     uncontrollableReaders: 'unknown-standing-fact',
