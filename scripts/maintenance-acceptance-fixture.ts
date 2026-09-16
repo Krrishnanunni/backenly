@@ -265,8 +265,13 @@ async function prepare(): Promise<void> {
     select: { id: true, generatedCode: true },
   })
 
-  const readsStatus = /\bstatus\b/.test(fn.generatedCode)
-  const readsTarget = new RegExp(`\\b${TARGET_COLUMN}\\b`).test(fn.generatedCode)
+  // One authority for "does this reader reference that column", shared with
+  // the primitive that performs the switch. A hand-rolled regex here can drift
+  // from the one the switch uses, and a `\b` written inside a template literal
+  // is the BACKSPACE character, not a word boundary — it matches nothing and
+  // reports every reader as reading nothing.
+  const readsStatus = columnReferenceCount(fn.generatedCode ?? '', 'status') > 0
+  const readsTarget = columnReferenceCount(fn.generatedCode ?? '', TARGET_COLUMN) > 0
 
   console.log(
     JSON.stringify(
@@ -417,8 +422,8 @@ async function inspect(projectId: string): Promise<void> {
           ? {
               id: fn.id,
               status: fn.status,
-              readsStatus: /status/.test(fn.generatedCode),
-              readsTarget: new RegExp(`\b${TARGET_COLUMN}\b`).test(fn.generatedCode),
+              readsStatus: columnReferenceCount(fn.generatedCode ?? '', 'status') > 0,
+              readsTarget: columnReferenceCount(fn.generatedCode ?? '', TARGET_COLUMN) > 0,
               codeSha256: createHash('sha256').update(fn.generatedCode).digest('hex').slice(0, 16),
             }
           : null,
