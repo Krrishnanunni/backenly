@@ -100,7 +100,18 @@ export async function dryRunPlan(input: DryRunInput): Promise<DryRunReport> {
     : false
 
   const refusals: string[] = []
-  if (plan.validity === 'invalid') refusals.push('the plan is invalid and should not exist')
+  // With the reasons. `blocked_by_capability` has always carried them and
+  // `invalid` has not, so the one refusal an operator can do nothing about was
+  // also the only one that would not say why — which is backwards, since an
+  // invalid plan means the diagnosis or the ladder gate rejected it and that
+  // is precisely what has to be read next.
+  if (plan.validity === 'invalid') {
+    refusals.push(
+      plan.blockedReasons.length > 0
+        ? `the plan is invalid and should not exist: ${plan.blockedReasons.join('; ')}`
+        : 'the plan is invalid and should not exist',
+    )
+  }
   if (plan.validity === 'blocked_by_capability') {
     refusals.push(`the ladder is blocked by capability: ${plan.blockedReasons.join('; ')}`)
   }

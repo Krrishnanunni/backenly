@@ -169,7 +169,13 @@ export interface MaintenanceExecutionOutcome {
 function refuseLadder(input: ExecuteMaintenanceInput): string | null {
   const { plan, autonomyLevel } = input
 
-  if (plan.validity === 'invalid') return 'the plan is invalid and should not exist'
+  // With the reasons, which the ledger then records. A halt reason that does
+  // not say what rejected the plan makes the ledger entry unreadable later.
+  if (plan.validity === 'invalid') {
+    return plan.blockedReasons.length > 0
+      ? `the plan is invalid and should not exist: ${plan.blockedReasons.join('; ')}`
+      : 'the plan is invalid and should not exist'
+  }
   if (plan.validity === 'blocked_by_capability') {
     return (
       `the ladder is blocked by capability (${plan.blockedReasons.join('; ')}); ` +
