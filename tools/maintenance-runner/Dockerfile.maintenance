@@ -40,8 +40,13 @@ COPY fixture.cjs /app/fixture.cjs
 #
 # Generated here, inside the image, so the engine matches the image's platform.
 # The version is pinned to the one the canonical baseline was produced with.
+# The base image runs as `node` and its /app is not writable by that user, so
+# generation needs root. Dropped back immediately afterwards: this image must
+# run with exactly the privileges the runtime image chose for itself.
+USER root
 COPY schema.prisma /app/prisma/schema.prisma
 RUN npx --yes prisma@5.22.0 generate --schema=/app/prisma/schema.prisma  && node -e "const{PrismaClient}=require('/app/node_modules/@prisma/client'); const c=new PrismaClient(); if(!c.maintenanceExecution||!c.maintenanceStepExecution) {console.error('generated client lacks the ledger models');process.exit(1)} console.log('prisma client has the ledger models')"
+USER node
 
 # The pinned AWS RDS CA bundle.
 #
