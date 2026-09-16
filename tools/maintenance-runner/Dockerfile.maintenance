@@ -31,6 +31,18 @@ COPY maintenance.cjs /app/maintenance.cjs
 # guards, and because a second image is a second thing to keep pinned.
 COPY fixture.cjs /app/fixture.cjs
 
+# Regenerate the Prisma client from the CURRENT schema.
+#
+# The base image carries a client generated when that image was built, which
+# predates the Phase 6b ledger models — so `prisma.maintenanceExecution` is
+# undefined and the executor dies on its first write. Measured against
+# production, not assumed.
+#
+# Generated here, inside the image, so the engine matches the image's platform.
+# The version is pinned to the one the canonical baseline was produced with.
+COPY schema.prisma /app/prisma/schema.prisma
+RUN npx --yes prisma@5.22.0 generate --schema=/app/prisma/schema.prisma  && node -e "const{PrismaClient}=require('/app/node_modules/@prisma/client'); const c=new PrismaClient(); if(!c.maintenanceExecution||!c.maintenanceStepExecution) {console.error('generated client lacks the ledger models');process.exit(1)} console.log('prisma client has the ledger models')"
+
 # The pinned AWS RDS CA bundle.
 #
 # Prisma and node-postgres disagree about `sslmode=require`: Prisma follows
