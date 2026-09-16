@@ -62,7 +62,11 @@ case "${1:-}" in
     [ -n "$MIGRATION" ] || { echo "verify needs a migration id"; exit 2; }
     case "$MIGRATION" in
       20260916180000_maintenance_approvals)
-        exec "$PRISMA" db execute --schema "$SCHEMA" --stdin <<'SQL'
+        # Not exec'd: the marker below has to be printed AFTER the script
+        # succeeds. "Script executed successfully" is prisma's own wording for
+        # "the statements ran", and a caller cannot tell from it whether this
+        # particular assertion was the thing that ran.
+        "$PRISMA" db execute --schema "$SCHEMA" --stdin <<'SQL'
 DO $$
 DECLARE missing text := '';
 BEGIN
@@ -89,6 +93,7 @@ BEGIN
   RAISE NOTICE 'verified: table, both indexes and the foreign key are present';
 END $$;
 SQL
+        echo "VERIFIED: $MIGRATION declared objects are all present"
         ;;
       *)
         echo "refusing: no verification is defined for \"$MIGRATION\""
