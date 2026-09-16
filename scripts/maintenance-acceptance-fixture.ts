@@ -338,8 +338,8 @@ async function inspect(projectId: string): Promise<void> {
     die(`project ${projectId} is named "${project.name}"; this only inspects the acceptance project`)
   }
 
-  const columns = await q<{ column_name: string; data_type: string }>(
-    `SELECT column_name, data_type FROM information_schema.columns
+  const columns = await q<{ column_name: string; data_type: string; is_nullable: string; column_default: string | null }>(
+    `SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns
       WHERE table_schema = $1 AND table_name = 'sessions' ORDER BY ordinal_position`,
     schema,
   )
@@ -380,7 +380,13 @@ async function inspect(projectId: string): Promise<void> {
         projectId,
         workspaceSchema: schema,
         rows: Number(counted[0]?.n ?? 0),
-        columns: columns.map(c => `${c.column_name}:${c.data_type}`),
+        // Nullability and defaults included: "which column refuses a NULL" is
+        // the question a 23502 leaves you with, and guessing it is how a
+        // fixture gets debugged by trial.
+        columns: columns.map(
+          c => `${c.column_name}:${c.data_type}:${c.is_nullable === 'YES' ? 'null' : 'NOTNULL'}` +
+               `${c.column_default ? `:default=${String(c.column_default).slice(0, 30)}` : ''}`,
+        ),
         targetColumnPresent: columns.some(c => c.column_name === TARGET_COLUMN),
         triggers: triggers.map(t => t.tgname),
         rowsDisagreeingWithTransform: agree ? Number(agree[0]?.n ?? 0) : null,
