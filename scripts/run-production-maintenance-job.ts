@@ -151,9 +151,17 @@ async function main(): Promise<void> {
     if (argValue('--confirm') !== expected) die(`--confirm must be exactly "${expected}"`)
     command.push('--confirm', expected)
 
-    const bindings = argValue('--bindings')
-    if (!bindings) die('--bindings <path inside the image or /tmp> is required to execute')
-    command.push('--bindings', bindings)
+    // Inline JSON, on the command rather than in the environment: the
+    // container has no file to read, and this is the operator's mapping, not
+    // the plan. The plan itself is still rebuilt inside the container.
+    const bindings = argValue('--bindings-json')
+    if (!bindings) die('--bindings-json <json> is required to execute')
+    try {
+      JSON.parse(bindings)
+    } catch {
+      die('--bindings-json is not valid JSON')
+    }
+    command.push('--bindings-json', bindings)
 
     // Passed through from this shell, never invented here. The container's own
     // flag check is what actually decides, and it reads this value.

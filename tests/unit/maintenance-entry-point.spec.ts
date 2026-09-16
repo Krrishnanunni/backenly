@@ -143,8 +143,24 @@ describe('executing needs the exact confirmation', () => {
   it('refuses without bindings, rather than generating any SQL', () => {
     const r = run([...IDS, '--mode', 'execute', '--confirm', 'p1:plan-abc:ver-abc'], ON)
     expect(r.status).toBe(2)
-    expect(r.output).toMatch(/--bindings <file\.json> is required/)
+    expect(r.output).toMatch(/--bindings <file\.json> or --bindings-json <json> is required/)
     expect(r.output).toMatch(/typed data, never generated SQL/)
+  })
+
+  it('accepts inline bindings, which is the only form a container can use', () => {
+    // The container has no file to read. Bindings are the operator's mapping,
+    // not the plan — the plan is still rebuilt from the database.
+    const r = run([...IDS, '--mode', 'execute', '--confirm', 'p1:plan-abc:ver-abc', '--bindings-json', '{}'], ON)
+    expect(r.output).not.toMatch(/is required to execute/)
+  })
+
+  it('refuses both binding forms at once, rather than picking one', () => {
+    const r = run(
+      [...IDS, '--mode', 'execute', '--confirm', 'p1:plan-abc:ver-abc', '--bindings', 'b.json', '--bindings-json', '{}'],
+      ON,
+    )
+    expect(r.status).toBe(2)
+    expect(r.output).toMatch(/not both/)
   })
 
   it('gets past the argument gates with everything correct, and only then reads', () => {
