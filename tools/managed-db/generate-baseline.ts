@@ -32,15 +32,29 @@ export const BASELINE_LOCK_PATH = join('tools', 'managed-db', 'baseline.lock.jso
 
 export interface BaselineLock {
   migration: string
+  /** Prefixed `sha256:`. See the note on `sha256()` below. */
   sha256: string
   bytes: number
   prismaVersion: string
+  /** Prefixed `sha256:`. */
   schemaSha256: string
   generatedAt: string
   command: string
 }
 
-const sha256 = (value: Buffer | string) => createHash('sha256').update(value).digest('hex')
+/**
+ * A digest, written the way OCI image digests, SRI hashes and Go checksums
+ * write one: labelled with the algorithm that produced it.
+ *
+ * Not decoration. A bare 64-character hex string in a tracked JSON file is
+ * indistinguishable from a signing key, both to a reader and to the
+ * publish-time credential scanner, which flags exactly that shape because a
+ * live JWT_SECRET once sat in two tracked files and every prefix-shaped rule
+ * missed it. The prefix says what the value is instead of asking the scanner to
+ * make an exception for this file — an exception being the mechanism by which a
+ * scanner stops catching things.
+ */
+const sha256 = (value: Buffer | string) => `sha256:${createHash('sha256').update(value).digest('hex')}`
 
 export function generateBaselineSql(root: string): { sql: string; prismaVersion: string; schemaSha256: string } {
   const schemaPath = join(root, 'prisma', 'schema.prisma')

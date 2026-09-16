@@ -17,7 +17,10 @@ import { assembleMigrationWorkspace, CANONICAL_DIR } from '../../tools/managed-d
 const ROOT = join(__dirname, '..', '..')
 const sql = readFileSync(join(ROOT, BASELINE_SQL_PATH), 'utf8')
 const lock: BaselineLock = JSON.parse(readFileSync(join(ROOT, BASELINE_LOCK_PATH), 'utf8'))
-const sha256 = (v: string) => createHash('sha256').update(v).digest('hex')
+// Prefixed, matching generate-baseline.ts: a bare 64-char hex string in a
+// tracked file is indistinguishable from a signing key, and the publish-time
+// credential scanner flags that shape for good reason.
+const sha256 = (v: string) => `sha256:${createHash('sha256').update(v).digest('hex')}`
 
 describe('the canonical baseline', () => {
   it('is pinned by digest', () => {
@@ -31,8 +34,12 @@ describe('the canonical baseline', () => {
     // chain still produces schema.prisma is a database-backed check
     // (tools/managed-db/verify-canonical-history.ts), because Prisma needs a
     // shadow database to answer it.
-    expect(lock.schemaSha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(lock.schemaSha256).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(lock.prismaVersion).toBe('5.22.0')
+    // It is NOT the current schema: the ledger migration added models after the
+    // squash, so a lock recording today's schema would be claiming the baseline
+    // contains them.
+    expect(lock.schemaSha256).not.toBe(sha256(readFileSync(join(ROOT, 'prisma', 'schema.prisma'), 'utf8')))
   })
 
   it('owns the canonical schema and nothing else, in every migration', () => {
