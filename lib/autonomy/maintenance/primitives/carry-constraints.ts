@@ -243,21 +243,30 @@ export async function carryConstraints(
   }
 
   // The product's own verb, the same one that created the source constraint.
+  // Same call shape as `add-structure.ts`: one action, replanning OFF. The
+  // sixth argument is what stops a failed constraint being turned into some
+  // other action — replanning reached for "I don't know how to undefined" the
+  // first time this was called with the wrong argument shape.
   const { executeAction } = await import('@/lib/ai/minimal-executor')
   const expression = `"${targetColumn}" IN (${derived.map(sqlLiteral).join(', ')})`
   const result = await executeAction(
     {
-      type: 'ADD_CONSTRAINT',
-      payload: { tableName: table, constraintType: 'check', constraintName, expression },
+      action: 'ADD_CONSTRAINT',
+      params: { tableName: table, columnName: targetColumn, constraintType: 'check', constraintName, expression },
     } as never,
-    { projectId, allowReplan: false } as never,
+    projectId,
+    undefined,
+    0,
+    undefined,
+    false,
   )
-  if ((result as { success?: boolean })?.success === false) {
+  if (!(result as { success?: boolean })?.success) {
+    const r = result as { message?: string; error?: string }
     return {
       applied: false,
       sourceDomain,
       derivedDomain: derived,
-      refusal: `ADD_CONSTRAINT refused: ${(result as { error?: string })?.error ?? 'unknown'}`,
+      refusal: `ADD_CONSTRAINT refused: ${r?.error ?? r?.message ?? 'unknown'}`,
     }
   }
 
