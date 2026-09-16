@@ -172,29 +172,42 @@ Production acceptance fixture — ${mode}
     '--mode', mode,
   ]
 
-  if (mode === 'execute') {
-    const expected = `${projectId}:${planId}:${planVersion}`
-    if (argValue('--confirm') !== expected) die(`--confirm must be exactly "${expected}"`)
-    command.push('--confirm', expected)
-
-    // Inline JSON, on the command rather than in the environment: the
-    // container has no file to read, and this is the operator's mapping, not
-    // the plan. The plan itself is still rebuilt inside the container.
-    const bindings = argValue('--bindings-json')
-    if (!bindings) die('--bindings-json <json> is required to execute')
+  // Inline JSON, on the command rather than in the environment: the container
+  // has no file to read, and this is the operator's mapping, not the plan. The
+  // plan itself is still rebuilt inside the container.
+  //
+  // Carried for BOTH modes. A dry run without bindings cannot report whether
+  // they are complete, and cannot name the column whose readers it inventories,
+  // which is most of what the report is for.
+  const bindings = argValue('--bindings-json')
+  if (bindings) {
     try {
       JSON.parse(bindings)
     } catch {
       die('--bindings-json is not valid JSON')
     }
     command.push('--bindings-json', bindings)
+  }
 
-    // Passed through from this shell, never invented here. The container's own
-    // flag check is what actually decides, and it reads this value.
+  // Passed through from this shell, never invented here. The container's own
+  // flag check is what actually decides, and it reads this value.
+  //
+  // A dry run reads it too, and must: "would this rung execute" is a different
+  // question from "would it execute in an environment that forbids writing",
+  // and the first is the one an operator is asking. The dry run still writes
+  // nothing — the flag changes what it REPORTS, not what it does.
+  if (process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS) {
+    environment.push({ name: 'ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS', value: 'true' })
+  }
+
+  if (mode === 'execute') {
+    const expected = `${projectId}:${planId}:${planVersion}`
+    if (argValue('--confirm') !== expected) die(`--confirm must be exactly "${expected}"`)
+    command.push('--confirm', expected)
+    if (!bindings) die('--bindings-json <json> is required to execute')
     if (!process.env.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS) {
       die('ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS is not set in this shell; nothing here can turn mutations on')
     }
-    environment.push({ name: 'ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS', value: 'true' })
   }
 
   for (const name of ['AUTONOMY_LEVEL', 'MAINTENANCE_APPROVED_PLAN_VERSION', 'MAINTENANCE_APPROVAL_ID']) {
