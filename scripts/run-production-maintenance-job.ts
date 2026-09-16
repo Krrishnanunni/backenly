@@ -145,11 +145,19 @@ async function main(): Promise<void> {
     // reaches it: the schema, the tables, the columns and every statement are
     // fixed in scripts/maintenance-acceptance-fixture.ts.
     if (!projectId) die('--project is required')
-    if (mode !== 'prepare' && mode !== 'cleanup') die('--mode must be prepare or cleanup for --job fixture')
-    const confirmFlag = mode === 'prepare' ? '--confirm' : '--confirm-destroy'
-    if (argValue(confirmFlag) !== projectId) die(`${confirmFlag} must be exactly "${projectId}"`)
+    if (mode !== 'prepare' && mode !== 'cleanup' && mode !== 'inspect') {
+      die('--mode must be prepare, cleanup or inspect for --job fixture')
+    }
     entryPoint = ['node', '/app/fixture.cjs']
-    command = ['--mode', mode, '--project', projectId, confirmFlag, projectId]
+    command = ['--mode', mode, '--project', projectId]
+    // `inspect` writes nothing, so it needs no confirmation. The two that do
+    // write take different ones, so a shell-history re-run of prepare cannot
+    // delete the evidence it created.
+    if (mode !== 'inspect') {
+      const confirmFlag = mode === 'prepare' ? '--confirm' : '--confirm-destroy'
+      if (argValue(confirmFlag) !== projectId) die(`${confirmFlag} must be exactly "${projectId}"`)
+      command.push(confirmFlag, projectId)
+    }
 
     console.log(`
 Production acceptance fixture — ${mode}

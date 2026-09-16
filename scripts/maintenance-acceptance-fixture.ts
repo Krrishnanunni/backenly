@@ -59,6 +59,7 @@
  * inspectable.
  */
 
+import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/db'
 
 /** The only project this file will ever touch. */
@@ -319,11 +320,96 @@ async function cleanup(projectId: string): Promise<void> {
   )
 }
 
+/**
+ * Read the fixture's state. Writes nothing.
+ *
+ * The acceptance sequence has to observe production between rungs — whether the
+ * target column exists, whether the trigger is installed, whether the reader's
+ * bytes changed and came back — and there is no other read path into that
+ * database. Fixed queries over the fixture's own objects, like everything else
+ * in this file.
+ */
+async function inspect(projectId: string): Promise<void> {
+  const schema = schemaFor(projectId)
+  const q = <T = any>(sql: string, ...params: unknown[]) => prisma.$queryRawUnsafe<T[]>(sql, ...params)
+
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } })
+  if (!project) die(`project ${projectId} does not exist`)
+  if (project.name !== ACCEPTANCE_PROJECT_NAME) {
+    die(`project ${projectId} is named "${project.name}"; this only inspects the acceptance project`)
+  }
+
+  const columns = await q<{ column_name: string; data_type: string }>(
+    `SELECT column_name, data_type FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = 'sessions' ORDER BY ordinal_position`,
+    schema,
+  )
+  const counted = await q<{ n: bigint }>(`SELECT count(*)::bigint AS n FROM "${schema}"."sessions"`)
+  const triggers = await q<{ tgname: string }>(
+    `SELECT tgname FROM pg_trigger tg
+       JOIN pg_class c ON c.oid = tg.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1 AND c.relname = 'sessions' AND NOT tg.tgisinternal`,
+    schema,
+  )
+  const agree = columns.some(c => c.column_name === TARGET_COLUMN)
+    ? await q<{ n: bigint }>(
+        `SELECT count(*)::bigint AS n FROM "${schema}"."sessions"
+          WHERE "${TARGET_COLUMN}" IS DISTINCT FROM upper(status)`,
+      )
+    : null
+  const fn = await prisma.aiFunction.findFirst({
+    where: { projectId, name: FIXTURE_FUNCTION_NAME },
+    select: { id: true, generatedCode: true, status: true },
+  })
+  const jobs = await prisma.backgroundJob.findMany({
+    where: { projectId, type: 'maintenance_backfill' },
+    select: { id: true, status: true, attempts: true, result: true, error: true },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+  })
+  const executions = await prisma.maintenanceExecution.findMany({
+    where: { projectId },
+    select: { id: true, status: true, haltReason: true, planVersion: true },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+  })
+
+  console.log(
+    JSON.stringify(
+      {
+        projectId,
+        workspaceSchema: schema,
+        rows: Number(counted[0]?.n ?? 0),
+        columns: columns.map(c => `${c.column_name}:${c.data_type}`),
+        targetColumnPresent: columns.some(c => c.column_name === TARGET_COLUMN),
+        triggers: triggers.map(t => t.tgname),
+        rowsDisagreeingWithTransform: agree ? Number(agree[0]?.n ?? 0) : null,
+        reader: fn
+          ? {
+              id: fn.id,
+              status: fn.status,
+              readsStatus: /status/.test(fn.generatedCode),
+              readsTarget: new RegExp(`\b${TARGET_COLUMN}\b`).test(fn.generatedCode),
+              codeSha256: createHash('sha256').update(fn.generatedCode).digest('hex').slice(0, 16),
+            }
+          : null,
+        backfillJobs: jobs.map(j => ({ id: j.id, status: j.status, attempts: j.attempts, result: j.result, error: j.error })),
+        executions,
+      },
+      null,
+      2,
+    ),
+  )
+}
+
 async function main(): Promise<void> {
   const mode = arg('--mode')
   const projectId = arg('--project')
 
-  if (mode !== 'prepare' && mode !== 'cleanup') die('--mode must be prepare or cleanup')
+  if (mode !== 'prepare' && mode !== 'cleanup' && mode !== 'inspect') {
+    die('--mode must be prepare, cleanup or inspect')
+  }
   if (!projectId) die('--project <id> is required')
   if (!UUID.test(projectId)) die('--project must be a uuid')
 
@@ -338,6 +424,7 @@ async function main(): Promise<void> {
 
   console.log(`\nMaintenance acceptance fixture — ${mode}\n`)
   if (mode === 'prepare') await prepare(projectId)
+  else if (mode === 'inspect') await inspect(projectId)
   else await cleanup(projectId)
 
   await prisma.$disconnect().catch(() => {})

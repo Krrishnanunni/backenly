@@ -68,7 +68,7 @@ describe('the surface is two arguments wide', () => {
   })
 
   it('refuses a mode it does not have', () => {
-    expect(run(['--mode', 'seed', '--project', PROJECT]).output).toMatch(/--mode must be prepare or cleanup/)
+    expect(run(['--mode', 'seed', '--project', PROJECT]).output).toMatch(/--mode must be prepare, cleanup or inspect/)
   })
 
   it('refuses without a project', () => {
