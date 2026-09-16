@@ -371,6 +371,21 @@ async function inspect(projectId: string): Promise<void> {
   const counted = await queryWorkspaceAsOwner<{ n: bigint }>(
     projectId, `SELECT count(*)::bigint AS n FROM "${schema}"."sessions"`,
   )
+  // The policies on the fixture's own tables.
+  //
+  // `policy_fragmentation` competes with every other structural hypothesis, so
+  // when it is raised the diagnosis goes inconclusive and no plan can be built.
+  // Whether it is raised correctly is a question about these rows, and there is
+  // no other read path into this database. Fixed query, fixture's own schema.
+  const policies = await q<{
+    tablename: string; policyname: string; cmd: string; permissive: string; roles: string[]
+  }>(
+    `SELECT tablename, policyname, cmd, permissive, roles
+       FROM pg_policies
+      WHERE schemaname = $1 AND tablename IN ('sessions', 'users')
+      ORDER BY tablename, cmd, policyname`,
+    schema,
+  )
   const triggers = await q<{ tgname: string }>(
     `SELECT tgname FROM pg_trigger tg
        JOIN pg_class c ON c.oid = tg.tgrelid
@@ -416,6 +431,9 @@ async function inspect(projectId: string): Promise<void> {
                `${c.column_default ? `:default=${String(c.column_default).slice(0, 30)}` : ''}`,
         ),
         targetColumnPresent: columns.some(c => c.column_name === TARGET_COLUMN),
+        policies: policies.map(
+          p => `${p.tablename}.${p.cmd}:${p.policyname}:${p.permissive}:{${(p.roles ?? []).join(',')}}`,
+        ),
         triggers: triggers.map(t => t.tgname),
         rowsDisagreeingWithTransform: agree ? Number(agree[0]?.n ?? 0) : null,
         reader: fn

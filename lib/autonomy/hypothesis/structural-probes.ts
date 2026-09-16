@@ -68,10 +68,30 @@ export const policyOverlap: ProbeFn = async ctx => {
   const tables = members(ctx)
   const res = await queryWorkspaceSchema(
     ctx.projectId,
-    `SELECT tablename, cmd, count(*)::int AS n
-       FROM pg_policies
-      WHERE schemaname = $1 AND tablename = ANY($2::text[])
-      GROUP BY tablename, cmd
+    // PERMISSIVE only, and `ALL` expanded to the commands it covers.
+    //
+    // The comment above says "more than one permissive policy" and the query
+    // did not say that. RESTRICTIVE policies AND with everything else, so a
+    // permissive/restrictive pair is a composition, not a fragmentation — the
+    // same rule `drift-detector.ts:382` already applies. Counting them made
+    // this probe report `overlapping` for a shape that is not overlapping.
+    //
+    // The grouping was also wrong in the opposite direction: `cmd` is `ALL`
+    // for a policy that covers every command, and grouping that separately
+    // from `SELECT` hid the real overlap between an ALL policy and a
+    // per-command one — the exact case where the effective rule is not what
+    // either policy reads as.
+    `SELECT pp.tablename, x.cmd, count(*)::int AS n
+       FROM pg_policies pp
+       CROSS JOIN LATERAL unnest(
+         CASE WHEN pp.cmd = 'ALL'
+              THEN ARRAY['SELECT','INSERT','UPDATE','DELETE']
+              ELSE ARRAY[pp.cmd] END
+       ) AS x(cmd)
+      WHERE pp.schemaname = $1
+        AND pp.tablename = ANY($2::text[])
+        AND pp.permissive = 'PERMISSIVE'
+      GROUP BY pp.tablename, x.cmd
       HAVING count(*) > 1
       ORDER BY n DESC`,
     `workspace_${ctx.projectId}`,
