@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 
 export const metadata: Metadata = {
   title: 'Page Not Found',
@@ -72,7 +73,7 @@ export default function NotFound() {
             style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}
           >
             <Link
-              href="/"
+              href={CLOUD_CONTROL_PLANE ? '/' : '/app'}
               style={{
                 display: 'inline-block',
                 background: '#7c3aed',
@@ -84,29 +85,35 @@ export default function NotFound() {
                 textDecoration: 'none',
               }}
             >
-              Back to Backenly
+              {CLOUD_CONTROL_PLANE ? 'Back to Backenly' : 'Back to your dashboard'}
             </Link>
 
-            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.25rem' }}>
-              <Link
-                href="/pricing"
-                style={{ color: '#6b6b88', fontSize: '0.9rem', textDecoration: 'none' }}
-              >
-                Pricing
-              </Link>
-              <Link
-                href="/use-cases"
-                style={{ color: '#6b6b88', fontSize: '0.9rem', textDecoration: 'none' }}
-              >
-                Use cases
-              </Link>
-              <Link
-                href="/auth/signup"
-                style={{ color: '#6b6b88', fontSize: '0.9rem', textDecoration: 'none' }}
-              >
-                Get started free
-              </Link>
-            </div>
+            {/* Pricing, use cases and a signup CTA are the hosted service
+                selling itself. On a self-hosted deployment the operator has
+                already installed the product and these routes redirect to /app,
+                so the links would be both irrelevant and circular. */}
+            {CLOUD_CONTROL_PLANE && (
+              <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.25rem' }}>
+                <Link
+                  href="/pricing"
+                  style={{ color: '#6b6b88', fontSize: '0.9rem', textDecoration: 'none' }}
+                >
+                  Pricing
+                </Link>
+                <Link
+                  href="/use-cases"
+                  style={{ color: '#6b6b88', fontSize: '0.9rem', textDecoration: 'none' }}
+                >
+                  Use cases
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  style={{ color: '#6b6b88', fontSize: '0.9rem', textDecoration: 'none' }}
+                >
+                  Get started free
+                </Link>
+              </div>
+            )}
           </nav>
         </main>
       </body>

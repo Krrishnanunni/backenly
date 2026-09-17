@@ -17,18 +17,24 @@
  *
  * There is nothing to switch on a self-hosted deployment: one deployment is one
  * project, and organizations are Cloud control plane. So this shows who is
- * signed in and stops there. No dropdown affordance, no /api/org/list request
- * to a route this build does not serve.
+ * signed in and stops there. No dropdown affordance, no plan chip, and no
+ * /api/org/list request to a route this build does not serve.
  */
 
-export function OrgSwitcher({ fallbackName, plan }: { fallbackName: string; plan: string }) {
+/**
+ * `plan` is accepted and deliberately ignored.
+ *
+ * TopBar passes the literal "Free", which is a Cloud plan name. A self-hosted
+ * deployment has no plan: `selfHostedEntitlements()` leaves every ceiling null,
+ * so the chip was telling an operator with unlimited entitlements that they
+ * were on the free tier. Keeping the prop in the signature keeps this component
+ * swappable with the Cloud switcher, which does render a real plan.
+ */
+export function OrgSwitcher({ fallbackName }: { fallbackName: string; plan?: string }) {
   return (
     <div className="relative">
       <div className="flex items-center gap-1.5 px-1.5 h-8 rounded-md">
         <span className="text-[12.5px] text-zinc-300 truncate max-w-[140px]">{fallbackName}</span>
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 tracking-tight">
-          {plan}
-        </span>
       </div>
     </div>
   )

@@ -1,9 +1,10 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { notFound, useParams } from 'next/navigation'
 import { GitBranch } from 'lucide-react'
 import { InspectorPageHeader } from '@/components/inspector/InspectorPageHeader'
 import { BranchesPanel } from '@/components/branches/BranchesPanel'
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 
 /**
  * Preview Branches — "PRs for your backend." Clone the schema + data, let an
@@ -13,6 +14,11 @@ import { BranchesPanel } from '@/components/branches/BranchesPanel'
 export default function BranchesPage() {
   const params = useParams()
   const projectId = params.id as string
+
+  // The nav no longer links here off Cloud, but a typed URL or an old
+  // bookmark still resolves. Without this the page would render a shell whose
+  // every call answers 404.
+  if (!CLOUD_CONTROL_PLANE) notFound()
 
   return (
     <div className="min-h-screen bg-[#101116] flex flex-col text-white">

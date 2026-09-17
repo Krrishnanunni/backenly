@@ -45,9 +45,14 @@ interface MeUser {
  */
 const NAV = [
   { id: 'projects', title: 'Projects',          icon: FolderKanban, href: '/app',          match: (p: string) => p === '/app' || p === '/app/' },
-  { id: 'usage',    title: 'Usage',             icon: Gauge,        href: '/app/usage',    match: (p: string) => p.startsWith('/app/usage') },
+  // Usage is a billing-cycle surface: it reads /api/billing/usage (overlay-only)
+  // and renders consumption against plan ceilings. A self-hosted deployment has
+  // no billing cycle and no ceilings — every self-host entitlement is null —
+  // so the page could only ever show bars against infinity, and in the public
+  // build it showed "Could not load usage data" because its endpoint is absent.
   ...(CLOUD_CONTROL_PLANE
     ? ([
+        { id: 'usage',    title: 'Usage',             icon: Gauge,        href: '/app/usage',    match: (p: string) => p.startsWith('/app/usage') },
         { id: 'members',  title: 'Members',           icon: Users,        href: '/app/members',  match: (p: string) => p.startsWith('/app/members') },
         { id: 'billing',  title: 'Billing', icon: CreditCard,   href: '/app/billing',  match: (p: string) => p.startsWith('/app/billing') },
       ] as const)
@@ -107,9 +112,14 @@ export function OrgShell({ children }: { children: ReactNode }) {
           <span className="text-[12.5px] text-zinc-300 truncate max-w-[180px]">
             {user?.name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Personal'}
           </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 tracking-tight">
-            Free
-          </span>
+          {/* Plan chip is a Cloud concept. It was a hardcoded literal, so a
+              self-hosted deployment — which has unlimited entitlements — was
+              being told it was on a free tier. */}
+          {CLOUD_CONTROL_PLANE && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 tracking-tight">
+              Free
+            </span>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-1">

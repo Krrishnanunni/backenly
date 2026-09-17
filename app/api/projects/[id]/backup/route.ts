@@ -9,8 +9,15 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { withProjectValidation } from '@/lib/middleware/projectValidation'
 import { backupWorkspace, listBackups, restoreWorkspace } from '@/lib/services/workspace-backup'
+import { isCloudEdition } from '@/lib/edition/cloud-only'
+
+// Workspace backup/restore is a Backenly Cloud capability. 404 rather than 403:
+// on a self-hosted deployment the surface does not exist at all.
+const cloudOnly404 = () =>
+  NextResponse.json({ error: 'Not found', code: 'CLOUD_ONLY_FEATURE' }, { status: 404 })
 
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  if (!isCloudEdition()) return cloudOnly404()
   const params = await props.params
   return withProjectValidation<any>(request, async (validated) => {
     const { projectId } = validated
@@ -20,6 +27,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
 }
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  if (!isCloudEdition()) return cloudOnly404()
   const params = await props.params
   return withProjectValidation<any>(request, async (validated) => {
     const { projectId } = validated
@@ -32,6 +40,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 }
 
 export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  if (!isCloudEdition()) return cloudOnly404()
   const params = await props.params
   return withProjectValidation<any>(request, async (validated) => {
     const { projectId } = validated

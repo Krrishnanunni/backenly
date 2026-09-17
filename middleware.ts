@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { domainRoutingMiddleware, shouldUseDomainRouting } from '@/lib/middleware/domainRouting'
 import { extractTokenFromHeader } from '@/lib/auth/jwt'
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 
 // ── Per-project CORS cache ────────────────────────────────────────────────────
 const _corsCache = new Map<string, { origins: string[]; expiresAt: number }>()
@@ -74,6 +75,41 @@ const publicPathPrefixes = [
   '/report/',       // shared change reports — access IS the revocable token, no session
   '/.well-known/',  // security.txt etc.
 ]
+
+// ✅ MARKETING SURFACES — the hosted service's shop window.
+//
+// A self-hosted deployment is somebody's own infrastructure. Serving Backenly's
+// landing page, pricing and competitor comparisons there is wrong twice over:
+// the operator has already installed the product so there is nothing to sell
+// them, and their internal host ends up publishing our marketing to whoever can
+// reach it. Supabase self-hosted puts the dashboard at `/` and ships no
+// marketing at all; this matches that.
+//
+// These redirect to /app rather than 404 so that an indexed or bookmarked link
+// lands the operator in the product instead of on an error page. `/login`,
+// `/signup` and `/auth/*` are NOT here — they are how you reach the product.
+const marketingRoutes = [
+  '/',
+  '/pricing',
+  '/contact',
+  '/privacy',
+  '/terms',
+  '/refund-policy',
+]
+const marketingPrefixes = [
+  '/alternatives',
+  '/comparisons',
+  '/features',
+  '/use-cases',
+  '/resources',
+  '/mcp',
+  '/quickstart',
+]
+
+function isMarketingPath(pathname: string): boolean {
+  if (marketingRoutes.includes(pathname)) return true
+  return marketingPrefixes.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))
+}
 
 // ✅ PUBLIC API ROUTES (Auth endpoints + webhook receivers)
 const publicApiRoutes = [
@@ -282,6 +318,11 @@ export async function middleware(request: NextRequest) {
   // ✅ Auth pages
   if (pathname.startsWith('/auth')) {
     return applyCorsHeaders(NextResponse.next())
+  }
+
+  // 🚫 Marketing belongs to Cloud. Off Cloud, send the operator to the product.
+  if (!CLOUD_CONTROL_PLANE && isMarketingPath(pathname)) {
+    return NextResponse.redirect(new URL('/app', request.url))
   }
 
   // ✅ Exact public routes
