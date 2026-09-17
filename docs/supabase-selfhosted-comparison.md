@@ -1,8 +1,19 @@
 # Supabase self-hosted vs Backenly self-hosted
 
-**Status:** evidence gathered, gap register open. This is a gate, not notes — the
-classification in Part 3 decides what gets built, and the "will not build"
-register is as binding as the build list.
+**Status (2026-09-17):** evidence gathered, gap register open. This is a gate,
+not notes — the classification in Part 3 decides what gets built, and the
+"will not build" register is as binding as the build list.
+
+Where the work actually stands, so nobody reads "main is green" as "finished":
+
+| | state |
+|---|---|
+| Self-host core correctness and security | **largely closed and verified.** Restore no longer destroys data, corrupt archives are rejected before the live schema is touched, failures roll back, `ON_ERROR_STOP` prevents false success, the backup role has a proven minimal privilege contract, and the edition boundary is regression-locked. |
+| Self-host parity and operator UX | **not started.** One-command self-host, FK/constraint UI, backup/restore UI, logs explorer, read-only SQL workspace, migration history, webhooks UI, and the wider Auth/storage/extensions gaps in Part 2. |
+| Cloud production validation | **pending.** Staging with the private overlay and production-style credentials, then build once and promote that exact digest. |
+
+Sequence: **Cloud staging validation first**, then the parity tranche in the
+order given below. No parity feature starts before staging restore passes.
 
 **Supabase pinned at:** `8dc9206f569e823e715cbc391f25cb53f9938782`
 (committed 2026-09-16, recorded by `setup.sh` in `.supabase-version`).
@@ -282,8 +293,11 @@ route is already a typed action rather than a SQL passthrough.
 
 ### Class (a0) — defects surfaced by verification, fix before any feature work
 
-> Items 6-9 were **fixed on 2026-09-17** — see Part 7. Items 1-5 remain open,
-> and item 1 is now *more* urgent because backups became Cloud-only.
+> **Closed 2026-09-17:** items 1, 2 and 6-9. **Still open:** 3, 4, 5 and 10.
+>
+> The dangerous class is done — restore no longer destroys data, and the backup
+> privilege contract is documented and proven. What remains open here is
+> operator friction and CI hygiene, not data loss.
 
 These were not on any list before the two verification runs. They outrank the
 whole tranche because each one makes an existing, shipped promise untrue.
@@ -293,11 +307,18 @@ whole tranche because each one makes an existing, shipped promise untrue.
    dropped, psql runs with `ON_ERROR_STOP=1`, an empty result counts as failure,
    and a failed restore rolls the project back. Regression-locked, and the test
    was verified to fail against the old implementation.
-2. **Default self-host configuration makes backups unsafe off the Compose path.**
-   `BACKUP_DATABASE_URL` is undocumented and unset, so pg_dump runs as the
-   application role; that works on Compose only because the role happens to be a
-   superuser. On managed Postgres it reproduces the documented four-day outage.
-   Document it in `README.md` and `.env.example`, or default it.
+2. ~~**Default self-host configuration makes backups unsafe off the Compose path.**~~
+   **FIXED 2026-09-17.** `BACKUP_DATABASE_URL` is now documented in `README.md`
+   under "Backups" and in `.env.example`, with the minimal DDL. The privilege
+   contract is proven rather than asserted by
+   `__tests__/services/backup-restore-privileges.test.ts`, which builds a
+   `NOSUPERUSER NOBYPASSRLS` application role and a backup role holding
+   `CONNECT`, `USAGE`, `SELECT` and `BYPASSRLS` and nothing else. **No SUPERUSER
+   is required.** That work also found and fixed a second defect: restore ran
+   over the backup connection, so `--no-owner` left the backup role owning the
+   restored schema and every table in it — and `FORCE ROW LEVEL SECURITY` keys
+   on the owner. The dump now reads on that connection and the restore writes
+   on the application's.
 3. **`MASTER_ENCRYPTION_KEY` is an undocumented required secret.** A self-hoster
    following the README runs with a zero encryption key and only a log line says so.
 4. **The application connects to Postgres as a superuser** on the default Compose
@@ -323,6 +344,13 @@ whole tranche because each one makes an existing, shipped promise untrue.
 9. **An "Upgrade" button ships in the self-host build** (`app/app/usage/page.tsx:162`),
    routing to `/app/billing` — also overlay-private, so it is a 404 by construction.
    There is nothing to upgrade to on a self-hosted deployment.
+
+10. **`probe fixtures` is intermittently flaky.** Observed 2026-09-17: the job
+   failed twice on one PR and once on a bisect branch, then passed on re-run
+   with byte-identical code, while `main` passed six consecutive times. It cost
+   a wrong diagnosis before the re-run disproved it. A flaky job defeats the
+   same property a known-red job does — a genuinely new failure can hide in it
+   — so it belongs in this class rather than in the parity tranche.
 
    Items 6-9 are one defect class: **the self-host edition presents itself as a
    metered SaaS trial.** The edition seam (`CLOUD_CONTROL_PLANE`) already exists and
