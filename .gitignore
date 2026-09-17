@@ -210,3 +210,6 @@ jest-integration.json
 # last week's logic and report PASS.
 .rehearsal.b64
 .rehearsal-launcher.cjs
+
+# Local research evidence (Supabase comparison captures, screenshots). Never committed.
+evidence/
