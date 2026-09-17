@@ -88,7 +88,14 @@ jobs:
             LINE=$(echo "$OUT" | grep -E "^Tests:" | head -1 | sed 's/|/ /g')
             if [ "$CODE" -eq 0 ]; then
               echo "| $i | pass | ${LINE:-n/a} |" >> "$GITHUB_STEP_SUMMARY"
+              # Echoed to the log as well as the summary: a harness whose job is
+              # proving stability must leave evidence on success, not only on
+              # failure. Without this a green hunt is provable only from the
+              # exit code, which is exactly the kind of unverifiable claim this
+              # work exists to stop making.
+              echo "run $i: PASS  ${LINE:-n/a}"
             else
+              echo "run $i: FAIL  ${LINE:-n/a}"
               FAILED=$((FAILED + 1))
               echo "| $i | **FAIL** | ${LINE:-n/a} |" >> "$GITHUB_STEP_SUMMARY"
               # Keep the whole output of a failing run: the point of the hunt
