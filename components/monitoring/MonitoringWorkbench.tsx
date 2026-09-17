@@ -25,6 +25,7 @@ import {
   type DataPoint, type MetricStats, type Anomaly, type Incident, type PerformanceBreakdown,
 } from '@/lib/api/monitoring'
 import { KitButton, EmptyState, KIT } from '@/components/inspector/kit'
+import { LogsExplorer } from './LogsExplorer'
 
 type TimeRange = '1h' | '24h' | '7d' | '30d'
 
@@ -41,7 +42,7 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
   const [timeRange, setTimeRange] = useState<TimeRange>('24h')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeView, setActiveView] = useState<'overview' | 'performance'>('overview')
+  const [activeView, setActiveView] = useState<'overview' | 'performance' | 'logs'>('overview')
 
   const [metrics, setMetrics] = useState<MetricStats | null>(null)
   const [responseTimeData, setResponseTimeData] = useState<DataPoint[]>([])
@@ -217,6 +218,7 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
         {([
           ['overview', 'Overview'],
           ['performance', 'Performance'],
+          ['logs', 'Logs'],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -237,6 +239,18 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
       </div>
     </div>
   )
+
+  // Ahead of BOTH gates below, deliberately.
+  //
+  // Logs read a different endpoint and own their loading, empty and error
+  // states, so the workbench's shared spinner would block a panel that is
+  // already capable of showing its own. More importantly the "backend not
+  // live" gate would swallow this tab entirely: a deployment with no traffic
+  // still records system and auth logs, and sending that case to "nothing to
+  // watch yet" hides the very entries an operator opens this tab to read.
+  if (activeView === 'logs') {
+    return shell(<LogsExplorer projectId={projectId} />)
+  }
 
   // Backend not live — keep the chrome so the section still reads as itself.
   if (isBackendLive === false && !loading) {

@@ -188,3 +188,11 @@ __tests__/services/backup-restore-privileges.test.ts
 # fixture makes inference and the choice DISAGREE, and asserts on the catalog
 # rather than on what the executor reported.
 __tests__/database/constraint-picker.test.ts
+
+# The logs explorer's query. /api/logs answered "how many, and how many of each
+# severity" by loading every matching row into memory for a .length and four
+# .filter().length calls, then discarding them - a full table read per request
+# on a page whose search box fires on every change. Nothing caught it because
+# the ANSWERS were right, so this pins the answers AND the tenant scoping, with
+# a second project holding more rows of every severity.
+__tests__/database/logs-explorer-query.test.ts

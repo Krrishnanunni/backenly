@@ -42,11 +42,20 @@ setup('sign up the first operator', async ({ page, request, baseURL }) => {
     `registration failed (${res.status()}): ${await res.text()}`
   ).toBe(true)
 
+  // Register returns a token in its BODY and sets no cookie; login is what
+  // issues the `auth-token` cookie the app authenticates with. So the setup
+  // does what an operator does — sign up, then sign in — rather than lifting
+  // the token out of the register response and constructing a cookie by hand.
+  // A hand-built cookie would also pass if login were broken, which is exactly
+  // the failure this suite should not be blind to.
+  const login = await request.post('/api/auth/login', { data: { email, password } })
+  expect(login.ok(), `login failed (${login.status()}): ${await login.text()}`).toBe(true)
+
   // The cookie the application set, not one this file invented. Reading it back
   // from the context is what proves the session is real.
   const cookies = await request.storageState().then(s => s.cookies)
   const auth = cookies.find(c => c.name === 'auth-token')
-  expect(auth, 'no auth-token cookie was issued by /api/auth/register').toBeTruthy()
+  expect(auth, 'no auth-token cookie was issued by /api/auth/login').toBeTruthy()
 
   mkdirSync(dirname(STORAGE_STATE), { recursive: true })
   writeFileSync(
