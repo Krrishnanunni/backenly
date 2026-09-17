@@ -117,6 +117,13 @@ __tests__/edition/public-private-boundary.test.ts
 # something quietly in either direction; this is what notices.
 __tests__/edition/oss-surface.test.ts
 
+# The self-hosted build must not present itself as a hosted SaaS. A cold install
+# found marketing at the root, a hardcoded Free plan chip, an Upgrade CTA and a
+# Usage page whose endpoint ships only with the overlay. None of that shows up
+# in a diff, and it regresses the moment a nav item or a fetch is added without
+# thinking about edition. Reads committed files only; no database.
+__tests__/edition/self-host-surface-separation.test.ts
+
 # README.md is the acceptance script for a self-hosted install, so it is checked
 # against the module bootstrap renders its prerequisite guidance from. Compares
 # committed text to committed code; no database.
