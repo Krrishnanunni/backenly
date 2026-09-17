@@ -219,7 +219,7 @@ describe('with enough evidence to confirm a structural cause', () => {
     await q(`DROP SCHEMA IF EXISTS "${EVIDENCE_SCHEMA}" CASCADE`).catch(() => {})
   })
 
-  it('produces a full six-rung ladder and a report that stops at the human step', async () => {
+  it('produces a full seven-rung ladder and a report that stops at the human step', async () => {
     const r = await resolveMaintenancePlan({
       projectId: EVIDENCE_PROJECT,
       findingId: evidenceFindingId,
@@ -233,7 +233,11 @@ describe('with enough evidence to confirm a structural cause', () => {
 
     expect(r.plan.validity).toBe('executable')
     expect(r.plan.steps.map(s => s.kind)).toEqual([
-      'add_structure', 'dual_write', 'backfill', 'verify', 'switch_readers', 'contract',
+      // carry_constraints joined the ladder in fe080cef, which carries the
+      // source column's domain onto the column replacing it. Listed explicitly
+      // rather than matched loosely: the order of these rungs is the safety
+      // property, and a plan that reorders them should fail here.
+      'add_structure', 'carry_constraints', 'dual_write', 'backfill', 'verify', 'switch_readers', 'contract',
     ])
     expect(r.plan.humanOnlySteps.join(' ')).toMatch(/contract/)
 
@@ -246,18 +250,22 @@ describe('with enough evidence to confirm a structural cause', () => {
       autonomyLevel: 'AGGRESSIVE',
       approvedPlanVersion: r.plan.planVersion,
       mutationsEnvironmentEnabled: true,
+      // Keyed by ordinal, so inserting carry_constraints at 1 shifts every
+      // rung below it. A missing binding blocks its step and halts the ladder,
+      // which is what went unnoticed when that rung was added.
       bindings: {
         0: { kind: 'add_structure', verb: 'ADD_COLUMN', table: 'sessions', column: 'state', columnType: 'text' },
-        1: { kind: 'dual_write', table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'upper' } },
-        2: { kind: 'backfill', table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'upper' } },
-        3: { kind: 'verify', table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'upper' } },
-        4: { kind: 'switch_readers', table: 'sessions', sourceColumn: 'status', targetColumn: 'state' },
+        1: { kind: 'carry_constraints', table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'upper' } },
+        2: { kind: 'dual_write', table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'upper' } },
+        3: { kind: 'backfill', table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'upper' } },
+        4: { kind: 'verify', table: 'sessions', sourceColumn: 'status', targetColumn: 'state', transform: { kind: 'upper' } },
+        5: { kind: 'switch_readers', table: 'sessions', sourceColumn: 'status', targetColumn: 'state' },
       },
     })
 
     expect(report.verdict).toBe('WOULD_STOP_AWAITING_HUMAN_CONTRACT')
-    expect(report.steps.map(s => s.wouldExecute)).toEqual([true, true, true, true, true, false])
-    expect(report.steps[5].classification).toBe('human_only')
+    expect(report.steps.map(s => s.wouldExecute)).toEqual([true, true, true, true, true, true, false])
+    expect(report.steps[6].classification).toBe('human_only')
     expect(report.bindingsComplete).toBe(true)
     expect(report.ledgerWritten).toBe(false)
     expect(report.uncontrollableReaders).toBe('unknown-standing-fact')
