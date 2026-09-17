@@ -238,9 +238,42 @@ function startInfrastructure(): void {
   )
 }
 
+/** Ask the database a yes/no question through the Compose postgres service. */
+function psqlScalar(sql: string): string | null {
+  const user = envValue(readEnvLines(), 'POSTGRES_USER') || 'backenly_user'
+  const db = envValue(readEnvLines(), 'POSTGRES_DB') || 'backenly'
+  const r = capture('docker', [
+    'compose', ...COMPOSE, 'exec', '-T', 'postgres',
+    'psql', '-h', '127.0.0.1', '-U', user, '-d', db, '-tAc', sql,
+  ])
+  return r.code === 0 ? r.out.trim() : null
+}
+
 function createTables(): void {
   heading('creating the platform tables')
+
   run('npx', ['prisma', 'generate'], 'check the prisma schema')
+
+  // `prisma db push` runs ONCE, and only when the platform tables are absent.
+  //
+  // It is not idempotent against an installed deployment. The PostgREST support
+  // objects are created by SQL rather than by Prisma — a registry table and two
+  // event triggers that fire on schema DDL — so push sees objects its schema
+  // does not describe and sets out to drop them, which is what
+  // `--accept-data-loss` would authorise. Running it a second time failed with
+  // P1014 on `public.backenly_pgrst_schema_registry`; had it succeeded, it
+  // would have removed the registry the data plane reads to decide which
+  // schemas PostgREST serves.
+  //
+  // Found by the rerun assertion in CI, not by reasoning about it. The
+  // documented manual path only ever reaches this step once, so an installer
+  // that is safe to rerun has to check rather than repeat.
+  const present = psqlScalar("SELECT to_regclass('public.projects') IS NOT NULL")
+  if (present === 't') {
+    ok('platform tables already present; not re-pushing the schema')
+    return
+  }
+
   run('npx', ['prisma', 'db', 'push', '--accept-data-loss', '--skip-generate'],
     'check DATABASE_URL in .env points at the Compose stack')
   ok('schema in sync')

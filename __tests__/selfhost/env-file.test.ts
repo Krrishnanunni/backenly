@@ -20,7 +20,18 @@
 
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { randomBytes } from 'crypto'
 import { ensureEnvVar, envValue, isPlaceholder, setEnvVar } from '../../scripts/lib/env-file'
+
+/**
+ * A value with the shape of a real generated secret, built at runtime.
+ *
+ * Deliberately not a literal. A 64-character hex string in a source file is
+ * indistinguishable from a leaked key to any scanner worth having, and the OSS
+ * preflight correctly refused to publish this file when it was one. The test
+ * needs the SHAPE, not a fixed value.
+ */
+const looksGenerated = () => randomBytes(32).toString('hex')
 
 const COUNTER = () => {
   let n = 0
@@ -64,13 +75,16 @@ describe('isPlaceholder', () => {
   })
 
   it.each([
-    'a3f1c8e29b7d4a6f81e0c5b93d2a7f46e8c1b0a9d7f3e2c5b8a1d6f409e7c3b2',
     '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
     'hunter2',
     // Contains "your" but is not the template's `your-` prefix.
     'notyour-secret',
   ])('treats the real value %p as configured', value => {
     expect(isPlaceholder(value)).toBe(false)
+  })
+
+  it('treats a generated 64-char hex secret as configured', () => {
+    expect(isPlaceholder(looksGenerated())).toBe(false)
   })
 })
 
@@ -98,7 +112,7 @@ describe('ensureEnvVar', () => {
   })
 
   it('keeps a configured value, which is what makes a rerun safe', () => {
-    const real = 'a3f1c8e29b7d4a6f81e0c5b93d2a7f46e8c1b0a9d7f3e2c5b8a1d6f409e7c3b2'
+    const real = looksGenerated()
     const lines = [`JWT_SECRET=${real}`]
     expect(ensureEnvVar(lines, 'JWT_SECRET', COUNTER())).toBe('kept')
     expect(envValue(lines, 'JWT_SECRET')).toBe(real)

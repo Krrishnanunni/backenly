@@ -248,6 +248,18 @@ npm run db:generate && npm run db:push
 npm run bootstrap
 ```
 
+> **`db:push` belongs to this step only — do not rerun it later.**
+>
+> The PostgREST support objects are created by SQL in step 4, not by Prisma: a
+> registry table and two event triggers that fire on schema DDL. `prisma db
+> push` does not know about them, so on an installed deployment it treats them
+> as objects to drop, which is exactly what `--accept-data-loss` authorises.
+> The registry is what the data plane reads to decide which schemas PostgREST
+> serves, so losing it takes `/db/*` down.
+>
+> `npm run bootstrap` is the command that is safe to rerun. It is a reconciler
+> and repairs whatever is missing.
+
 **This first run is expected to exit 3.** Bootstrap creates the project row, its
 workspace schema and its signing secret, then reports what it cannot install
 itself. Its exit code is the state, and deployment automation should read it:
