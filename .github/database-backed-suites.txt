@@ -153,3 +153,12 @@ tests/integration/maintenance-resolve-db.spec.ts
 # development role is a superuser and superusers bypass RLS entirely, so a
 # superuser-only test would prove nothing about production.
 tests/integration/maintenance-rls-aware.spec.ts
+
+# Restore must never destroy a project and report success. It did: DROP plus
+# CREATE, then a dump whose own first statement is CREATE SCHEMA, an aborted
+# --single-transaction restore, and psql exiting 0 because ON_ERROR_STOP was
+# unset. Observed as 3 tables and 5 rows before, 0 tables after, success:true.
+# Needs a real database, a real pg_dump and a real psql: the defect lived in
+# the interaction between the dump's contents and psql's exit code, so any
+# mock would have tested the mock.
+__tests__/services/backup-restore-integrity.test.ts
