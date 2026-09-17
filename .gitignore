@@ -213,3 +213,4 @@ jest-integration.json
 
 # Local research evidence (Supabase comparison captures, screenshots). Never committed.
 evidence/
+.playwright/

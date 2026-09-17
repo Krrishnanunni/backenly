@@ -845,7 +845,9 @@ jobs:
   self-host-one-command:
     name: self-host one command
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Installs a deployment, reruns the installer, then builds the app and runs
+    # the browser suite against it. The Next build is the long pole.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -936,6 +938,43 @@ jobs:
             sleep 1
           done
           [ "$code" != "000" ] || { echo "postgrest never answered"; exit 1; }
+
+      # ── Browser coverage, on the deployment just installed ────────────────
+      #
+      # This job is the only place a REAL self-hosted deployment exists in CI,
+      # so it is where the browser suite belongs. `tests/e2e/` already held
+      # specs, but they assumed a session nothing created and were never wired
+      # in, so they were not evidence for anything. The `selfhost` project
+      # signs up through the real register route and asserts against the pages
+      # the install produced.
+      - name: install the browser
+        run: npx playwright install --with-deps chromium
+
+      - name: build and start the app
+        run: |
+          set -euo pipefail
+          npm run build
+          # Started detached and waited for. `npm run dev` would also work but
+          # rebuilds on demand, which makes the first navigation in every spec
+          # look like a slow page rather than a slow compile.
+          npm run start > app.log 2>&1 &
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/app || true)
+            if [ "$code" != "000" ]; then echo "  app answered $code after ${i}s"; break; fi
+            sleep 1
+          done
+          [ "$code" != "000" ] || { echo "the app never started"; tail -60 app.log; exit 1; }
+
+      - name: browser suite
+        env:
+          # The app is already running, started by the step above. Without this
+          # Playwright starts its own on the same port.
+          PLAYWRIGHT_SERVER_ALREADY_RUNNING: '1'
+        run: npx playwright test --project=selfhost
+
+      - name: app log on failure
+        if: failure()
+        run: tail -120 app.log || true
 
       - name: compose logs on failure
         if: failure()
