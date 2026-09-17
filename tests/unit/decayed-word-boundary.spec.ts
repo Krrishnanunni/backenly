@@ -66,16 +66,24 @@ describe('no decayed word boundaries in tracked source', () => {
   })
 })
 
+// The passwords here stay arbitrary on purpose: that is what these assertions
+// prove sanitizeError handles. The HOSTS are deliberately localhost, because
+// scripts/preflight-oss.ts treats a DSN pointed at a local host as benign and
+// only recognises the host when a port or path delimiter follows it, which is
+// why each of these carries an explicit :5432, and
+// flags one pointed anywhere else. A redaction test containing a
+// routable-looking DSN made that gate the only red job on main, and the gate's
+// own header is right that every false positive spends its credibility.
 describe('sanitizeError actually redacts', () => {
   it('masks the password in a connection string', () => {
-    const out = sanitizeError('failed: postgres://backenly_user:s3cr3t-p4ssw0rd@db.internal:5432/backenly')
+    const out = sanitizeError('failed: postgres://backenly_user:s3cr3t-p4ssw0rd@localhost:5432/backenly')
     expect(out).not.toContain('s3cr3t-p4ssw0rd')
     expect(out).toContain('postgres://backenly_user:***@')
   })
 
   it('masks every scheme and every occurrence', () => {
     const out = sanitizeError(
-      'primary postgresql://a:one-secret@h1/db and replica postgres://b:two-secret@h2/db',
+      'primary postgresql://a:one-secret@localhost:5432/db1 and replica postgres://b:two-secret@localhost:5432/db2',
     )
     expect(out).not.toContain('one-secret')
     expect(out).not.toContain('two-secret')
@@ -84,7 +92,7 @@ describe('sanitizeError actually redacts', () => {
   it('masks a connection string embedded mid-token', () => {
     // The boundary anchors the scheme; it must not become an excuse to miss a
     // URL that is quoted, parenthesised, or glued to preceding text.
-    const out = sanitizeError('DATABASE_URL="postgres://u:hunter2-hunter2@h/db"')
+    const out = sanitizeError('DATABASE_URL="postgres://u:hunter2-hunter2@localhost:5432/db"')
     expect(out).not.toContain('hunter2-hunter2')
   })
 
