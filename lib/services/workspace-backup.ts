@@ -328,36 +328,102 @@ export async function restoreWorkspace(
     return { success: false, error: `Backup file not found on disk: ${backup.filename}` }
   }
 
+  // Short enough to stay inside Postgres's 63-byte identifier limit:
+  // workspace_<uuid> is already 46 characters.
+  const asideName = `${schemaName}_pre${randomBytes(3).toString('hex')}`
+  const sqlPath = backup.filePath.replace('.gz', '.restore.sql')
+  let renamed = false
+
   try {
     const conn = buildConnection()
 
-    // Drop and recreate the schema
-    await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`)
-    await prisma.$executeRawUnsafe(`CREATE SCHEMA "${schemaName}"`)
-
-    // Decompress and restore
-    const sqlPath = backup.filePath.replace('.gz', '.restore.sql')
+    // Decompress BEFORE touching the live schema. A corrupt or truncated
+    // archive must fail while the project's data is still there.
     await pipeline(
       fs.createReadStream(/*turbopackIgnore: true*/ backup.filePath),
       zlib.createGunzip(),
       fs.createWriteStream(/*turbopackIgnore: true*/ sqlPath)
     )
 
-    // Same contract as the dump path: discrete argv, password in the child env.
+    // Move the live schema aside rather than dropping it.
+    //
+    // The previous implementation ran DROP + CREATE and then fed in a dump
+    // whose own first statement is `CREATE SCHEMA`. That collided, the
+    // --single-transaction restore aborted, psql still exited 0 because
+    // ON_ERROR_STOP was not set, and the function reported success over a
+    // schema it had just emptied. Every restore was silent total data loss.
+    //
+    // Renaming keeps the old data recoverable for the whole operation, so a
+    // failure anywhere below is survivable instead of terminal.
+    await prisma.$executeRawUnsafe(
+      `ALTER SCHEMA "${schemaName}" RENAME TO "${asideName}"`
+    ).then(
+      () => { renamed = true },
+      // Nothing to move aside is fine: restoring into an absent schema is the
+      // disaster-recovery case, and the dump creates it.
+      () => { renamed = false },
+    )
+
+    // ON_ERROR_STOP is what makes psql's exit code mean anything. Without it
+    // the restore above reported success over an aborted transaction.
     await execFileAsync(
       'psql',
-      [...conn.args, '--file', sqlPath, '--single-transaction'],
+      [...conn.args, '--file', sqlPath, '--single-transaction', '-v', 'ON_ERROR_STOP=1'],
       { timeout: 300_000, env: conn.env },
     )
 
+    // Belt and braces: psql exiting 0 is necessary, not sufficient. Confirm the
+    // schema exists and actually holds relations before destroying the aside.
+    const [{ count }] = await prisma.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT count(*)::bigint AS count
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relkind IN ('r', 'v', 'm', 'p')`,
+      schemaName,
+    )
+    if (Number(count) === 0) {
+      throw new Error(
+        `restore produced an empty schema: psql reported success but ${schemaName} holds no relations`
+      )
+    }
+
+    // Only now is the old copy safe to destroy.
+    if (renamed) {
+      await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${asideName}" CASCADE`)
+    }
     await fs.promises.unlink(/*turbopackIgnore: true*/ sqlPath).catch(() => {})
 
-    console.log(`[Restore] Restored ${projectId} from ${backup.filename}`)
+    console.log(`[Restore] Restored ${projectId} from ${backup.filename} (${count} relations)`)
 
     return { success: true, restoredFrom: backup.filename }
   } catch (err: any) {
-    console.error(`[Restore] Failed for ${projectId}:`, sanitizeError(err?.message ?? ''))
-    return { success: false, error: sanitizeError(err?.message ?? '') }
+    const message = sanitizeError(err?.message ?? '')
+    console.error(`[Restore] Failed for ${projectId}:`, message)
+
+    // Put the project back. The half-restored schema is the thing to discard;
+    // the aside is the thing to keep.
+    if (renamed) {
+      try {
+        await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`)
+        await prisma.$executeRawUnsafe(`ALTER SCHEMA "${asideName}" RENAME TO "${schemaName}"`)
+        console.error(`[Restore] Rolled ${projectId} back to its pre-restore state`)
+      } catch (rollbackErr: any) {
+        // Worth shouting about: the data still exists under asideName, and an
+        // operator needs to know that name to get it back by hand.
+        console.error(
+          `[Restore] ROLLBACK FAILED for ${projectId}. The pre-restore schema is ` +
+            `retained as "${asideName}" and must be renamed back manually: ` +
+            sanitizeError(rollbackErr?.message ?? '')
+        )
+        return {
+          success: false,
+          error: `${message} — rollback also failed; pre-restore data retained as ${asideName}`,
+        }
+      }
+    }
+
+    await fs.promises.unlink(/*turbopackIgnore: true*/ sqlPath).catch(() => {})
+    return { success: false, error: message }
   }
 }
 

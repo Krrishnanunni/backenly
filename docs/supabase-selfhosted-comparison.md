@@ -288,12 +288,11 @@ route is already a typed action rather than a SQL passthrough.
 These were not on any list before the two verification runs. They outrank the
 whole tranche because each one makes an existing, shipped promise untrue.
 
-1. **Restore silently destroys the schema it was asked to recover.** Part 6.
-   `restoreWorkspace` pre-creates the schema the dump also creates, the
-   `--single-transaction` restore aborts, psql exits 0 without `ON_ERROR_STOP`,
-   and the API reports success over an empty schema. One-line fix, validated.
-   **Nothing about backups may be claimed externally until this ships.**
-   `lib/services/workspace-backup.ts:328-347`
+1. ~~**Restore silently destroys the schema it was asked to recover.**~~
+   **FIXED 2026-09-17**, see Part 6. The schema is now moved aside rather than
+   dropped, psql runs with `ON_ERROR_STOP=1`, an empty result counts as failure,
+   and a failed restore rolls the project back. Regression-locked, and the test
+   was verified to fail against the old implementation.
 2. **Default self-host configuration makes backups unsafe off the Compose path.**
    `BACKUP_DATABASE_URL` is undocumented and unset, so pg_dump runs as the
    application role; that works on Compose only because the role happens to be a
@@ -619,10 +618,28 @@ Observed state **after** that "successful" restore:
 4. **psql exits 0** — `ON_ERROR_STOP` is not set — so `execFileAsync` never throws.
 5. `restoreWorkspace` returns `{ success: true }` over an empty schema.
 
-**The fix is one line, and was validated:** dropping the schema *without*
-pre-creating it, with `-v ON_ERROR_STOP=1`, restored the same dump perfectly —
-3 tables, all 5 rows, 14 indexes, 9 policies, 39 grants, and the data plane back
-to 200.
+**FIXED 2026-09-17.** The one-line diagnosis was right, but the fix went
+further than restoring the error, because "DROP then fail" is terminal however
+loud the failure is. `restoreWorkspace` now:
+
+1. decompresses **before** touching the live schema, so a corrupt archive fails
+   while the data is still there;
+2. **renames** the live schema aside instead of dropping it, so the pre-restore
+   copy exists for the whole operation;
+3. runs psql with `-v ON_ERROR_STOP=1`, which is what makes its exit code mean
+   anything;
+4. counts the relations the restore produced and treats zero as a failure, because
+   psql exiting 0 is necessary and not sufficient — that is precisely how the
+   original defect reported success;
+5. drops the aside only after that check passes, and on any failure drops the
+   half-restored schema and renames the aside back.
+
+If the rollback itself fails, the error names the retained schema so an operator
+can recover by hand rather than discovering the loss later.
+
+Locked by `__tests__/services/backup-restore-integrity.test.ts` (real database,
+real pg_dump, real psql). **Verified to catch the original defect: 3 of its 4
+tests fail against the pre-fix implementation.**
 
 That the restore path has never run end to end is consistent with
 `audit-ui-coverage`: the backup API has **zero dashboard callers**.
@@ -705,7 +722,8 @@ Settings` — **no Branches**, **no Free chip** — and both removed pages rende
 
 ### Consequence that must not be lost
 
-**The restore bug in Part 6 is now a Cloud-only bug, which raises its severity.**
-It is no longer reachable on self-host, so it can no longer be found by a
-self-hoster — it can only be hit by a paying Cloud customer restoring real data.
-Class (a0) item 1 stands, and is now more urgent rather than less.
+**The restore bug in Part 6 became a Cloud-only bug, which raised its severity
+rather than lowering it.** Once backups were Cloud-only it could no longer be
+found by a self-hoster; only a paying customer restoring real data would hit it.
+That is why it was fixed first, before any parity work and before Cloud
+promotion. Fixed 2026-09-17.
