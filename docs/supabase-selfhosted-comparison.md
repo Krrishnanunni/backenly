@@ -321,10 +321,17 @@ whole tranche because each one makes an existing, shipped promise untrue.
    on the application's.
 3. **`MASTER_ENCRYPTION_KEY` is an undocumented required secret.** A self-hoster
    following the README runs with a zero encryption key and only a log line says so.
+   **Lands in tranche 01:** the installer should generate it, or require it and
+   refuse to proceed. A zero key must not be a silent default outside development.
 4. **The application connects to Postgres as a superuser** on the default Compose
-   path. Needs an explicit decision, not a default.
+   path. Needs an explicit decision, not a default. **Lands in tranche 01:** the
+   installer is where the role model gets decided — elevated bootstrap
+   credentials separated from the application credential, with the intended role
+   properties regression-tested. The backup work already proved the
+   non-superuser path works, so this is a decision, not a capability to build.
 5. **Bootstrap's expected path prints four raw Prisma errors before its summary.**
    Cosmetic, but it is the first thing a new self-hoster sees and it reads as a crash.
+   **Lands in tranche 01**, which is the only item that rewrites the install path.
 6. **A self-hosted deployment serves the cloud marketing site at `/`.** Part 5,
    item 7. Root should resolve to the dashboard (or to login when signed out),
    the way Supabase self-hosted does; the marketing routes should not be built
@@ -358,21 +365,46 @@ whole tranche because each one makes an existing, shipped promise untrue.
 
 ### Revised tranche (post-verification)
 
-Reordered from the original proposal: verification moved backups ahead of logs,
-because a backups panel is a capability Supabase self-hosted does not ship at
-all, whereas a logs explorer closes a parity gap against a feature Supabase
-itself puts behind an opt-in override. Class (a0) defects come first regardless.
+Reordered twice. Verification moved backups ahead of logs, because a backups
+panel is a capability Supabase self-hosted does not ship at all, whereas a logs
+explorer closes a parity gap against a feature Supabase itself puts behind an
+opt-in override. Then the surviving class (a0) items were folded into the work
+that already touches the install path, rather than left as isolated cleanup.
 
 | # | Work | Class |
 |---|---|---|
-| 0 | Fix the restore path; document `BACKUP_DATABASE_URL` and `MASTER_ENCRYPTION_KEY` | (a0) |
-| 1 | One-command self-host | (a) |
-| 2 | FK picker + column constraints | (c) |
-| 3 | Backup / restore UI — only after item 0 | (c) |
-| 4 | Logs explorer | (c) |
-| 5 | Read-only SQL workspace | (a) |
-| 6 | Migration-history UI | (c) |
-| 7 | Webhooks UI | (c) |
+| — | **Cloud staging restore validation** — private overlay, production-style credentials, the full backup/restore sequence. Build the image once, test that digest, promote **the same** digest. | gate |
+| 01 | **One-command self-host**, carrying a0 items 3, 4 and 5 | (a) + (a0) |
+| 02 | **Fix the `probe fixtures` flake** (a0 item 10) | (a0) |
+| 03 | FK picker + column constraints | (c) |
+| 04 | Backup / restore UI | (c) |
+| 05 | Logs explorer | (c) |
+| 06 | Read-only SQL workspace | (a) |
+| 07 | Migration-history UI | (c) |
+| 08 | Webhooks UI | (c) |
+
+**Nothing in 01-08 starts before the staging restore passes.** Backups are
+Cloud-only now, so that validation is the only place the restore path is
+exercised against real credentials on real infrastructure.
+
+**Why 3, 4 and 5 belong inside 01.** All three are install-path decisions, and
+01 is the only tranche item that rewrites the install path:
+
+- **a0 3 — `MASTER_ENCRYPTION_KEY`.** The installer should generate it, or
+  require it explicitly and refuse to proceed. A zero key must not be a silent
+  default outside development.
+- **a0 4 — the application connects as a Postgres superuser.** The installer is
+  where the role model gets decided: elevated bootstrap credentials separated
+  from the normal application credential, with the intended role properties
+  regression-tested. The backup work already proved the non-superuser path
+  works, so this is a decision to make rather than a capability to build.
+- **a0 5 — bootstrap prints raw Prisma errors on its expected path.** Pure
+  install-path UX; it is the first thing a new self-hoster sees.
+
+**Why 02 sits near the front.** An intermittent gate makes every later
+diagnosis slower and less trustworthy. It already produced one wrong conclusion
+during this audit. Fixing it before the feature work means a red job in 03-08
+can be believed.
 
 ### Class (a) — genuine, needs backend work
 
