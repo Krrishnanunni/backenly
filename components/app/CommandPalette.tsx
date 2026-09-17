@@ -80,7 +80,9 @@ export function CommandPalette() {
           { id: 'p-integrations', label: 'Integrations',  icon: Zap,             category: 'Project',  action: go(`${base}/integrations`),  keywords: ['stripe', 'connectors', 'keys'] },
           { id: 'p-autonomy',     label: 'Autonomy',      icon: Bot,             category: 'Project',  action: go(`${base}/autonomy`),      keywords: ['self-healing', 'review', 'approvals', 'loop'] },
           { id: 'p-monitoring',   label: 'Monitoring',    icon: Activity,        category: 'Project',  action: go(`${base}/monitoring`),    keywords: ['metrics', 'health', 'logs', 'status'] },
-          { id: 'p-branches',     label: 'Branches',      icon: GitBranch,       category: 'Project',  action: go(`${base}/branches`),      keywords: ['preview', 'environments'] },
+          ...(CLOUD_CONTROL_PLANE
+            ? [{ id: 'p-branches',     label: 'Branches',      icon: GitBranch,       category: 'Project',  action: go(`${base}/branches`),      keywords: ['preview', 'environments'] }]
+            : []),
           { id: 'p-deploy',       label: 'Deploy',        icon: Rocket,          category: 'Project',  action: go(`${base}/deploy`),        keywords: ['publish', 'release', 'rollback'] },
           { id: 'p-connect',      label: 'Connect agent', icon: Cable,           category: 'Project',  action: go(`${base}/connect`),       keywords: ['mcp', 'cursor', 'claude', 'agent', 'sdk', 'api key'] },
           { id: 'p-settings',     label: 'Project settings', icon: Settings,     category: 'Project',  action: go(`${base}/settings`),      keywords: ['config', 'keys', 'danger'] },

@@ -107,7 +107,15 @@ export default function DashboardPage() {
     }
     if (response.status === 403) {
       const errData = await response.json().catch(() => ({}))
-      setLimitError(errData.error || 'You have reached your project limit on the free plan.')
+      // Off Cloud a 403 here is PROJECT_CREATION_UNSUPPORTED — architectural,
+      // not a tier ceiling. "Your free plan" would be both wrong and an
+      // upsell on a deployment with nothing to sell.
+      setLimitError(
+        errData.error ||
+          (CLOUD_CONTROL_PLANE
+            ? 'You have reached your project limit on the free plan.'
+            : 'This deployment hosts one project. That is architectural, not a limit that can be lifted.')
+      )
       return null
     }
     if (!response.ok) throw new Error('Failed to create project')
@@ -360,13 +368,15 @@ export default function DashboardPage() {
             <div className="p-5">
               <p className="text-[12.5px] leading-5 text-zinc-300">{limitError}</p>
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => router.push('/app/billing')}
-                  className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200"
-                >
-                  Upgrade
-                </button>
+                {CLOUD_CONTROL_PLANE && (
+                  <button
+                    type="button"
+                    onClick={() => router.push('/app/billing')}
+                    className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200"
+                  >
+                    Upgrade
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setLimitError(null)}

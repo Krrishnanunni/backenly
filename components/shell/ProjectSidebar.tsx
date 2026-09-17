@@ -37,6 +37,8 @@ import { FrontendConnectionPill } from '@/components/inspector/FrontendConnectio
 
 // ── Section registry ─────────────────────────────────────────────────────────
 
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
+
 interface NavItem {
   id: string
   title: string
@@ -80,7 +82,12 @@ const NAV: NavGroup[] = [
     items: [
       { id: 'autonomy',   title: 'Autonomy',   icon: Bot,      href: '/autonomy',   match: ['/autonomy'] },
       { id: 'monitoring', title: 'Monitoring', icon: Activity, href: '/monitoring', match: ['/monitoring'] },
-      { id: 'branches',   title: 'Branches',   icon: GitBranch,href: '/branches',   match: ['/branches'] },
+      // Preview branches are a Cloud capability: the engine refuses off Cloud
+      // (lib/branches/engine.ts) and the routes answer 404, so listing the item
+      // here would offer a control for work that cannot happen.
+      ...(CLOUD_CONTROL_PLANE
+        ? [{ id: 'branches', title: 'Branches', icon: GitBranch, href: '/branches', match: ['/branches'] } as NavItem]
+        : []),
       { id: 'deploy',     title: 'Deploy',     icon: Rocket,   href: '/deploy',     match: ['/deploy'] },
     ],
   },

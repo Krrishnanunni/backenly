@@ -15,7 +15,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { notFound, useRouter } from 'next/navigation'
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import { Database, HardDrive, Bot, Activity, Users, ArrowUpRight, Loader2, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react'
 import { OrgShell } from '@/components/shell/OrgShell'
 import { SectionTitle, KitButton, KitNote, KitCard, KitCardHeader, KitCardBody } from '@/components/inspector/kit'
@@ -113,6 +114,11 @@ function Meter({
 }
 
 export default function UsagePage() {
+  // Billing-cycle surface: reads /api/billing/usage, which ships only with the
+  // Cloud overlay, and plots consumption against plan ceilings that a
+  // self-hosted deployment does not have.
+  if (!CLOUD_CONTROL_PLANE) notFound()
+
   const router = useRouter()
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [activity, setActivity] = useState<AutonomyActivity | null>(null)

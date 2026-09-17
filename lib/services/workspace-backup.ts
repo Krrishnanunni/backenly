@@ -27,6 +27,7 @@ import * as path from 'path'
 import * as zlib from 'zlib'
 import { pipeline } from 'stream/promises'
 import { prisma } from '@/lib/db/prisma'
+import { assertCloudEdition, isCloudEdition } from '@/lib/edition/cloud-only'
 
 const execFileAsync = promisify(execFile)
 
@@ -193,6 +194,9 @@ export interface BackupResult {
  * data is captured. Returns the file path of the created backup.
  */
 export async function backupWorkspace(projectId: string): Promise<BackupResult> {
+  // Before the try: the catch below persists a `failed` WorkspaceBackup row,
+  // and an edition refusal is not a backup failure to record.
+  assertCloudEdition('Workspace backups')
   const schemaName = `workspace_${projectId}`
   const backupDir = getBackupDir(projectId)
   const filename = getBackupFilename()
@@ -305,6 +309,7 @@ export async function restoreWorkspace(
   projectId: string,
   backupId?: string
 ): Promise<RestoreResult> {
+  assertCloudEdition('Workspace backups')
   const schemaName = `workspace_${projectId}`
 
   // Find the backup to restore from
@@ -359,6 +364,8 @@ export async function restoreWorkspace(
 // ─── List Backups ─────────────────────────────────────────────────────────────
 
 export async function listBackups(projectId: string) {
+  // Reading "which backups exist" has a correct answer off Cloud: none.
+  if (!isCloudEdition()) return []
   return prisma.workspaceBackup.findMany({
     where: { projectId },
     orderBy: { createdAt: 'desc' },
@@ -452,6 +459,11 @@ export async function pruneOldBackups(
  * Skips projects that already have a backup today.
  */
 export async function runDailyBackups(): Promise<{ ran: number; succeeded: number; failed: number }> {
+  // The scheduler ticks on every deployment. Return rather than throw: a
+  // self-hosted install has nothing to back up here, and an exception once a
+  // day would read as a broken scheduler.
+  if (!isCloudEdition()) return { ran: 0, succeeded: 0, failed: 0 }
+
   const today = new Date()
   today.setUTCHours(0, 0, 0, 0)
 
