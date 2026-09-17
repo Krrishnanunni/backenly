@@ -12,8 +12,9 @@ Where the work actually stands, so nobody reads "main is green" as "finished":
 | Self-host parity and operator UX | **not started.** One-command self-host, FK/constraint UI, backup/restore UI, logs explorer, read-only SQL workspace, migration history, webhooks UI, and the wider Auth/storage/extensions gaps in Part 2. |
 | Cloud production validation | **pending.** Staging with the private overlay and production-style credentials, then build once and promote that exact digest. |
 
-Sequence: **Cloud staging validation first**, then the parity tranche in the
-order given below. No parity feature starts before staging restore passes.
+Sequence: **CI-01 (stabilize the flaky job), then Cloud staging validation**,
+then the parity tranche in the order given below. The gate blocks product work,
+not the work required to make the gate itself reliable.
 
 **Supabase pinned at:** `8dc9206f569e823e715cbc391f25cb53f9938782`
 (committed 2026-09-16, recorded by `setup.sh` in `.supabase-version`).
@@ -373,19 +374,37 @@ that already touches the install path, rather than left as isolated cleanup.
 
 | # | Work | Class |
 |---|---|---|
+| CI-01 | **Stabilize `probe fixtures`** (a0 item 10) — pre-gate | (a0) |
 | — | **Cloud staging restore validation** — private overlay, production-style credentials, the full backup/restore sequence. Build the image once, test that digest, promote **the same** digest. | gate |
 | 01 | **One-command self-host**, carrying a0 items 3, 4 and 5 | (a) + (a0) |
-| 02 | **Fix the `probe fixtures` flake** (a0 item 10) | (a0) |
-| 03 | FK picker + column constraints | (c) |
-| 04 | Backup / restore UI | (c) |
-| 05 | Logs explorer | (c) |
-| 06 | Read-only SQL workspace | (a) |
-| 07 | Migration-history UI | (c) |
-| 08 | Webhooks UI | (c) |
+| 02 | FK picker + column constraints | (c) |
+| 03 | Backup / restore UI | (c) |
+| 04 | Logs explorer | (c) |
+| 05 | Read-only SQL workspace | (a) |
+| 06 | Migration-history UI | (c) |
+| 07 | Webhooks UI | (c) |
 
-**Nothing in 01-08 starts before the staging restore passes.** Backups are
-Cloud-only now, so that validation is the only place the restore path is
-exercised against real credentials on real infrastructure.
+### The Cloud staging gate
+
+> **No product or self-host parity tranche work begins before Cloud staging
+> restore validation passes.** CI reliability, test-harness repairs,
+> documentation-only corrections, and investigation needed to make that
+> validation trustworthy are **exempt** from this gate.
+
+Backups are Cloud-only now, so staging is the only place the restore path meets
+real credentials on real infrastructure.
+
+The exemption is not a loophole, it is the point: the gate exists to stop
+unvalidated product work, and a gate cannot be trusted while the instrument
+reading it is unreliable. A flaky probe can make a genuine staging regression
+look transient, or make unrelated work look broken — which is exactly what
+happened during the backup-role work, where it cost a wrong diagnosis. So
+CI-01 sits *before* the gate rather than inside the numbered sequence.
+
+**CI-01 acceptance:** identify and remove the source of nondeterminism, then
+demonstrate stability by running the suite repeatedly. Retries are not a fix —
+they hide the exact signal the gate depends on — and are acceptable only if the
+nondeterminism proves external and unavoidable, which must then be stated.
 
 **Why 3, 4 and 5 belong inside 01.** All three are install-path decisions, and
 01 is the only tranche item that rewrites the install path:
@@ -401,10 +420,9 @@ exercised against real credentials on real infrastructure.
 - **a0 5 — bootstrap prints raw Prisma errors on its expected path.** Pure
   install-path UX; it is the first thing a new self-hoster sees.
 
-**Why 02 sits near the front.** An intermittent gate makes every later
-diagnosis slower and less trustworthy. It already produced one wrong conclusion
-during this audit. Fixing it before the feature work means a red job in 03-08
-can be believed.
+**Why CI-01 sits before the gate.** An intermittent job makes every later
+diagnosis slower and less trustworthy, including the staging diagnosis the gate
+depends on. It already produced one wrong conclusion during this audit.
 
 ### Class (a) — genuine, needs backend work
 
