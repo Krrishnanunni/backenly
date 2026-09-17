@@ -320,6 +320,52 @@ curl -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:3000/api/cron/autonomy
 Nothing calls that URL on its own. The in-process scheduler is the mechanism;
 the endpoint is for operators.
 
+#### Backups
+
+Backups are a Backenly Cloud capability and the routes answer 404 on a
+self-hosted deployment. Nothing below is needed to run Backenly; it is here
+because the same code runs in both editions and the failure it describes is
+silent.
+
+A backup is `pg_dump` of one project's `workspace_<id>` schema, gzipped under
+`BACKUP_DIR`. It carries tables, rows, indexes, constraints, RLS policies,
+`FORCE ROW LEVEL SECURITY` and the end-user `users` table. It is **not** PITR
+and not deployment-level disaster recovery: project secrets, API keys, storage
+objects and function definitions all live outside that schema.
+
+**If the role in `DATABASE_URL` cannot bypass RLS, set `BACKUP_DATABASE_URL`.**
+Workspace tables are `FORCE ROW LEVEL SECURITY`, and under FORCE even the owner
+is subject to its policies, so `pg_dump` aborts on the first protected table:
+
+```
+pg_dump: error: query failed: ERROR: query would be affected by
+         row-level security policy for table "users"
+```
+
+On production that meant every nightly backup failed for four days while the
+pruner deleted the last good ones, ending at zero on disk. The Compose stack
+hides it, because `POSTGRES_USER` there is the bootstrap superuser and
+superusers bypass RLS. Managed Postgres does not hide it.
+
+Do **not** fix this by granting `BYPASSRLS` to the application role — that
+disables every RLS policy on every tenant at once. Create a dedicated role with
+exactly this much, and no more:
+
+```sql
+CREATE ROLE backenly_backup LOGIN PASSWORD '<secret>'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT CONNECT ON DATABASE backenly TO backenly_backup;
+GRANT USAGE  ON SCHEMA "workspace_<project-id>" TO backenly_backup;
+GRANT SELECT ON ALL TABLES IN SCHEMA "workspace_<project-id>" TO backenly_backup;
+```
+
+It needs no `CREATE`, no membership of the application role and no superuser.
+Restore deliberately writes back over `DATABASE_URL` instead, so the
+application keeps ownership of its own schema — restoring over the backup role
+would re-own every table to it, and `FORCE ROW LEVEL SECURITY` keys on the
+owner. `__tests__/services/backup-restore-privileges.test.ts` builds exactly
+these two roles and proves the contract.
+
 #### Bringing your own database
 
 The Compose stack is the supported path. If you already operate PostgreSQL, or

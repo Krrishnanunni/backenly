@@ -162,3 +162,13 @@ tests/integration/maintenance-rls-aware.spec.ts
 # the interaction between the dump's contents and psql's exit code, so any
 # mock would have tested the mock.
 __tests__/services/backup-restore-integrity.test.ts
+
+# Backup and restore under a PRODUCTION-style role rather than a superuser.
+# Every other test of this path runs as the local development role, which is a
+# superuser, and superusers bypass RLS — so a superuser-only test proves
+# nothing about the deployment that matters. That gap hid a four-day production
+# backup outage. This builds a NOSUPERUSER NOBYPASSRLS application role owning
+# FORCE ROW LEVEL SECURITY tables, plus a dedicated BYPASSRLS backup role with
+# CONNECT, USAGE and SELECT and nothing else, and asserts the minimal privilege
+# contract the README documents. Needs CREATE ROLE, so it is database-backed.
+__tests__/services/backup-restore-privileges.test.ts
