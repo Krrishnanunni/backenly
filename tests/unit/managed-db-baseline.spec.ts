@@ -76,11 +76,28 @@ describe('the canonical baseline', () => {
   })
 })
 
+/**
+ * The canonical forward migrations, in order.
+ *
+ * Deliberately hardcoded rather than read from the directory: the point of the
+ * assertions below is that a new migration cannot join the shipped history
+ * without a human acknowledging it here. Reading the directory would make the
+ * gate agree with whatever it found and assert nothing.
+ *
+ * Adding a migration is a one-line change to this list. It was two duplicated
+ * literals before, which is how 20260916180000_maintenance_approvals landed in
+ * the chain with both assertions left stale and the unit job red.
+ */
+const FORWARD_MIGRATIONS = [
+  '20260916120000_maintenance_ledger',
+  '20260916180000_maintenance_approvals',
+]
+
 describe('the assembled migration workspace', () => {
   it('contains the schema and only the canonical history', () => {
     const workspace = assembleMigrationWorkspace(ROOT)
     try {
-      expect(workspace.migrations).toEqual([BASELINE_ID, '20260916120000_maintenance_ledger'])
+      expect(workspace.migrations).toEqual([BASELINE_ID, ...FORWARD_MIGRATIONS])
       expect(existsSync(workspace.schemaPath)).toBe(true)
       expect(existsSync(join(workspace.migrationsDir, BASELINE_ID, 'migration.sql'))).toBe(true)
       expect(existsSync(join(workspace.migrationsDir, 'migration_lock.toml'))).toBe(true)
@@ -93,7 +110,7 @@ describe('the assembled migration workspace', () => {
   it('can carry a rehearsal-only migration without writing it into the repository', () => {
     const workspace = assembleMigrationWorkspace(ROOT, [{ id: '29990101000000_fixture', sql: 'SELECT 1;' }])
     try {
-      expect(workspace.migrations).toEqual([BASELINE_ID, '20260916120000_maintenance_ledger', '29990101000000_fixture'])
+      expect(workspace.migrations).toEqual([BASELINE_ID, ...FORWARD_MIGRATIONS, '29990101000000_fixture'])
       expect(existsSync(join(ROOT, CANONICAL_DIR, '20260916000000_fixture'))).toBe(false)
     } finally {
       workspace.dispose()
