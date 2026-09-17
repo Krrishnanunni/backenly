@@ -113,10 +113,44 @@ at it. Nothing to install or operate.
 
 ### Self-hosted
 
-One deployment is one project. `npm run bootstrap` provisions that project, and
-it is a reconciler rather than an installer: rerunning it repairs whatever is
-missing and changes nothing else. You will run it at least twice, and that is
-the intended path, not a failure.
+One deployment is one project.
+
+```bash
+git clone https://github.com/backenly/backenly.git
+cd backenly
+npm install
+npm run selfhost
+```
+
+That is the whole install. It generates the secrets, starts the Compose stack,
+creates the tables, runs the superuser steps, issues the PostgREST credential
+and reconciles until the deployment reports ready. Then:
+
+```bash
+npm run dev                   # dashboard :3000 · runtime :3001
+```
+
+`npm run selfhost` is **safe to rerun**. It fills in what is missing and never
+rotates a secret that already exists, so a rerun cannot sign out your sessions
+or break a running PostgREST.
+
+It does not hide the steps or replace them: it runs the same sequence
+[documented below](#doing-it-by-hand), driven by the same module that
+`npm run bootstrap` prints its guidance from. Read that section if you are
+bringing your own database, if a step failed and you want to run it yourself,
+or if you would simply rather see what is being done to your machine.
+
+The installer needs one thing the README cannot give you: an `OPENAI_API_KEY`
+in `.env` for planning and the autonomy loop. Everything else it generates.
+
+<a name="doing-it-by-hand"></a>
+
+## Doing it by hand
+
+The same install, one step at a time. `npm run bootstrap` is the centre of it:
+it provisions the project, and it is a reconciler rather than an installer, so
+rerunning it repairs whatever is missing and changes nothing else. You will run
+it at least twice, and that is the intended path, not a failure.
 
 **You install on the host:**
 

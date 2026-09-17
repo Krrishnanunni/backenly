@@ -117,6 +117,32 @@ export interface RegistrationResult {
 }
 
 /**
+ * Whether the PostgREST registry helpers a superuser installs via
+ * scripts/postgrest-install.sh exist in this database.
+ *
+ * The companion to directAccessHelpersInstalled, and it exists for the same
+ * reason: on a fresh install these are genuinely absent, and finding that out
+ * by calling them means Prisma logs a raw error block at `error` level before
+ * any caller can turn it into a sentence. Bootstrap's DOCUMENTED first run hit
+ * that path twice and opened with stack-shaped text.
+ *
+ * Checking `backenly_pgrst_current_schemas` specifically: it is the read side,
+ * installed by the same script and in the same transaction as the register
+ * side, so its presence answers for both.
+ */
+export async function postgrestRegistryInstalled(): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ present: boolean }>>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND p.proname = 'backenly_pgrst_current_schemas'
+    ) AS present`
+  return rows[0]?.present === true
+}
+
+/**
  * Make `workspace_<projectId>` servable by PostgREST. Safe to call at any time,
  * from any path, as often as you like.
  *

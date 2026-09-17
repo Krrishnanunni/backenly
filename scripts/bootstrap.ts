@@ -44,9 +44,9 @@
 import { randomUUID, createHash, randomBytes } from 'crypto'
 import { prisma } from '@/lib/db'
 import { workspaceSchemaName } from '@/lib/security/workspace-schema'
-import { ensureSchemaRegistered } from '@/lib/postgrest/registration'
+import { ensureSchemaRegistered, postgrestRegistryInstalled } from '@/lib/postgrest/registration'
 import { JWTSecretManager } from '@/lib/services/jwtSecretManager'
-import { getDirectAccessStatus, provisionDirectAccess } from '@/lib/services/direct-access'
+import { directAccessHelpersInstalled, getDirectAccessStatus, provisionDirectAccess } from '@/lib/services/direct-access'
 import { createEmptyGraph } from '@/lib/orchestration/backend-state-graph'
 import {
   BOOTSTRAP_EXIT,
@@ -96,6 +96,26 @@ const needs = (what: string, fix: string) => pending.push({ what, fix })
  */
 const advisories: Array<{ what: string; fix: string }> = []
 const advisory = (what: string, fix: string) => advisories.push({ what, fix })
+
+/**
+ * Print the optional-but-missing list.
+ *
+ * Called from BOTH terminal states. It used to be inline on the ready path
+ * only, so a first run — which exits 3 by design — collected these and threw
+ * them away. The step lines still said "skipped (see warning)", pointing the
+ * operator at a warning that was never printed. The one run where somebody is
+ * actually reading the output was the one run that withheld it.
+ */
+function printAdvisories(): void {
+  if (advisories.length === 0) return
+  console.log('')
+  console.log('  Optional, not installed:')
+  console.log('')
+  for (const a of advisories) {
+    console.log(`    -  ${a.what}`)
+    console.log(`       ${a.fix}`)
+  }
+}
 
 class BootstrapRefusal extends Error {
   constructor(code: string, detail: string) {
@@ -294,14 +314,27 @@ async function ensureWorkspaceSchema(projectId: string, ownerId: string | null):
 }
 
 async function ensurePostgrestRegistration(projectId: string): Promise<void> {
+  const schema = workspaceSchemaName(projectId)
+
+  // Asked before either call below, because on the documented first run the
+  // registry helpers do not exist yet and BOTH calls would fail. Catching those
+  // failures was not enough: Prisma logs a failed query at `error` level before
+  // the catch runs, so the expected path printed raw error blocks and read as a
+  // crash. The prerequisite is reported here in exactly the same words, minus
+  // the stack-shaped noise.
+  if (!(await postgrestRegistryInstalled())) {
+    needs(
+      'PostgREST cannot register the workspace schema, so the data plane is not available',
+      renderPrerequisiteSteps(postgrestPrerequisiteSteps(projectId))
+    )
+    step('postgrest registration', 'skipped (see warning)')
+    return
+  }
+
   // RegistrationResult reports success, not whether anything CHANGED, so ask
   // the registry first. Without this the step said "created" on every run,
   // which quietly contradicts the property this script is built around: a
   // rerun should visibly change nothing.
-  //
-  // Guarded, because the registry helpers may not be installed yet — that is
-  // the very condition this function exists to report.
-  const schema = workspaceSchemaName(projectId)
   let alreadyRegistered = false
   try {
     const rows = await prisma.$queryRaw<Array<{ schemas: string | null }>>`
@@ -389,6 +422,36 @@ async function ensureAnonKey(projectId: string, ownerId: string): Promise<void> 
 async function ensureDirectAccessRoles(projectId: string): Promise<void> {
   const status = await getDirectAccessStatus(projectId)
   const modes = new Set(status.credentials.map(c => c.mode))
+
+  // Asked once, before any provisioning is attempted.
+  //
+  // This step is OPTIONAL and its installer is a superuser step the README
+  // marks optional, so on the documented first run the helpers are genuinely
+  // absent. Discovering that by calling provisionDirectAccess and catching the
+  // failure meant Prisma logged a full raw error block per mode — at `error`
+  // level, before the catch could turn it into a sentence. The expected path
+  // of a fresh install therefore opened with raw Prisma errors and read as a
+  // crash, which is the first thing a new self-hoster saw.
+  //
+  // One catalog probe answers it directly, and one advisory replaces two error
+  // blocks. The per-mode catch below is kept for the failures that are real.
+  const helpersInstalled = await directAccessHelpersInstalled()
+  if (!helpersInstalled) {
+    const missing = (['READ_ONLY', 'READ_WRITE'] as const).filter(m => !modes.has(m))
+    if (missing.length > 0) {
+      advisory(
+        'privileged role helpers are not installed, so direct database access ' +
+          `is unavailable (${missing.join(', ')})`,
+        `${DIRECT_ACCESS_PREREQUISITE.command}   (as a superuser), then rerun: npm run bootstrap`
+      )
+      for (const mode of missing) step(`direct access role (${mode})`, 'skipped (see warning)')
+    }
+    for (const mode of (['READ_ONLY', 'READ_WRITE'] as const).filter(m => modes.has(m))) {
+      step(`direct access role (${mode})`, 'already present')
+    }
+    return
+  }
+
   for (const mode of ['READ_ONLY', 'READ_WRITE'] as const) {
     if (modes.has(mode)) {
       step(`direct access role (${mode})`, 'already present')
@@ -479,6 +542,7 @@ async function main(): Promise<void> {
       console.log(`    x  ${p.what}`)
       console.log(`       ${p.fix}`)
     }
+    printAdvisories()
     console.log('')
     console.log('  Rerun `npm run bootstrap` afterwards. It is idempotent and will')
     console.log('  provision only what is still missing.')
@@ -504,15 +568,7 @@ async function main(): Promise<void> {
 
   // Printed on the ready path too, because "ready" must not mean "silent about
   // what is missing". These do not change the exit code.
-  if (advisories.length > 0) {
-    console.log('')
-    console.log('  Optional, not installed:')
-    console.log('')
-    for (const a of advisories) {
-      console.log(`    -  ${a.what}`)
-      console.log(`       ${a.fix}`)
-    }
-  }
+  printAdvisories()
   if (!process.env.BACKENLY_PROJECT_ID) {
     console.log('')
     console.log('  Pin this in .env so the identity of this deployment cannot drift:')

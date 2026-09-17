@@ -31,7 +31,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'note',
-          text: 'The compose files do not start the application. `docker-compose.dev.yml` brings up the dependencies — PostgreSQL 15 and Redis — and the root `docker-compose.yml` builds the API-tester worker container. You run the two Node processes yourself, with `npm run dev` or PM2.',
+          text: 'The compose file does not start the application. `docker-compose.dev.yml` brings up the dependencies — PostgreSQL 15, Redis and PostgREST. You run the two Node processes yourself, with `npm run dev` or PM2. `npm run selfhost` does all of this for you on a first install.',
         },
       ],
     },

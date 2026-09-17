@@ -833,3 +833,110 @@ jobs:
       - name: compose logs on failure
         if: failure()
         run: docker compose -f docker-compose.dev.yml logs --tail=80
+
+  # The one-command install, on a machine that has never run Backenly.
+  #
+  # The sibling `self-host` job walks the README step by step and is the
+  # authority on the DOCUMENTED path. This one asserts the single command
+  # actually replaces it, because "one command" is a claim about what an
+  # operator types, and the only honest test of it is typing that and nothing
+  # else. No .env is written here, no secret is exported, no step is performed
+  # on the installer's behalf: a clean clone, `npm ci`, then the command.
+  self-host-one-command:
+    name: self-host one command
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # Deliberately NOT creating .env. Generating the secrets and the project
+      # id is the installer's job, and doing it here would test a path no
+      # operator follows.
+      - name: the machine is clean
+        run: |
+          set -euo pipefail
+          test ! -f .env || { echo ".env exists before the installer ran"; exit 1; }
+          echo "  no .env, no containers"
+
+      - name: npm run selfhost
+        run: npm run selfhost 2>&1 | tee install.log
+
+      - name: it reached the end, and said so
+        run: |
+          set -euo pipefail
+          grep -q "Backenly is installed." install.log || {
+            echo "the installer did not report a completed install"; exit 1; }
+          echo "  installer reported success"
+
+      # Exit 0 from bootstrap is the readiness contract, and the installer is
+      # not allowed to be the thing that decides it. Asked again here, directly.
+      - name: bootstrap independently agrees the deployment is ready
+        run: |
+          set -euo pipefail
+          npm run bootstrap > verify.log 2>&1
+          cat verify.log
+          grep -q "Backenly is ready" verify.log
+
+      - name: it generated every secret, and none is a template placeholder
+        run: |
+          set -euo pipefail
+          for key in BACKENLY_PROJECT_ID JWT_SECRET POSTGREST_JWT_SECRET STORAGE_SECRET MASTER_ENCRYPTION_KEY POSTGREST_AUTHENTICATOR_PASSWORD; do
+            value=$(grep -E "^${key}=" .env | head -1 | cut -d= -f2-)
+            if [ -z "$value" ]; then echo "$key is empty"; exit 1; fi
+            case "$value" in
+              *change-this*|your-*|"<"*) echo "$key is still the template placeholder: $value"; exit 1 ;;
+            esac
+            echo "  $key set"
+          done
+
+      # The defect this program started from. A fresh install must not open with
+      # stack-shaped text an operator reads as a crash.
+      - name: the install printed no raw Prisma error
+        run: |
+          set -euo pipefail
+          for marker in "prisma:error" "PrismaClientKnownRequestError" "Raw query failed"; do
+            if grep -qF "$marker" install.log; then
+              echo "installer output contained: $marker"
+              grep -nF -A4 "$marker" install.log | head -30
+              exit 1
+            fi
+          done
+          echo "  clean output"
+
+      # Idempotence, which is the property that makes rerunning safe. Asserted
+      # on the secrets specifically: regenerating JWT_SECRET would sign out
+      # every session and regenerating the authenticator password would break
+      # the PostgREST now running.
+      - name: rerunning it changes no secret
+        run: |
+          set -euo pipefail
+          cp .env .env.before
+          npm run selfhost 2>&1 | tee rerun.log
+          grep -q "Backenly is installed." rerun.log
+          if ! diff -q .env.before .env; then
+            echo "a rerun modified .env:"; diff .env.before .env || true; exit 1
+          fi
+          echo "  .env byte-identical after a rerun"
+
+      - name: the data plane is actually serving
+        run: |
+          set -euo pipefail
+          # Not "the container is up". PostgREST restarts in a loop without a
+          # valid credential, and `docker compose ps` calls that running. A
+          # response is the only evidence that the password the installer wrote
+          # is the one the role actually has.
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3002/ || true)
+            if [ "$code" != "000" ]; then echo "  postgrest answered $code after ${i}s"; break; fi
+            sleep 1
+          done
+          [ "$code" != "000" ] || { echo "postgrest never answered"; exit 1; }
+
+      - name: compose logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.dev.yml logs --tail=120

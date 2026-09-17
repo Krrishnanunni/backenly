@@ -97,6 +97,15 @@ __tests__/bootstrap/postgrest-roles-idempotency.test.ts
 # allowed to sit in.
 __tests__/bootstrap/single-tenant-ownership.test.ts
 
+# What a new self-hoster READS on the documented first run. That run exits 3 by
+# design, but it used to open with raw Prisma error blocks, because bootstrap
+# discovered its optional superuser helpers were missing by calling them and
+# catching the failure - and Prisma logs a failed query at `error` level before
+# any catch runs. Asserts the OUTPUT, since the exit code was always correct.
+# Needs its own database: the text depends on the helpers being genuinely
+# absent, which is not true of the shared one.
+__tests__/bootstrap/install-path-output.test.ts
+
 # First self-hosted operator admission. Needs a user table with ZERO rows, which
 # a shared database cannot guarantee, so it runs against its own.
 __tests__/auth/first-operator-admission.test.ts
