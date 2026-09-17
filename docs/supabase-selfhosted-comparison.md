@@ -406,6 +406,37 @@ demonstrate stability by running the suite repeatedly. Retries are not a fix —
 they hide the exact signal the gate depends on — and are acceptable only if the
 nondeterminism proves external and unavoidable, which must then be stated.
 
+**CI-01 progress, 2026-09-17/18. Not closed.**
+
+A harness landed — `.github/workflows/flake-hunt.yml`, dispatch-only — that runs
+one suite N times in the same service container and environment as the
+`probe fixtures` job, records every run pass or fail, keeps the full output of
+any failure as an artifact, and exits non-zero if any iteration failed. It
+offers no retry option, deliberately.
+
+Measured so far, all clean:
+
+| where | runs |
+|---|---|
+| local | 3 |
+| local, freshly created database each time | 3 |
+| CI hunt | 12 |
+| CI hunt | 20 |
+| **total consecutive clean** | **38** |
+
+One concrete hypothesis was **disproven** rather than left open: the 30-second
+memo in `computeSubsystems` would explain failures in both directions, but
+forcing its TTL to an hour — maximally stale — leaves both affected suites
+green.
+
+Against that: three failures, all inside roughly one hour on 2026-09-17, across
+two branches, with `main` green either side. The cause is **not identified and
+CI-01 is not done.** 38 clean runs is consistent with a low-rate flake nobody
+has hit again, and it would be an overclaim to call it external and unavoidable
+on this evidence — which is the only condition under which a retry would be
+acceptable. What has changed is that the next occurrence produces logs and a
+measured rate instead of a shrug.
+
 **Why 3, 4 and 5 belong inside 01.** All three are install-path decisions, and
 01 is the only tranche item that rewrites the install path:
 
