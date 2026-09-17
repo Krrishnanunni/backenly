@@ -12,9 +12,10 @@ Where the work actually stands, so nobody reads "main is green" as "finished":
 | Self-host parity and operator UX | **not started.** One-command self-host, FK/constraint UI, backup/restore UI, logs explorer, read-only SQL workspace, migration history, webhooks UI, and the wider Auth/storage/extensions gaps in Part 2. |
 | Cloud production validation | **pending.** Staging with the private overlay and production-style credentials, then build once and promote that exact digest. |
 
-Sequence: **CI-01 (stabilize the flaky job), then Cloud staging validation**,
-then the parity tranche in the order given below. The gate blocks product work,
-not the work required to make the gate itself reliable.
+Sequence: **CI-01 closed 2026-09-18** (there was no flake; see the record
+below). The self-host parity tranche now runs in the order given below,
+verified against deterministic production-like fixtures. Cloud staging
+validation remains required before Cloud production, and gates Cloud only.
 
 **Supabase pinned at:** `8dc9206f569e823e715cbc391f25cb53f9938782`
 (committed 2026-09-16, recorded by `setup.sh` in `.supabase-version`).
@@ -374,8 +375,8 @@ that already touches the install path, rather than left as isolated cleanup.
 
 | # | Work | Class |
 |---|---|---|
-| CI-01 | **Stabilize `probe fixtures`** (a0 item 10) — pre-gate | (a0) |
-| — | **Cloud staging restore validation** — private overlay, production-style credentials, the full backup/restore sequence. Build the image once, test that digest, promote **the same** digest. | gate |
+| CI-01 | ~~Stabilize `probe fixtures`~~ (a0 item 10) — **closed 2026-09-18, no flake existed** | (a0) |
+| — | **Cloud staging restore validation** — private overlay, production-style credentials, the full backup/restore sequence. Build the image once, test that digest, promote **the same** digest. Gates **Cloud production only**. | gate |
 | 01 | **One-command self-host**, carrying a0 items 3, 4 and 5 | (a) + (a0) |
 | 02 | FK picker + column constraints | (c) |
 | 03 | Backup / restore UI | (c) |
@@ -386,10 +387,16 @@ that already touches the install path, rather than left as isolated cleanup.
 
 ### The Cloud staging gate
 
-> **No product or self-host parity tranche work begins before Cloud staging
-> restore validation passes.** CI reliability, test-harness repairs,
-> documentation-only corrections, and investigation needed to make that
-> validation trustworthy are **exempt** from this gate.
+> **No Cloud production promotion before Cloud staging restore validation
+> passes.** The gate is scoped to Cloud, because that is where the restore path
+> meets real credentials on real infrastructure.
+>
+> **Superseded 2026-09-18:** this gate previously blocked the self-host parity
+> tranche too. It no longer does. Self-host correctness is provable on
+> deterministic production-like fixtures — a NOSUPERUSER/NOBYPASSRLS role owning
+> FORCE RLS tables reproduces the failure mode that mattered, and did in fact
+> surface the ownership defect. Holding OSS work behind a Cloud-infrastructure
+> gate would have blocked it on something it does not depend on.
 
 Backups are Cloud-only now, so staging is the only place the restore path meets
 real credentials on real infrastructure.
@@ -406,36 +413,59 @@ demonstrate stability by running the suite repeatedly. Retries are not a fix —
 they hide the exact signal the gate depends on — and are acceptable only if the
 nondeterminism proves external and unavoidable, which must then be stated.
 
-**CI-01 progress, 2026-09-17/18. Not closed.**
+**CI-01 CLOSED, 2026-09-18. There was no flake.**
 
-A harness landed — `.github/workflows/flake-hunt.yml`, dispatch-only — that runs
-one suite N times in the same service container and environment as the
-`probe fixtures` job, records every run pass or fail, keeps the full output of
-any failure as an artifact, and exits non-zero if any iteration failed. It
-offers no retry option, deliberately.
+The premise was wrong, and it was wrong in a way worth recording, because the
+mistake was mine and it survived 38 test runs without being caught.
 
-Measured so far, all clean:
+Reading the job logs instead of my own notes:
 
-| where | runs |
+| what I recorded | what the logs say |
 |---|---|
-| local | 3 |
-| local, freshly created database each time | 3 |
-| CI hunt | 12 |
-| CI hunt | 20 |
-| **total consecutive clean** | **38** |
+| `probe fixtures` failed 3x on 2026-09-17 | `probe fixtures` **did not fail at all** that day. The failing job was `integration suites` |
+| the failures were intermittent | all four were the **same single test**, failing **every** time |
+| a bisect "proved" a change broke it, then the same commit passed | the two bisect branches held **different code**; the bisect was correct |
 
-One concrete hypothesis was **disproven** rather than left open: the 30-second
-memo in `computeSubsystems` would explain failures in both directions, but
-forcing its TTL to an hour — maximally stale — leaves both affected suites
-green.
+The actual defect: `fe080cef` added `carry_constraints` as a new rung between
+`add_structure` and `dual_write`, and
+`tests/integration/maintenance-resolve-db.spec.ts:235` still asserted the old
+six-rung ladder. Deterministic red from that commit until `5386616c` renumbered
+the bindings. The older `probe fixtures` reds (2026-09-14/15) were likewise one
+deterministic test on two feature branches, never on `main`.
 
-Against that: three failures, all inside roughly one hour on 2026-09-17, across
-two branches, with `main` green either side. The cause is **not identified and
-CI-01 is not done.** 38 clean runs is consistent with a low-rate flake nobody
-has hit again, and it would be an overclaim to call it external and unavoidable
-on this evidence — which is the only condition under which a retry would be
-acceptable. What has changed is that the next occurrence produces logs and a
-measured rate instead of a shrug.
+So the 38 consecutive clean runs were not a failure to reproduce a rare defect.
+They were correctly reporting that the defect was already fixed. The stability
+measurement was sound; the label on it was not.
+
+**Against the acceptance criterion:** "identify and remove the source of
+nondeterminism" is satisfied vacuously — there was none to remove, and that is
+now demonstrated rather than assumed. No retry was added, which would have been
+the wrong fix for a deterministic failure and would have masked a real one.
+
+**What the misdiagnosis cost, and what guards it now.** Two job names were
+conflated for a day, and a correct bisect was publicly retracted on the strength
+of that. The root cause of the *misdiagnosis* was reasoning from a remembered
+job name instead of from the failing assertion. Kept as guards:
+
+- `.github/workflows/flake-hunt.yml`, dispatch-only, which measures a suite's
+  failure rate in the `probe fixtures` environment and records every run, pass
+  or fail. It offers no retry option, deliberately. Its value is unchanged: the
+  next time a job looks intermittent, this answers the question with a rate
+  instead of an anecdote.
+- `tools/jest/seeded-sequencer.cjs`, which permutes **inter-file** order under a
+  recorded seed. Order was the one dimension never varied, and it is now varied:
+  6 random orderings of `tests/probes`, 221 tests each, all green, with the same
+  seed reproducing the same order. That converts "we never tested ordering" into
+  a measured negative result.
+
+Both are opt-in. Normal CI keeps the default sequencer, because a suite that
+fails only under one arrangement must surface as a real defect rather than as
+noise on an unrelated PR.
+
+**Not built:** concurrency and stress modes for the harness. They were scoped
+against a flake that does not exist, and `probe fixtures` and `integration
+suites` both run `--runInBand` in CI by design, since those suites share one
+database. Adding a parallel mode would measure a configuration CI never uses.
 
 **Why 3, 4 and 5 belong inside 01.** All three are install-path decisions, and
 01 is the only tranche item that rewrites the install path:
