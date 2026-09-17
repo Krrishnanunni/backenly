@@ -181,3 +181,10 @@ __tests__/services/backup-restore-integrity.test.ts
 # CONNECT, USAGE and SELECT and nothing else, and asserts the minimal privilege
 # contract the README documents. Needs CREATE ROLE, so it is database-backed.
 __tests__/services/backup-restore-privileges.test.ts
+
+# The table editor's constraint picker. The foreign-key executor INFERS a target
+# when none is given, which is right for the AI path and wrong for a picker: an
+# operator's explicit choice was being discarded in favour of a guess. The
+# fixture makes inference and the choice DISAGREE, and asserts on the catalog
+# rather than on what the executor reported.
+__tests__/database/constraint-picker.test.ts
