@@ -96,7 +96,14 @@ export function getBackupFilename(): string {
  * application requests, and giving it BYPASSRLS would silently disable every
  * RLS policy on every tenant at once — the same shape as the cutover-script
  * vulnerability that exposed password hashes. It needs a role that is read-only
- * AND bypasses RLS, used by nothing but this dump. See docs for the DDL.
+ * AND bypasses RLS, used by nothing but this dump.
+ *
+ * The DDL, and the reasoning, are in README.md under "Backups". The privilege
+ * set is deliberately minimal and is proven rather than asserted:
+ * __tests__/services/backup-restore-privileges.test.ts builds a NOSUPERUSER
+ * NOBYPASSRLS application role and a NOSUPERUSER BYPASSRLS backup role with
+ * CONNECT, USAGE and SELECT and nothing else, and runs the whole round trip
+ * against them.
  */
 /**
  * Connection arguments for pg_dump/psql, with the password kept OUT of argv.
@@ -112,9 +119,25 @@ export function getBackupFilename(): string {
  * bug, not just the symptom: there is no longer any string containing the
  * password for an error message to capture.
  */
-export function buildConnection(): { args: string[]; env: NodeJS.ProcessEnv } {
+export function buildConnection(
+  purpose: 'read' | 'write' = 'read',
+): { args: string[]; env: NodeJS.ProcessEnv } {
+  // Only the DUMP wants BACKUP_DATABASE_URL. Restoring over that connection
+  // makes the backup role the OWNER of the restored schema and every table in
+  // it, because pg_dump runs with --no-owner and psql creates whatever it
+  // replays as the role it connected with.
+  //
+  // That is not cosmetic. The application role loses ownership of its own
+  // workspace, explicit grants are gone (--no-privileges never carried them),
+  // and FORCE ROW LEVEL SECURITY keys on the owner — so a "successful" restore
+  // silently rewrites who the policies bind. It is invisible on the Compose
+  // stack, where one superuser is both roles, and breaks the project anywhere
+  // the two are separate.
+  //
+  // So the backup role stays what its own docstring above describes: read-only
+  // with BYPASSRLS. Writing back is the application's own connection.
   const url =
-    process.env.BACKUP_DATABASE_URL ||
+    (purpose === 'read' ? process.env.BACKUP_DATABASE_URL : '') ||
     process.env.DATABASE_URL ||
     process.env.DIRECT_URL ||
     ''
@@ -208,7 +231,7 @@ export async function backupWorkspace(projectId: string): Promise<BackupResult> 
     // Ensure backup directory exists
     await fs.promises.mkdir(/*turbopackIgnore: true*/ backupDir, { recursive: true })
 
-    const conn = buildConnection()
+    const conn = buildConnection('read')
 
     // Dump only the workspace schema (data + structure, no roles).
     // execFile, not exec: no shell, no command string, nothing for an error to
@@ -335,7 +358,9 @@ export async function restoreWorkspace(
   let renamed = false
 
   try {
-    const conn = buildConnection()
+    // 'write': restoring over BACKUP_DATABASE_URL would re-own the schema to
+    // the backup role. See buildConnection.
+    const conn = buildConnection('write')
 
     // Decompress BEFORE touching the live schema. A corrupt or truncated
     // archive must fail while the project's data is still there.
