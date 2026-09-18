@@ -196,3 +196,19 @@ __tests__/database/constraint-picker.test.ts
 # the ANSWERS were right, so this pins the answers AND the tenant scoping, with
 # a second project holding more rows of every severity.
 __tests__/database/logs-explorer-query.test.ts
+
+# The credential split. The application used to connect as POSTGRES_USER, which
+# initdb creates as a SUPERUSER - and superusers bypass RLS, including FORCE
+# ROW LEVEL SECURITY, so every policy the platform wrote was advisory for the
+# application itself. Runs the real script, then reconnects as the role it made
+# and watches the database refuse. A contrast test shows the superuser still
+# sees every row, so the isolation assertion cannot pass vacuously.
+__tests__/database/app-role-separation.test.ts
+
+# Claiming a self-hosted deployment. The installer said "ready" while the
+# project had no owner, so the first account could not use the dashboard until
+# somebody ran bootstrap a second time. Signup now binds the administrator to
+# the project in one transaction, gated on a token the installer prints -
+# possession of the machine grants the claim rather than whoever loads the page
+# first. Covers the race, the replay, and adoption itself.
+__tests__/auth/deployment-claim.test.ts

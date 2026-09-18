@@ -515,23 +515,46 @@ the same way, by running the thing rather than reading it. The browser suite
 saw it because it is the first harness that starts a real app against a real
 fresh install.
 
-**Found by the browser suite, 2026-09-18.** A freshly installed deployment's
-dashboard is not usable by the account that just signed up. Bootstrap creates
-THE project before any account exists, so it is owner-less; it adopts the first
-operator only on a **rerun**. Until that rerun, opening the project answers
-`PROJECT_FORBIDDEN` and the database page redirects to the project list after a
-two-second delay. The README does document the rerun, so this is friction
-rather than breakage — but it is friction on the first thing an operator does
-after installing, it looks like the install failed, and `npm run selfhost`
-cannot do it for them because the account does not exist yet. Supabase
-self-hosted has no equivalent step. Candidate fix: adopt the owner on first
-signup rather than on a bootstrap rerun.
+**FIXED 2026-09-18 — first-owner claim.** A freshly installed deployment's
+dashboard was not usable by the account that had just signed up. Bootstrap
+creates THE project before any account exists, so it was owner-less, and it
+adopted the first operator only on a **rerun**; until then opening the project
+answered `PROJECT_FORBIDDEN`. `npm run selfhost` claiming to produce a ready
+deployment while a second hidden command was still required did not hold.
 
-**Open, carried forward.** a0 4 — the application still connects to Postgres as
-a superuser on the default Compose path — is a decision about the role model
-rather than a capability to build, and it is the one item in this tranche that
-changes the security model. It is stated for the founder rather than taken
-unilaterally.
+Signup now binds the administrator to the project **in the same transaction**
+that creates them, so there is no second command. It is gated on a one-time
+setup token the installer generates and prints, because "first signup wins"
+would be wrong in the other direction: a deployment is frequently reachable
+before its operator reaches it, and the single administrator slot would go to
+whoever loaded the page first. Possession of the machine grants the claim.
+Single-use comes from the account slot, not the secret — the token sits in
+`.env` and a file cannot be un-read, so once claimed it is refused whatever it
+is set to. Covered by `__tests__/auth/deployment-claim.test.ts`, and the
+browser suite now asserts ownership immediately after signup with the CI
+bootstrap rerun removed.
+
+**FIXED 2026-09-18 — a0 4, the runtime superuser.** The application connected
+as `POSTGRES_USER`, the role `initdb` creates, which is a SUPERUSER. Superusers
+bypass row-level security **including `FORCE ROW LEVEL SECURITY`**, so every
+policy the platform wrote was advisory for the application itself: tenant
+isolation held because the code scoped its own queries, not because the
+database would have refused one that did not.
+
+Four roles now, one job each: `backenly_user` (SUPERUSER, install scripts only,
+never in `DATABASE_URL`), `backenly_app` (**NOSUPERUSER NOBYPASSRLS**, owns the
+platform tables and workspace schemas so governed typed actions keep their DDL
+rights), `backenly_authenticator` (unchanged, NOINHERIT), and `backenly_backup`
+(NOSUPERUSER BYPASSRLS, `pg_dump` only; restore still runs over the application
+connection so ownership is preserved).
+
+Ownership plus `FORCE` is what makes that combination work — without FORCE an
+owner is exempt from its own policies and ownership would re-open the hole.
+`public.backenly_app_role()` was already the seam every privileged statement
+read, so one `ALTER DATABASE ... SET backenly.app_role` moves the whole system.
+`__tests__/database/app-role-separation.test.ts` connects **as the role** and
+watches the database refuse, with a contrast test showing the superuser still
+sees every row so the assertion cannot pass vacuously.
 
 **Open.** There is no working browser coverage. `tests/e2e/` assumes an
 authenticated session and is not wired into CI, so it is not evidence for any

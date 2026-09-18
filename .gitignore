@@ -214,3 +214,7 @@ jest-integration.json
 # Local research evidence (Supabase comparison captures, screenshots). Never committed.
 evidence/
 .playwright/
+
+# Local agent tooling (skills installed per-machine). Not product code.
+.agents/
+skills-lock.json

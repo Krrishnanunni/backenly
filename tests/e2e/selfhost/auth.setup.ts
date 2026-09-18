@@ -43,8 +43,17 @@ setup('sign up the first operator', async ({ page, request, baseURL }) => {
   const password = existing?.password ?? `E2e!${randomBytes(12).toString('hex')}`
 
   if (!existing) {
+    // The setup token claims the deployment. `npm run selfhost` generated it
+    // and CI passes it through, exactly as an operator reads it from the
+    // install output. Registration without it is refused on a self-hosted
+    // deployment, which is the point.
     const res = await request.post('/api/auth/register', {
-      data: { email, password, name: 'E2E Operator' },
+      data: {
+        email,
+        password,
+        name: 'E2E Operator',
+        setupToken: process.env.BACKENLY_SETUP_TOKEN,
+      },
     })
     expect(
       res.ok(),
@@ -109,14 +118,21 @@ setup('sign up the first operator', async ({ page, request, baseURL }) => {
     `could not determine the project id (got ${JSON.stringify(id)})`
   ).toBe(true)
 
-  // Deliberately NOT asserting the database page here.
+  // Ownership, asserted right here.
   //
-  // It was asserted, and it passed while being wrong: toHaveURL matched on
-  // first paint, and the page then redirected client-side to /app because the
-  // operator did not yet own the project. Bootstrap creates THE project
-  // owner-less and adopts the first operator on a rerun, which happens between
-  // this setup and the specs. An assertion that passes before the redirect
-  // proves nothing, so the specs assert reachability themselves.
+  // This is the whole claim of the setup-token change: signing up binds the
+  // administrator to the project in the SAME transaction, so there is no
+  // second `npm run bootstrap` and no window in which the only account cannot
+  // use the dashboard. If adoption regressed, the listing below is empty and
+  // this fails immediately rather than as four mysterious redirects later.
+  const owned = await request.get('/api/projects')
+  expect(owned.ok(), `could not list projects after signup: ${owned.status()}`).toBe(true)
+  const ownedBody = await owned.json()
+  const ownedList = Array.isArray(ownedBody) ? ownedBody : (ownedBody.projects ?? ownedBody.data ?? [])
+  expect(
+    Array.isArray(ownedList) && ownedList.length > 0,
+    'the account that just signed up owns no project - adoption did not happen at signup'
+  ).toBe(true)
 
   // The password is stored so a rerun of this setup can log in rather than
   // register. The file is gitignored and lives only for the life of the job.
