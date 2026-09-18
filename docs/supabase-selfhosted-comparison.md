@@ -515,6 +515,18 @@ the same way, by running the thing rather than reading it. The browser suite
 saw it because it is the first harness that starts a real app against a real
 fresh install.
 
+**Found by the browser suite, 2026-09-18.** A freshly installed deployment's
+dashboard is not usable by the account that just signed up. Bootstrap creates
+THE project before any account exists, so it is owner-less; it adopts the first
+operator only on a **rerun**. Until that rerun, opening the project answers
+`PROJECT_FORBIDDEN` and the database page redirects to the project list after a
+two-second delay. The README does document the rerun, so this is friction
+rather than breakage — but it is friction on the first thing an operator does
+after installing, it looks like the install failed, and `npm run selfhost`
+cannot do it for them because the account does not exist yet. Supabase
+self-hosted has no equivalent step. Candidate fix: adopt the owner on first
+signup rather than on a bootstrap rerun.
+
 **Open, carried forward.** a0 4 — the application still connects to Postgres as
 a superuser on the default Compose path — is a decision about the role model
 rather than a capability to build, and it is the one item in this tranche that

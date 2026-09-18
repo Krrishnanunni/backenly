@@ -977,6 +977,15 @@ jobs:
           # spec then navigated to a URL that redirects to the project list.
           export BACKENLY_PROJECT_ID=$(grep -E '^BACKENLY_PROJECT_ID=' .env | head -1 | cut -d= -f2-)
           echo "project: $BACKENLY_PROJECT_ID"
+
+          # The documented flow, executed rather than described. Bootstrap
+          # creates THE project owner-less, because no account exists when the
+          # installer runs; it adopts the first operator on a rerun. Until that
+          # rerun the dashboard answers PROJECT_FORBIDDEN and redirects to the
+          # project list, which is what four specs spent three CI cycles
+          # failing against.
+          npx playwright test --project=selfhost-setup
+          npm run bootstrap
           npx playwright test --project=selfhost
 
       # The rendered page, not a guess at it. Without this, diagnosing a

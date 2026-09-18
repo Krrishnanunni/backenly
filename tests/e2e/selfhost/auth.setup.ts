@@ -19,28 +19,38 @@
 
 import { test as setup, expect } from '@playwright/test'
 import { randomBytes } from 'crypto'
-import { mkdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, resolve } from 'path'
 
 export const STORAGE_STATE = resolve(__dirname, '../../../.playwright/selfhost-state.json')
 const PROJECT_HANDOFF = resolve(__dirname, '../../../.playwright/selfhost-project.json')
 
 setup('sign up the first operator', async ({ page, request, baseURL }) => {
-  const email = `e2e-${randomBytes(4).toString('hex')}@example.test`
+  // Re-runnable.
+  //
+  // A self-hosted install admits exactly ONE account and then closes
+  // registration, and this setup runs again whenever the specs project runs.
+  // It also has to run before `npm run bootstrap` adopts the operator as the
+  // project's owner, and again after. So a second run reuses the credentials
+  // the first one stored rather than trying to register into a closed door.
+  const existing = existsSync(PROJECT_HANDOFF)
+    ? JSON.parse(readFileSync(PROJECT_HANDOFF, 'utf8'))
+    : null
+
+  const email = existing?.email ?? `e2e-${randomBytes(4).toString('hex')}@example.test`
   // Long enough for any password policy, and generated so it is never a
   // literal in the repository.
-  const password = `E2e!${randomBytes(12).toString('hex')}`
+  const password = existing?.password ?? `E2e!${randomBytes(12).toString('hex')}`
 
-  const res = await request.post('/api/auth/register', {
-    data: { email, password, name: 'E2E Operator' },
-  })
-
-  // A closed registration means a previous run already claimed the single
-  // account. Saying so plainly beats a timeout on a login form later.
-  expect(
-    res.ok(),
-    `registration failed (${res.status()}): ${await res.text()}`
-  ).toBe(true)
+  if (!existing) {
+    const res = await request.post('/api/auth/register', {
+      data: { email, password, name: 'E2E Operator' },
+    })
+    expect(
+      res.ok(),
+      `registration failed (${res.status()}): ${await res.text()}`
+    ).toBe(true)
+  }
 
   // Register returns a token in its BODY and sets no cookie; login is what
   // issues the `auth-token` cookie the app authenticates with. So the setup
@@ -99,10 +109,17 @@ setup('sign up the first operator', async ({ page, request, baseURL }) => {
     `could not determine the project id (got ${JSON.stringify(id)})`
   ).toBe(true)
 
-  // Prove it resolves before handing it on.
-  await page.goto(`/app/projects/${id}/database`)
-  await expect(page).toHaveURL(new RegExp(`/app/projects/${id}/database`), { timeout: 30_000 })
+  // Deliberately NOT asserting the database page here.
+  //
+  // It was asserted, and it passed while being wrong: toHaveURL matched on
+  // first paint, and the page then redirected client-side to /app because the
+  // operator did not yet own the project. Bootstrap creates THE project
+  // owner-less and adopts the first operator on a rerun, which happens between
+  // this setup and the specs. An assertion that passes before the redirect
+  // proves nothing, so the specs assert reachability themselves.
 
-  writeFileSync(PROJECT_HANDOFF, JSON.stringify({ id, email }, null, 2), 'utf8')
+  // The password is stored so a rerun of this setup can log in rather than
+  // register. The file is gitignored and lives only for the life of the job.
+  writeFileSync(PROJECT_HANDOFF, JSON.stringify({ id, email, password }, null, 2), 'utf8')
   void baseURL
 })
