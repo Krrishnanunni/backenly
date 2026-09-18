@@ -97,6 +97,15 @@ __tests__/bootstrap/postgrest-roles-idempotency.test.ts
 # allowed to sit in.
 __tests__/bootstrap/single-tenant-ownership.test.ts
 
+# What a new self-hoster READS on the documented first run. That run exits 3 by
+# design, but it used to open with raw Prisma error blocks, because bootstrap
+# discovered its optional superuser helpers were missing by calling them and
+# catching the failure - and Prisma logs a failed query at `error` level before
+# any catch runs. Asserts the OUTPUT, since the exit code was always correct.
+# Needs its own database: the text depends on the helpers being genuinely
+# absent, which is not true of the shared one.
+__tests__/bootstrap/install-path-output.test.ts
+
 # First self-hosted operator admission. Needs a user table with ZERO rows, which
 # a shared database cannot guarantee, so it runs against its own.
 __tests__/auth/first-operator-admission.test.ts
@@ -172,3 +181,18 @@ __tests__/services/backup-restore-integrity.test.ts
 # CONNECT, USAGE and SELECT and nothing else, and asserts the minimal privilege
 # contract the README documents. Needs CREATE ROLE, so it is database-backed.
 __tests__/services/backup-restore-privileges.test.ts
+
+# The table editor's constraint picker. The foreign-key executor INFERS a target
+# when none is given, which is right for the AI path and wrong for a picker: an
+# operator's explicit choice was being discarded in favour of a guess. The
+# fixture makes inference and the choice DISAGREE, and asserts on the catalog
+# rather than on what the executor reported.
+__tests__/database/constraint-picker.test.ts
+
+# The logs explorer's query. /api/logs answered "how many, and how many of each
+# severity" by loading every matching row into memory for a .length and four
+# .filter().length calls, then discarding them - a full table read per request
+# on a page whose search box fires on every change. Nothing caught it because
+# the ANSWERS were right, so this pins the answers AND the tenant scoping, with
+# a second project holding more rows of every severity.
+__tests__/database/logs-explorer-query.test.ts

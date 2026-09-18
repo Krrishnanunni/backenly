@@ -367,9 +367,18 @@ PostgreSQL instance you control:
 | Next.js | The dashboard UI and all platform APIs under `/app/api/` |
 | Express runtime | The public end-user runtime, `/api/v1/*` (see `server/`) |
 
-`docker-compose.yml` brings up the whole stack — both processes plus Postgres —
-and is the supported way to run it. `ecosystem.config.js` is a PM2 alternative
-for a plain VM.
+`npm run selfhost` is the supported way to install it: one command that
+generates the secrets, starts `docker-compose.dev.yml` (PostgreSQL, Redis and
+PostgREST), creates the tables and reconciles until bootstrap reports ready.
+The two Node processes then run on the host with `npm run dev`.
+
+No compose file starts the application itself. There used to be a root
+`docker-compose.yml` claimed here as "the whole stack"; it built an API-tester
+worker from a `./worker` directory that no longer exists, so the one command a
+Supabase user would reach for first failed on a missing build context. It has
+been removed rather than repaired.
+
+`ecosystem.config.js` is a PM2 alternative for a plain VM.
 
 ### Deploying an update
 

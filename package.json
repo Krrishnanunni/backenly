@@ -39,7 +39,8 @@
     "db:test:setup": "npm run test:setup",
     "migrate:api-keys": "tsx scripts/migrate-api-keys-to-hash.ts",
     "cleanup:tokens": "tsx scripts/cleanup-expired-tokens.ts",
-    "build:runtime": "node scripts/build-runtime-bundle.mjs"
+    "build:runtime": "node scripts/build-runtime-bundle.mjs",
+    "selfhost": "tsx scripts/selfhost.ts"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.44.5",

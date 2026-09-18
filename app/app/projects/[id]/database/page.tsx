@@ -51,6 +51,7 @@ import {
   updateRow,
   deleteRow,
   addColumn,
+  addConstraint,
   renameColumn,
   dropColumn,
   validateProjectAccess,
@@ -59,6 +60,7 @@ import {
   type IndexInfo,
   type DatabaseType,
 } from '@/lib/api/database'
+import { isForeignKeyShaped, suggestForeignKeyColumn } from '@/lib/db/fk-shape'
 import { useParams, useRouter } from 'next/navigation'
 import { getCurrentProjectId } from '@/lib/api/client'
 import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisualizer'
@@ -197,6 +199,18 @@ export default function ProjectDatabasePage() {
   const [newColumnType, setNewColumnType] = useState('text')
   const [newColumnNullable, setNewColumnNullable] = useState(true)
   const [addingColumn, setAddingColumn] = useState(false)
+  // Constraints requested alongside a new column. Applied AFTER the column
+  // exists, because every one of them is an ALTER on a column that has to be
+  // there first. Each is a separate typed action through the same governed
+  // path, not a hand-assembled DDL string.
+  const [newColumnUnique, setNewColumnUnique] = useState(false)
+  const [newColumnReferences, setNewColumnReferences] = useState('')
+  const [newColumnCheck, setNewColumnCheck] = useState('')
+  // Reports which constraints applied and which did not. The column can succeed
+  // while a constraint fails — an FK against a table with incompatible rows,
+  // for instance — and saying "added" would be a lie in exactly the case the
+  // operator most needs to know about.
+  const [constraintOutcome, setConstraintOutcome] = useState<string[] | null>(null)
 
   const [renamingColumn, setRenamingColumn] = useState<string | null>(null)
   const [renameColumnNewName, setRenameColumnNewName] = useState('')
@@ -1052,20 +1066,90 @@ export default function ProjectDatabasePage() {
   // /api/database/schema/columns route + lib/services/tableLifecycle). So a
   // manual rename triggers the same schema-version snapshot, typegen refresh,
   // and Zod validator cache eviction that an AI-driven rename does.
+  const resetAddColumnForm = () => {
+    setNewColumnName('')
+    setNewColumnType('text')
+    setNewColumnNullable(true)
+    setNewColumnUnique(false)
+    setNewColumnReferences('')
+    setNewColumnCheck('')
+  }
+
   const handleAddColumn = async () => {
     if (!selectedTable || !resolvedProjectId || !newColumnName.trim()) return
+    const columnName = newColumnName.trim()
     try {
       setAddingColumn(true)
       setError(null)
+      setConstraintOutcome(null)
+
       await addColumn(resolvedProjectId, selectedTable, {
-        name: newColumnName.trim(),
+        name: columnName,
         type: newColumnType,
         nullable: newColumnNullable,
       })
+
+      // The column now exists. Each constraint is applied separately, and one
+      // failing does not undo the column or stop the others: an FK can fail on
+      // rows that do not match while a UNIQUE on the same new column succeeds.
+      // Reporting each outcome is the point — a single "added" over a partial
+      // result is how a schema silently ends up weaker than the operator
+      // believes it is.
+      const requested: Array<{ label: string; run: () => Promise<void> }> = []
+      if (newColumnUnique) {
+        requested.push({
+          label: 'unique',
+          run: () => addConstraint(resolvedProjectId, selectedTable, columnName, 'unique'),
+        })
+      }
+      if (newColumnReferences) {
+        requested.push({
+          label: `foreign key to ${newColumnReferences}`,
+          run: () =>
+            // The table is passed as referencedTable, NOT as the expression.
+            // The executor infers a target when none is given, and an inferred
+            // target is not necessarily the one just chosen here.
+            addConstraint(
+              resolvedProjectId,
+              selectedTable,
+              columnName,
+              'foreign_key',
+              undefined,
+              newColumnReferences,
+            ),
+        })
+      }
+      if (newColumnCheck.trim()) {
+        requested.push({
+          label: 'check',
+          run: () =>
+            addConstraint(resolvedProjectId, selectedTable, columnName, 'check', newColumnCheck.trim()),
+        })
+      }
+
+      const failures: string[] = []
+      for (const c of requested) {
+        try {
+          await c.run()
+        } catch (err: any) {
+          failures.push(`${c.label}: ${err?.message || 'failed'}`)
+        }
+      }
+
+      if (failures.length > 0) {
+        // Deliberately NOT thrown. The column was created, so treating this as
+        // a failed operation would leave the operator thinking nothing
+        // happened and adding it a second time.
+        setConstraintOutcome([
+          `Column "${columnName}" was added, but ${failures.length} of ${requested.length} constraints did not apply.`,
+          ...failures,
+        ])
+        await loadTableData()
+        return
+      }
+
       setShowAddColumnModal(false)
-      setNewColumnName('')
-      setNewColumnType('text')
-      setNewColumnNullable(true)
+      resetAddColumnForm()
       await loadTableData()
     } catch (err: any) {
       console.error('Error adding column:', err)
@@ -2150,6 +2234,69 @@ export default function ProjectDatabasePage() {
                   <span className="text-[12px] text-zinc-300">Allow empty values (nullable)</span>
                 </label>
 
+                <div className="pt-1 border-t border-white/[0.06]">
+                  <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-[0.12em] mb-2 mt-3">Constraints</label>
+
+                  <label className="flex items-center gap-2.5 cursor-pointer mb-3">
+                    <input
+                      type="checkbox"
+                      checked={newColumnUnique}
+                      onChange={(e) => setNewColumnUnique(e.target.checked)}
+                      disabled={addingColumn}
+                      className="w-4 h-4 rounded border-white/20 bg-white/[0.04] text-violet-500 focus:ring-violet-400/30"
+                    />
+                    <span className="text-[12px] text-zinc-300">Unique</span>
+                  </label>
+
+                  <div className="mb-3">
+                    <label className="block text-[11px] text-zinc-400 mb-1.5">References</label>
+                    <select
+                      value={newColumnReferences}
+                      onChange={(e) => setNewColumnReferences(e.target.value)}
+                      disabled={addingColumn}
+                      className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12.5px] focus:outline-none focus:border-violet-400/40 transition-colors"
+                    >
+                      <option value="">No foreign key</option>
+                      {tables
+                        .filter((t) => t.name !== selectedTable)
+                        .map((t) => (
+                          <option key={t.name} value={t.name}>{t.name}</option>
+                        ))}
+                    </select>
+                    <p className="text-[10.5px] text-zinc-600 mt-1.5">
+                      Points this column at the target table&apos;s primary key.
+                    </p>
+                    {newColumnReferences && !isForeignKeyShaped(newColumnName) && (
+                      <p className="text-[10.5px] text-amber-300/80 mt-1.5">
+                        A foreign key needs a column named like <span className="font-mono">{suggestForeignKeyColumn(newColumnReferences)}</span>.
+                        Rename the column, or the key will be refused.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-1.5">Check</label>
+                    <input
+                      value={newColumnCheck}
+                      onChange={(e) => setNewColumnCheck(e.target.value)}
+                      placeholder="e.g. price &gt; 0"
+                      disabled={addingColumn}
+                      className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-50 text-[12.5px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                    />
+                    <p className="text-[10.5px] text-zinc-600 mt-1.5">
+                      A boolean condition every row must satisfy. Validated server-side.
+                    </p>
+                  </div>
+                </div>
+
+                {constraintOutcome && (
+                  <div className="px-3 py-2 bg-amber-500/[0.06] border border-amber-500/20 rounded-lg text-[11px] text-amber-200/90 space-y-1">
+                    {constraintOutcome.map((line, i) => (
+                      <p key={i} className={i === 0 ? 'font-medium' : 'font-mono text-[10.5px] text-amber-200/70'}>{line}</p>
+                    ))}
+                  </div>
+                )}
+
                 {error && (
                   <div className="px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[11px] text-rose-300/90">{error}</div>
                 )}
@@ -2157,7 +2304,7 @@ export default function ProjectDatabasePage() {
 
               <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/[0.06]">
                 <button
-                  onClick={() => setShowAddColumnModal(false)}
+                  onClick={() => { setShowAddColumnModal(false); resetAddColumnForm(); setConstraintOutcome(null) }}
                   disabled={addingColumn}
                   className="h-8 px-3 text-[12px] font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] rounded-lg transition-colors disabled:opacity-50"
                 >
@@ -2165,7 +2312,11 @@ export default function ProjectDatabasePage() {
                 </button>
                 <button
                   onClick={handleAddColumn}
-                  disabled={addingColumn || !newColumnName.trim()}
+                  disabled={
+                    addingColumn ||
+                    !newColumnName.trim() ||
+                    (!!newColumnReferences && !isForeignKeyShaped(newColumnName))
+                  }
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[12px] font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {addingColumn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}

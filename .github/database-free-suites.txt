@@ -181,3 +181,12 @@ __tests__/storage/s3-native-aws-config.test.ts
 __tests__/storage/public-url-contract.test.ts
 __tests__/security/outbound-guard.test.ts
 __tests__/security/integration-credential-egress.test.ts
+
+# The self-host installer's .env editor. `npm run selfhost` is documented as
+# safe to rerun, so this asserts the two properties that pull against each
+# other: never overwrite a configured secret (a rerun must not sign out every
+# session or break a running PostgREST), and always overwrite a template
+# placeholder (.env.example ships a JWT_SECRET that is public knowledge, so
+# treating it as configured is worse than leaving the file empty). Pure string
+# handling, checked against the real .env.example.
+__tests__/selfhost/env-file.test.ts

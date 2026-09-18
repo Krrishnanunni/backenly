@@ -467,6 +467,76 @@ against a flake that does not exist, and `probe fixtures` and `integration
 suites` both run `--runInBand` in CI by design, since those suites share one
 database. Adding a parallel mode would measure a configuration CI never uses.
 
+**Tranche 01 landed, 2026-09-18.** `npm run selfhost` is one command from a
+fresh clone to a deployment bootstrap reports ready, proved by a CI job that
+runs it on a clean runner with no `.env`. a0 items 3 and 5 are closed. Four
+further defects were found by building it, three of them by the CI assertions
+rather than by reading code:
+
+1. **`prisma db push` is destructive against an installed deployment.** The
+   PostgREST support objects are created by SQL, not Prisma — a registry table
+   and two DDL event triggers — so push treats them as objects to drop, which
+   `--accept-data-loss` authorises. The rerun failed with P1014; had it
+   succeeded it would have removed the registry the data plane reads to decide
+   which schemas PostgREST serves. The installer now pushes only when the
+   platform tables are absent, and README.md warns against rerunning `db:push`.
+   Found by the idempotence assertion, not by inspection.
+2. **The root `docker-compose.yml` was dead.** It built from `./worker`, which
+   has no tracked files, so `docker compose up -d` at the repo root — the first
+   thing a Supabase user tries — failed on a missing build context. `AGENTS.md`
+   called it "the whole stack" and "the supported way to run it". Removed, both
+   documents corrected.
+3. **Bootstrap discarded its advisories on the exit-3 path.** It printed
+   "skipped (see warning)" for each optional step and then printed no warning,
+   on the one run an operator reads carefully.
+4. **The OSS preflight caught a key-shaped literal in a new test.** Working as
+   intended, and worth recording given it once reported clean with live JWTs.
+
+**Tranche 02 landed, 2026-09-18.** Foreign keys, unique and check constraints
+in the table editor, through `addWorkspaceConstraint` — the same typed-action
+path the brain uses. One defect found:
+
+- **An operator's chosen FK target was being discarded.** The executor infers a
+  target from the column name when none is supplied, which is right for the AI
+  path. Passing the choice through `expression` looked correct but the executor
+  parses that with a regex expecting `table(column)`, so a bare table name never
+  matched and inference ran anyway — picking `organizations` for `owner_id`
+  silently produced `owners`. `referencedTable` is now explicit end to end. The
+  regression fixture makes inference and the choice disagree with both targets
+  present, and asserts on the catalog; 2 of its 6 tests fail without the fix.
+
+**Found by the browser suite, 2026-09-18, not yet fixed.** A freshly installed
+deployment repeatedly logs `relation "workspace_<id>.users" does not exist`,
+along with `_magic_links`, `_password_resets` and `_email_verifications`.
+Something queries the end-user auth tables on a loop before anything has
+created them, so the server log of a brand-new install fills with raw Prisma
+errors. Same class as a0 5 — an expected state reported as a crash — and found
+the same way, by running the thing rather than reading it. The browser suite
+saw it because it is the first harness that starts a real app against a real
+fresh install.
+
+**Found by the browser suite, 2026-09-18.** A freshly installed deployment's
+dashboard is not usable by the account that just signed up. Bootstrap creates
+THE project before any account exists, so it is owner-less; it adopts the first
+operator only on a **rerun**. Until that rerun, opening the project answers
+`PROJECT_FORBIDDEN` and the database page redirects to the project list after a
+two-second delay. The README does document the rerun, so this is friction
+rather than breakage — but it is friction on the first thing an operator does
+after installing, it looks like the install failed, and `npm run selfhost`
+cannot do it for them because the account does not exist yet. Supabase
+self-hosted has no equivalent step. Candidate fix: adopt the owner on first
+signup rather than on a bootstrap rerun.
+
+**Open, carried forward.** a0 4 — the application still connects to Postgres as
+a superuser on the default Compose path — is a decision about the role model
+rather than a capability to build, and it is the one item in this tranche that
+changes the security model. It is stated for the founder rather than taken
+unilaterally.
+
+**Open.** There is no working browser coverage. `tests/e2e/` assumes an
+authenticated session and is not wired into CI, so it is not evidence for any
+UI item. That harness is worth building once, before the remaining UI tranches.
+
 **Why 3, 4 and 5 belong inside 01.** All three are install-path decisions, and
 01 is the only tranche item that rewrites the install path:
 
