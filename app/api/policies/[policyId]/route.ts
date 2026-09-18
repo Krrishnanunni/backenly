@@ -15,7 +15,11 @@ const updatePolicySchema = z.object({
 export async function GET(request: NextRequest, props: { params: Promise<{ policyId: string }> }) {
   const params = await props.params;
   try {
-    await requireAuth(request)
+    // Read is admin-gated too. PUT and DELETE already were, which made the
+    // open GET easy to miss: an auth policy describes how access is decided,
+    // and reading one tells you how to work around it.
+    const adminError = await requireAdmin(request)
+    if (adminError) return adminError
     
     const policy = await prisma.authPolicy.findUnique({
       where: { id: params.policyId },
