@@ -1,13 +1,5 @@
 [
   {
-    "route": "/api/ai-workspace/generate-plan",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/ai-workspace/preview-diff",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/auth/forgot-password",
     "reason": "UNREVIEWED"
   },
@@ -136,10 +128,6 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/monitoring/usage-alerts",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/notifications/[id]",
     "reason": "UNREVIEWED"
   },
@@ -156,14 +144,6 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/project/deploy",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/projects/[id]/ai-cost",
     "reason": "UNREVIEWED"
   },
@@ -177,10 +157,6 @@
   },
   {
     "route": "/api/projects/[id]/architecture-memory",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/auth-email-settings",
     "reason": "UNREVIEWED"
   },
   {
@@ -204,14 +180,6 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/projects/[id]/export/functions",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/export/schema",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/projects/[id]/go-live",
     "reason": "UNREVIEWED"
   },
@@ -228,27 +196,7 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/projects/[id]/rollback",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/rollback/archives",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/sdk-test",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/state",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/projects/[id]/suggestions",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/timeline",
     "reason": "UNREVIEWED"
   },
   {
@@ -272,11 +220,11 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/storage/buckets/[bucketId]",
+    "route": "/api/settings/billing",
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/storage/files/[fileId]/download",
+    "route": "/api/storage/buckets/[bucketId]",
     "reason": "UNREVIEWED"
   },
   {
@@ -285,14 +233,6 @@
   },
   {
     "route": "/api/test-services",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/testing/lineage-proof",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/testing/time-travel",
     "reason": "UNREVIEWED"
   },
   {
@@ -309,10 +249,6 @@
   },
   {
     "route": "/api/v1/[projectId]/[...unmatched]",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/ai/generate",
     "reason": "UNREVIEWED"
   },
   {
@@ -344,63 +280,7 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/v1/[projectId]/broadcast",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/cart",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/cart/clear",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/cart/items",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/cart/items/[productId]",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/checkout",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/database/delete",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/database/insert",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/database/query",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/database/update",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/db/[tableName]/vector-search",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/functions",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/functions/invoke",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/v1/[projectId]/healthz",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/logs",
     "reason": "UNREVIEWED"
   },
   {
@@ -408,47 +288,11 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/v1/[projectId]/presence",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/realtime",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/v1/[projectId]/realtime/ticket",
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/v1/[projectId]/stats/summary",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/storage/confirm-upload",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/storage/files",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/storage/files/[fileId]",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/storage/signed-upload",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/storage/upload",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/v1/[projectId]/storage/upload-multipart",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/v1/[projectId]/stripe/session",
     "reason": "UNREVIEWED"
   },
   {

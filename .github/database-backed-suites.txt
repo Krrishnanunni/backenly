@@ -229,3 +229,11 @@ __tests__/database/sql-workspace-isolation.test.ts
 # if it tried - and rollbackToVersion used it. Tested at the library boundary,
 # because scoping the query is what makes the bug unrepresentable.
 __tests__/auth/schema-version-isolation.test.ts
+
+# The ai-workspace routes took projectId from the request body and used it
+# unchecked, so any signed-in account could name another tenant's project and
+# apply schema changes to it. Two-sided: every denial is paired with the
+# corresponding permission, because a refusal-only suite is green when nothing
+# works. Runs as CLOUD, since single-tenant treats any authenticated account as
+# the deployment's operator and the question does not arise there.
+__tests__/auth/ai-workspace-tenant-isolation.test.ts
