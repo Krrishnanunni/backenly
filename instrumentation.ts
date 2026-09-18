@@ -25,6 +25,22 @@ export async function register() {
     const { assertEditionCompositionOrExit } = await import('./lib/edition/cloud-extension')
     assertEditionCompositionOrExit('Next server')
 
+    // Also before anything serves a request: a deployment that runs several
+    // instances while the auth limiter keeps per-process counters has a
+    // brute-force budget of (limit x instances) on every auth surface, and
+    // nothing about raising a replica count would prompt anybody to notice.
+    // Failing at startup is the point - the alternative is serving traffic
+    // with a control that is quietly weaker than it reads.
+    const { assertRateLimitStoreSupportsTopology } = await import('./lib/security/rate-limit-store')
+    try {
+      assertRateLimitStoreSupportsTopology()
+    } catch (err) {
+      console.error('')
+      console.error(err instanceof Error ? err.message : String(err))
+      console.error('')
+      process.exit(1)
+    }
+
     await import('./sentry.server.config')
 
     // Start the in-process cron scheduler.
