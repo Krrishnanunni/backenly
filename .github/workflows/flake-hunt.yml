@@ -5,24 +5,28 @@ name: Flake hunt
 #
 # WHY THIS EXISTS
 # ---------------
-# `probe fixtures` failed three times across two branches during the 2026-09-17
-# audit, then passed on re-run with byte-identical code while `main` passed six
-# times running. It cost a wrong diagnosis: a bisect "proved" a change had
-# broken it, and re-running the same commit disproved that.
+# It was built to chase an intermittent `probe fixtures` job. That job was not
+# intermittent. Reading the CI logs rather than the note I had written about
+# them: the failures were in `integration suites`, they were the same single
+# assertion every time, and they were deterministic red between fe080cef (which
+# added a `carry_constraints` rung) and 5386616c (which renumbered the fixture).
+# The bisect that supposedly exonerated a commit had in fact compared two
+# different trees and was correct.
 #
-# An intermittent job is worse than a red one. A red job is honest; an
-# intermittent job launders noise into evidence, and every later diagnosis
-# inherits the doubt — including the Cloud staging verdict the release gate
-# depends on.
+# The harness is kept anyway, because the reason it was reached for stands: an
+# intermittent job is worse than a red one. A red job is honest; an intermittent
+# job launders noise into evidence, and every later diagnosis inherits the
+# doubt. The next time a job looks flaky this answers the question with a
+# measured rate over N runs in the real CI environment, instead of an anecdote
+# and a re-run. It also records a clean result, so "it is stable" becomes a
+# green run rather than a claim.
 #
-# The suite could not be reproduced locally: six consecutive clean runs, three
-# of them against freshly created databases, and a deliberately staled
-# subsystem cache changed nothing. A defect that cannot be reproduced cannot be
-# removed, so the first move is to make it reproducible and measurable rather
-# than to guess at a cause or paper over it with retries.
+# First, though, read the failing assertion. That is what would have settled
+# this in one minute instead of 38 runs.
 #
 # Retries are deliberately NOT offered here. They would hide the exact signal
-# this is trying to measure.
+# this is trying to measure, and for a deterministic failure they would hide a
+# real defect.
 on:
   workflow_dispatch:
     inputs:
