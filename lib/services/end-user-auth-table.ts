@@ -159,6 +159,17 @@ export async function purgeSyntheticAuthArtifacts(
   // it — three red blocks per probe run, per project, for a non-event. Real
   // failures were getting lost in that noise.
   const existing = new Set<string>()
+  // Whether the lookup ANSWERED, as distinct from what it answered.
+  //
+  // This was inferred from `existing.size > 0`, which conflates "introspection
+  // failed" with "this schema has no tables" — and the second is exactly what a
+  // freshly installed deployment looks like. So on the one deployment where the
+  // pre-check mattered most it was skipped, every DELETE was attempted, and a
+  // brand-new install's log filled with `relation ... does not exist` for
+  // users, _email_verifications, _magic_links and _password_resets on every
+  // probe run. The operator's first impression of their own install was a wall
+  // of Prisma errors describing a non-event.
+  let introspected = false
   try {
     const present = await executeWithUserContext<{ table_name: string }>(
       '', true,
@@ -166,6 +177,7 @@ export async function purgeSyntheticAuthArtifacts(
       [schemaName],
     )
     for (const r of present) existing.add(r.table_name)
+    introspected = true
   } catch {
     /* introspection failed — fall through and let each purge try as before */
   }
@@ -173,9 +185,9 @@ export async function purgeSyntheticAuthArtifacts(
   // Each executeWithUserContext runs in its own transaction, so a table that
   // does not exist in this project fails just its own DELETE, not the batch.
   const purge = async (table: string, where: string, params: unknown[]): Promise<void> => {
-    // Skip only when introspection succeeded and positively excluded the table
-    // — an empty set means the lookup failed, so fall back to attempting.
-    if (existing.size > 0 && !existing.has(table)) return
+    // Skip whenever introspection ANSWERED and did not list this table. An
+    // empty answer is a real answer: a fresh workspace has no tables yet.
+    if (introspected && !existing.has(table)) return
     try {
       const rows = await executeWithUserContext<{ x: number }>(
         '', true,
@@ -195,13 +207,20 @@ export async function purgeSyntheticAuthArtifacts(
 
   if (!opts?.email) {
     let noUsers = false
-    try {
-      const remaining = await executeWithUserContext<{ n: bigint }>(
-        '', true, `SELECT count(*)::bigint AS n FROM "${schemaName}"."users"`,
-      )
-      noUsers = remaining.length > 0 && Number(remaining[0].n) === 0
-    } catch {
-      /* users table absent — leave noUsers false, only prune expired below */
+    // Same pre-check as the purges above, for the same reason. The try/catch
+    // here was never enough: Prisma logs a failed query at `error` level BEFORE
+    // any caller's catch runs, so on a workspace with no `users` table this one
+    // line still printed a raw error block on every sweep. Fixing only the
+    // purges left exactly one of the original four behind.
+    if (!introspected || existing.has('users')) {
+      try {
+        const remaining = await executeWithUserContext<{ n: bigint }>(
+          '', true, `SELECT count(*)::bigint AS n FROM "${schemaName}"."users"`,
+        )
+        noUsers = remaining.length > 0 && Number(remaining[0].n) === 0
+      } catch {
+        /* users table absent — leave noUsers false, only prune expired below */
+      }
     }
     await purge('_token_blacklist', noUsers ? 'TRUE' : 'expires_at < NOW()', [])
   }
