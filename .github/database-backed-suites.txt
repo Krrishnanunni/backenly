@@ -237,3 +237,10 @@ __tests__/auth/schema-version-isolation.test.ts
 # works. Runs as CLOUD, since single-tenant treats any authenticated account as
 # the deployment's operator and the question does not arise there.
 __tests__/auth/ai-workspace-tenant-isolation.test.ts
+
+# PUT /api/users/[userId] discarded requireAuth's result and applied the body to
+# where: { id: params.userId }. The body accepts password, roleId, emailVerified
+# and twoFactorEnabled, so one authenticated request was account takeover,
+# privilege escalation and 2FA bypass. Separates WHO may touch a record from
+# WHICH fields they may set: self-service must not become self-promotion.
+__tests__/auth/user-record-authorization.test.ts
