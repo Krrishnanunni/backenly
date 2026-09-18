@@ -9,7 +9,7 @@ Where the work actually stands, so nobody reads "main is green" as "finished":
 | | state |
 |---|---|
 | Self-host core correctness and security | **largely closed and verified.** Restore no longer destroys data, corrupt archives are rejected before the live schema is touched, failures roll back, `ON_ERROR_STOP` prevents false success, the backup role has a proven minimal privilege contract, and the edition boundary is regression-locked. |
-| Self-host parity and operator UX | **not started.** One-command self-host, FK/constraint UI, backup/restore UI, logs explorer, read-only SQL workspace, migration history, webhooks UI, and the wider Auth/storage/extensions gaps in Part 2. |
+| Self-host parity and operator UX | **See the derived capability register below.** This row was hand-maintained and said "not started" while the one-command install, FK/constraint controls, logs explorer, read-only SQL workspace and migration history had all landed. It is no longer the source of truth. |
 | Cloud production validation | **pending.** Staging with the private overlay and production-style credentials, then build once and promote that exact digest. |
 
 Sequence: **CI-01 closed 2026-09-18** (there was no flake; see the record
@@ -24,6 +24,50 @@ validation remains required before Cloud production, and gates Cloud only.
 
 Every claim below cites either a Supabase path at that SHA, an observed HTTP
 call, or a Backenly repo path. A claim with no locator does not belong here.
+
+
+<!-- BEGIN DERIVED REGISTER -->
+
+## Capability register
+
+**Derived from `848207f2` on 2026-09-18 by `scripts/derive-selfhost-register.ts`.**
+Do not hand-edit this section: it is regenerated, and a capability
+cannot be marked done by editing prose. The previous hand-maintained
+matrix listed five shipped capabilities as "not started".
+
+BACKEND_ONLY 1 · CLOUD_ONLY 1 · DONE 13 · INTENTIONAL 3 · PARTIAL 3 · REAL_GAP 2
+
+| Area | Capability | Verdict | Evidence |
+|---|---|---|---|
+| Install | One-command install | **DONE** | scripts/selfhost.ts, README.md |
+| Install | Non-superuser application role | **DONE** | scripts/setup-app-role.ts, README.md |
+| Install | First-owner claim token | **DONE** | lib/auth/setup-token.ts, README.md |
+| Database | Table editor | **DONE** | app/api/database/tables/route.ts, app/app/projects/[id]/database/page.tsx |
+| Database | Foreign keys and constraints | **DONE** | app/api/database/schema/constraints/route.ts, lib/db/fk-shape.ts, app/app/projects/[id]/database/page.tsx |
+| Database | Read-only SQL workspace | **DONE** | app/api/database/query/route.ts, lib/mcp/read-query.ts, components/database/SqlWorkspace.tsx |
+| Database | Migration / schema history | **DONE** | app/api/projects/[id]/schema-versions/route.ts, components/database/SchemaHistory.tsx |
+| Database | Schema graph | **DONE** | app/api/database/relationships/route.ts, components/database/EnhancedSchemaVisualizer.tsx |
+| Database | Dashboard SQL writes / DDL | **INTENTIONAL** | AGENTS.md: mutations go through typed governed actions so they can be planned, approved, verified and reversed. A SQL parser must never be the tenant boundary. |
+| Observability | Logs explorer | **DONE** | app/api/logs/route.ts, components/monitoring/LogsExplorer.tsx |
+| Observability | Monitoring workbench | **DONE** | app/api/monitoring/request-logs/route.ts, components/monitoring/MonitoringWorkbench.tsx |
+| Data protection | Workspace logical backup | **CLOUD_ONLY** | Gated to Cloud in lib/edition/cloud-only.ts. UNDER REVIEW: the implementation is proven safe on a non-superuser role, and withholding it from operators who run their own database is a product decision worth re-taking on its own merits rather than by copying Supabase. Backend present. |
+| Data protection | Deployment disaster recovery | **INTENTIONAL** | NOT YET DESIGNED. A workspace pg_dump is not DR: platform database, workspace schemas, storage objects, function definitions, project secrets and operator metadata are separate concerns. Must be designed or documented, never implied by the backup feature. |
+| Integrations | Webhooks | **BACKEND_ONLY** | backend: app/api/projects/[id]/webhooks/route.ts, lib/webhooks/index.ts. absent: ui components/integrations/WebhooksPanel.tsx |
+| Auth | End-user auth runtime | **DONE** | app/api/v1/[projectId]/auth/signin/route.ts, app/app/projects/[id]/auth/page.tsx |
+| Auth | SMTP configuration | **PARTIAL** | A transport exists but reads SMTP_HOST/USER/PASS from deployment-wide env. There is no per-project configuration and no UI, so an operator cannot change mail settings without editing .env and restarting. Present: lib/email/smtp-transport.ts. |
+| Auth | Email template editing | **PARTIAL** | Subjects and HTML are built in TypeScript in end-user-auth-email.ts. They are real and they send, but nothing can edit them without a code change. Present: lib/services/end-user-auth-email.ts. |
+| Storage | Buckets and objects | **DONE** | app/api/v1/[projectId]/storage/upload/route.ts, lib/services/storage.ts, components/storage/StorageWorkbench.tsx |
+| Storage | Per-bucket access policies | **PARTIAL** | Buckets carry a public/private flag and nothing finer. There is no per-bucket policy model, so access cannot be expressed per role, per path or per operation the way RLS expresses it for tables. Present: lib/services/storage.ts. |
+| Postgres admin | Index management | **DONE** | app/api/database/indexes/route.ts, app/app/projects/[id]/database/page.tsx |
+| Postgres admin | Extension allowlist provisioning | **REAL_GAP** | absent: backend lib/services/extensions.ts, ui components/database/ExtensionsPanel.tsx |
+| Postgres admin | Enums and domains | **REAL_GAP** | absent: backend lib/services/enums.ts, ui components/database/EnumsPanel.tsx |
+| Postgres admin | Arbitrary roles and grants | **INTENTIONAL** | Deliberate. Roles are cluster-global and the platform issues scoped credentials through governed actions; hand-editing grants would let a dashboard user dismantle the tenant boundary the platform relies on. |
+
+`BACKEND_ONLY` is the class this program exists to find: a working
+backend nothing calls. Both cross-tenant defects found so far lived
+in routes with no UI, because nothing ever exercised them.
+
+<!-- END DERIVED REGISTER -->
 
 ---
 

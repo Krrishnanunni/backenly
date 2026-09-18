@@ -244,3 +244,10 @@ __tests__/auth/ai-workspace-tenant-isolation.test.ts
 # privilege escalation and 2FA bypass. Separates WHO may touch a record from
 # WHICH fields they may set: self-service must not become self-promotion.
 __tests__/auth/user-record-authorization.test.ts
+# A fresh install must not fill its log with errors about a non-event. The
+# autonomy sweep purges end-user auth tables that do not exist until a project
+# enables auth; its information_schema pre-check treated an EMPTY answer as a
+# failed lookup, which is exactly what a brand-new workspace returns. Observes
+# the output from a SUBPROCESS: an in-process capture saw nothing and passed
+# identically against the bug.
+__tests__/services/fresh-install-auth-purge.test.ts
