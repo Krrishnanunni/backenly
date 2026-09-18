@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
 import { resetEndUserPassword } from '@/lib/services/end-user-auth-flows'
 
 /**
@@ -14,6 +15,23 @@ import { resetEndUserPassword } from '@/lib/services/end-user-auth-flows'
  */
 export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
+
+  // Throttled per IP AND per project. This surface had no rate limiting of any
+  // kind, while the platform's own recovery routes are limited via AUTH_LIMITS.
+  // Keyed on both so one project under attack cannot lock out recovery for a
+  // different project behind the same egress address.
+  const ip = clientIp(request)
+  const limit = consume(
+    `v1:endUserRecover:${params.projectId}:${ip}`,
+    AUTH_LIMITS.endUserRecover.ip.limit,
+    AUTH_LIMITS.endUserRecover.ip.windowMs,
+  )
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please try again later.' } },
+      { status: 429 },
+    )
+  }
   let token: unknown
   let password: unknown
   try {

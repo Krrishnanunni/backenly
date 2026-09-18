@@ -7,6 +7,23 @@
  * instance keeps its own counters; the underlying threat (brute force across
  * one connection) is what matters, not perfect cross-pod accounting.
  *
+ * ── KNOWN LIMIT: the store is per-process ───────────────────────────────────
+ *
+ * That slop is acceptable for the platform auth surface and it is NOT a
+ * complete answer for the end-user surface below. An attacker who can reach
+ * more than one instance gets a fresh budget from each, so the effective limit
+ * is (limit x instances).
+ *
+ * Today that is bounded: self-host is a single process, and the Cloud task
+ * definition runs desired_count = 1. It stops being true the moment either is
+ * scaled, and scaling is not a security decision anybody would think to
+ * review. `checkRateLimitRedis` in lib/middleware/rateLimiter.ts is the
+ * intended shared-store replacement and is currently commented out.
+ *
+ * Recorded here rather than silently assumed, because a control that quietly
+ * weakens when someone raises a replica count is worse than one whose limit is
+ * written down.
+ *
  * Returns a structured result. Routes should 429 on `allowed === false` and
  * include the `retryAfter` in the `Retry-After` header.
  */
@@ -99,6 +116,21 @@ export const AUTH_LIMITS = {
   verifyEmail:   { ip: { limit: 20, windowMs: 60 * 60_000 } },
   twoFactor:     { ip: { limit: 10, windowMs: 15 * 60_000 } },
   oauthCallback: { ip: { limit: 20, windowMs: 15 * 60_000 } },
+
+  // ── The END-USER auth surface, /api/v1/{projectId}/auth/* ────────────────
+  //
+  // These had no throttling of any kind. They are unauthenticated by design -
+  // they are how a customer's own users sign in - but the platform's
+  // /api/auth/login has IP brute-force protection and account lockout, and the
+  // end-user equivalent had neither. That left credential stuffing against
+  // every end user of every project unthrottled.
+  //
+  // Keyed per project as well as per IP, so one project under attack cannot
+  // lock out sign-in for a different project sharing an egress address, and a
+  // single IP cannot spend one global budget across every tenant.
+  endUserSignin:  { ip: { limit: 10, windowMs: 15 * 60_000 } },
+  endUserSignup:  { ip: { limit: 10, windowMs: 60 * 60_000 } },
+  endUserRecover: { ip: { limit: 5,  windowMs: 15 * 60_000 } },
 } as const
 
 /**
