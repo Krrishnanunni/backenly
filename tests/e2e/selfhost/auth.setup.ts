@@ -71,14 +71,38 @@ setup('sign up the first operator', async ({ page, request, baseURL }) => {
   await page.goto('/app')
   await expect(page).toHaveURL(/\/app(\/|$)/, { timeout: 30_000 })
 
-  // The single project this deployment is. Its id is what the database specs
-  // navigate to, and bootstrap pinned it long before the browser opened.
-  const projects = await request.get('/api/projects')
-  expect(projects.ok(), `could not list projects: ${projects.status()}`).toBe(true)
-  const body = await projects.json()
-  const list = Array.isArray(body) ? body : (body.projects ?? body.data ?? [])
-  expect(Array.isArray(list) && list.length > 0, 'the deployment has no project').toBe(true)
+  // The single project this deployment is.
+  //
+  // BACKENLY_PROJECT_ID is the authority: bootstrap pinned it, it names the
+  // workspace schema, and it cannot drift. The API listing is a fallback for
+  // running this against a deployment whose env is not readable from here.
+  //
+  // Reading it from the listing alone was wrong once already — the shape did
+  // not match, `list[0].id` came back undefined, and every spec navigated to
+  // /app/projects/undefined/... which redirects to the project list. Four
+  // specs then failed on "element not found" for a page they were never on.
+  let id = process.env.BACKENLY_PROJECT_ID?.trim() || ''
 
-  writeFileSync(PROJECT_HANDOFF, JSON.stringify({ id: list[0].id, email }, null, 2), 'utf8')
+  if (!id) {
+    const projects = await request.get('/api/projects')
+    expect(projects.ok(), `could not list projects: ${projects.status()}`).toBe(true)
+    const body = await projects.json()
+    const list = Array.isArray(body) ? body : (body.projects ?? body.data ?? [])
+    expect(Array.isArray(list) && list.length > 0, 'the deployment has no project').toBe(true)
+    id = list[0]?.id ?? ''
+  }
+
+  // Asserted rather than assumed, so a bad shape fails HERE with a clear
+  // message instead of as a mystery redirect in every spec.
+  expect(
+    typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id),
+    `could not determine the project id (got ${JSON.stringify(id)})`
+  ).toBe(true)
+
+  // Prove it resolves before handing it on.
+  await page.goto(`/app/projects/${id}/database`)
+  await expect(page).toHaveURL(new RegExp(`/app/projects/${id}/database`), { timeout: 30_000 })
+
+  writeFileSync(PROJECT_HANDOFF, JSON.stringify({ id, email }, null, 2), 'utf8')
   void baseURL
 })

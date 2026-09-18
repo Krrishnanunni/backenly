@@ -970,7 +970,14 @@ jobs:
           # The app is already running, started by the step above. Without this
           # Playwright starts its own on the same port.
           PLAYWRIGHT_SERVER_ALREADY_RUNNING: '1'
-        run: npx playwright test --project=selfhost
+        run: |
+          set -euo pipefail
+          # The id bootstrap pinned, which names the workspace schema. Reading
+          # it from the API listing instead produced undefined once, and every
+          # spec then navigated to a URL that redirects to the project list.
+          export BACKENLY_PROJECT_ID=$(grep -E '^BACKENLY_PROJECT_ID=' .env | head -1 | cut -d= -f2-)
+          echo "project: $BACKENLY_PROJECT_ID"
+          npx playwright test --project=selfhost
 
       # The rendered page, not a guess at it. Without this, diagnosing a
       # selector that does not match means another full CI cycle per attempt.
