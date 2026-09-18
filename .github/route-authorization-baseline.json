@@ -144,23 +144,7 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/projects/[id]/ai-cost",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/ai-suggestions",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/projects/[id]/anon-key",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/architecture-memory",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/auth-state",
     "reason": "UNREVIEWED"
   },
   {
@@ -169,10 +153,6 @@
   },
   {
     "route": "/api/projects/[id]/credentials",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/debug-state",
     "reason": "UNREVIEWED"
   },
   {
@@ -189,10 +169,6 @@
   },
   {
     "route": "/api/projects/[id]/integrations",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/suggestions",
     "reason": "UNREVIEWED"
   },
   {
