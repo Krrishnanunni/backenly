@@ -56,7 +56,7 @@ export interface RouteRecord {
   authn:
     | 'withProjectAccess' | 'withTenantIsolation' | 'withProjectValidation'
     | 'withAuth' | 'requireAuth' | 'authenticateRequest' | 'requireAdmin' | 'verifySession'
-    | 'v1ApiMiddleware'
+    | 'v1ApiMiddleware' | 'getProjectContext'
     | 'mcpGuard' | 'verifyToken' | 'sharedSecret' | 'none'
   /** Explicit authorization helpers called in the file. */
   authz: string[]
@@ -115,6 +115,9 @@ function classify(file: string): RouteRecord {
     // routes as unauthenticated, which was the largest single block of false
     // positives in the first report.
     : /v1ApiMiddleware\s*\(/.test(src) ? 'v1ApiMiddleware'
+    // Calls requireUser AND canAccessProject before returning the project, so
+    // it is both the authentication and the authorization for its callers.
+    : /getProjectContext\s*\(/.test(src) ? 'getProjectContext'
     : /withTenantIsolation\s*[(<]/.test(src) ? 'withTenantIsolation'
     : /requireAdmin\s*\(/.test(src) ? 'requireAdmin'
     : /withAuth\s*\(/.test(src) ? 'withAuth'
@@ -144,6 +147,10 @@ function classify(file: string): RouteRecord {
     // getProjectContext calls canAccessProject before returning the project,
     // so /api/projects/[id]/go-live was authorized all along.
     'getProjectContext',
+    // Cross-checks a child resource's projectId against the authorized one.
+    // /api/storage/buckets/[bucketId] uses it on every verb, which is the
+    // correct pattern for a globally unique child id.
+    'validateProjectOwnership',
   ].filter(h => new RegExp(`\\b${h}\\s*\\(`).test(src))
 
   const pathParams = Array.from(route.matchAll(/\[([^\]]+)\]/g)).map(m => m[1])
@@ -225,7 +232,15 @@ function classify(file: string): RouteRecord {
   // canWriteProject and THEN looks the project up by id, which is the correct
   // order — the lookup is not the boundary, the check before it is. Flagging
   // that was a false positive.
-  if (bareFindUnique && takesResourceId && !scopedByCallerIdentity && authz.length === 0 && !selfOrAdmin) {
+  const authorizingGuard =
+    authn === 'withProjectAccess' || authn === 'withTenantIsolation' ||
+    authn === 'withProjectValidation' || authn === 'v1ApiMiddleware' ||
+    authn === 'getProjectContext'
+
+  if (
+    bareFindUnique && takesResourceId && !scopedByCallerIdentity &&
+    authz.length === 0 && !selfOrAdmin && !authorizingGuard
+  ) {
     why.push('findUnique by bare id: a resource id is not proof of ownership')
   }
 
@@ -243,9 +258,23 @@ function classify(file: string): RouteRecord {
 
 const BASELINE = join(ROOT, '.github', 'route-authorization-baseline.json')
 
+/**
+ * One reviewed route.
+ *
+ * `status` exists because "the detector stopped flagging it" and "a human
+ * looked and it is safe" are different facts, and only the second is evidence.
+ * Without the distinction, a route silently left the list whenever the
+ * heuristics improved, and a later reviewer could not tell which had happened.
+ *
+ *   UNREVIEWED  still flagged, nobody has looked yet
+ *   ACCEPTED    still flagged, reviewed, and the shape is correct here anyway
+ *   SAFE        reviewed and confirmed safe; the reason records HOW that was
+ *               established, so it survives the detector changing its mind
+ */
 interface BaselineEntry {
   route: string
-  /** Why this shape is acceptable here, or UNREVIEWED. */
+  status?: 'UNREVIEWED' | 'ACCEPTED' | 'SAFE'
+  /** Why. For SAFE and ACCEPTED this is the evidence a later reviewer reads. */
   reason: string
 }
 
@@ -276,13 +305,47 @@ function check(records: RouteRecord[]): void {
 
   const known = new Map(baseline.map(b => [b.route, b]))
   const flagged = records.filter(r => r.risk !== 'none')
+  const flaggedRoutes = new Set(flagged.map(r => r.route))
 
   const added = flagged.filter(r => !known.has(r.route))
-  const fixed = baseline.filter(b => !flagged.some(r => r.route === b.route))
 
-  if (added.length === 0 && fixed.length === 0) {
-    console.log(`  Route authorization: ${flagged.length} flagged, all accounted for.`)
+  // A SAFE entry is KEPT after it stops being flagged. That is the whole point:
+  // it records that somebody looked and what they established, so a later
+  // reviewer can tell "reviewed and safe" from "the detector changed its mind".
+  // Only UNREVIEWED and ACCEPTED entries are expected to track the detector.
+  const stale = baseline.filter(
+    b => (b.status ?? 'UNREVIEWED') !== 'SAFE' && !flaggedRoutes.has(b.route),
+  )
+
+  // A SAFE route that starts being flagged again is a regression in something
+  // that was reviewed, which deserves a louder failure than a new route.
+  const regressed = baseline.filter(
+    b => b.status === 'SAFE' && flaggedRoutes.has(b.route),
+  )
+
+  const counts = baseline.reduce<Record<string, number>>((acc, b) => {
+    const k = b.status ?? 'UNREVIEWED'
+    acc[k] = (acc[k] ?? 0) + 1
+    return acc
+  }, {})
+
+  if (added.length === 0 && stale.length === 0 && regressed.length === 0) {
+    const summary = Object.entries(counts).sort().map(([k, v]) => `${v} ${k}`).join(' · ')
+    console.log(`  Route authorization: ${flagged.length} flagged. Baseline: ${summary}.`)
+    if ((counts.UNREVIEWED ?? 0) > 0) {
+      console.log(`  ${counts.UNREVIEWED} entr(y/ies) still UNREVIEWED.`)
+    }
     return
+  }
+
+  if (regressed.length > 0) {
+    console.error('')
+    console.error('  These were reviewed and marked SAFE, and are flagged again:')
+    for (const b of regressed) {
+      console.error(`    ${b.route}`)
+      console.error(`      was: ${b.reason}`)
+    }
+    console.error('')
   }
 
   if (added.length > 0) {
@@ -299,12 +362,14 @@ function check(records: RouteRecord[]): void {
     console.error('')
   }
 
-  if (fixed.length > 0) {
+  if (stale.length > 0) {
     // Not a failure to celebrate quietly: a stale baseline is how a ratchet
-    // loosens without anybody deciding to loosen it.
+    // loosens without anybody deciding to loosen it. Mark the entry SAFE with
+    // the evidence instead of deleting it, so the review is not lost.
     console.error('')
-    console.error('  These baseline entries are no longer flagged. Remove them:')
-    for (const b of fixed) console.error(`    ${b.route}`)
+    console.error('  These baseline entries are no longer flagged. Either remove them,')
+    console.error('  or set status SAFE with a reason recording what you established:')
+    for (const b of stale) console.error(`    ${b.route}`)
     console.error('')
   }
 
@@ -321,13 +386,25 @@ function writeBaseline(records: RouteRecord[]): void {
   } catch { /* first run */ }
 
   // Reasons already written are preserved; only the route list is refreshed.
-  const out: BaselineEntry[] = flagged.map(r => ({
-    route: r.route,
-    reason: existing.get(r.route)?.reason ?? 'UNREVIEWED',
-  }))
+  // SAFE entries are carried forward even when no longer flagged, so a review
+  // is never lost by regenerating the file.
+  const safeKept = [...existing.values()].filter(
+    b => b.status === 'SAFE' && !flagged.some(r => r.route === b.route),
+  )
+  const out: BaselineEntry[] = [
+    ...flagged.map(r => {
+      const prior = existing.get(r.route)
+      return {
+        route: r.route,
+        status: prior?.status ?? ('UNREVIEWED' as const),
+        reason: prior?.reason ?? 'UNREVIEWED',
+      }
+    }),
+    ...safeKept,
+  ].sort((a, b) => a.route.localeCompare(b.route))
   writeFileSync(BASELINE, JSON.stringify(out, null, 2) + String.fromCharCode(10), 'utf8')
   console.log(`  Wrote ${out.length} entries to ${relative(ROOT, BASELINE)}`)
-  console.log(`  ${out.filter(e => e.reason === 'UNREVIEWED').length} are UNREVIEWED.`)
+  console.log(`  ${out.filter(e => (e.status ?? 'UNREVIEWED') === 'UNREVIEWED').length} are UNREVIEWED.`)
 }
 
 function main(): void {
@@ -357,7 +434,7 @@ function main(): void {
   console.log('')
   console.log(`  routes              ${records.length}`)
   console.log(`  with a guard        ${records.filter(r => r.authn !== 'none').length}`)
-  const AUTHORIZING = new Set(['withProjectAccess', 'withTenantIsolation', 'withProjectValidation', 'v1ApiMiddleware'])
+  const AUTHORIZING = new Set(['withProjectAccess', 'withTenantIsolation', 'withProjectValidation', 'v1ApiMiddleware', 'getProjectContext'])
   console.log(`  authorizing guard   ${records.filter(r => AUTHORIZING.has(r.authn)).length}`)
   console.log(`  scoped by caller    ${records.filter(r => r.scopedByCallerIdentity).length}`)
   console.log(`  explicit authz call ${records.filter(r => r.authz.length > 0).length}`)

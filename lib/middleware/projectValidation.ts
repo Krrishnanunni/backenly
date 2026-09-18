@@ -47,7 +47,21 @@ export async function validateProjectAccess(
   const user = await requireAuth(request)
   
   // Step 2: Extract projectId from request
-  const projectId = extractProjectId(request)
+  const extracted = extractProjectId(request)
+
+  // A request naming two different projects is refused outright. Resolving it
+  // in favour of either one is what would let a caller authorize project A and
+  // operate on project B.
+  if (extracted === PROJECT_ID_CONFLICT) {
+    throw NextResponse.json(
+      {
+        error: 'Conflicting projectId',
+        message: 'The URL path and the projectId query parameter name different projects.',
+      },
+      { status: 400 },
+    )
+  }
+  const projectId = extracted
   
   if (!projectId) {
     throw NextResponse.json(
@@ -107,34 +121,75 @@ export async function validateProjectAccess(
 /**
  * Extract projectId from request
  * 
- * Checks in order:
- * 1. Query parameter (?projectId=xxx)
- * 2. Request body (for POST/PUT)
- * 3. URL path params (for /api/projects/[projectId]/...)
- * 
- * @returns projectId or null
+ * The PATH WINS, and a disagreement is refused.
+ *
+ * This used to return the query parameter whenever one was present, falling
+ * back to the path. That made a confused deputy possible by construction: a
+ * request to `/api/projects/VICTIM/thing?projectId=MINE` would AUTHORIZE the
+ * caller's own project and then, in any handler that read its path parameter,
+ * ACT ON somebody else's.
+ *
+ * No route in the tree mixed the two that way - every handler under
+ * withProjectValidation uses the authorized id it is handed - so this was a
+ * latent hazard rather than a live defect. It was one careless edit from being
+ * real, and the edit would have looked entirely reasonable.
+ *
+ * Two rules now, and neither depends on a caller remembering anything:
+ *
+ *   - when the path carries a project id, that is the id, full stop
+ *   - when both are present and DIFFER, the request is refused rather than
+ *     silently resolved in favour of either
+ *
+ * Refusing beats preferring the path: a request carrying two different project
+ * ids is not a request anybody meant to send, and answering it at all invites
+ * somebody to build on the behaviour.
+ *
+ * @returns projectId, or null when absent, or a ProjectIdConflict when the two
+ *          sources disagree
  */
-function extractProjectId(request: NextRequest): string | null {
-  // 1. Check query parameters (most common)
-  const url = new URL(request.url)
-  const queryProjectId = url.searchParams.get('projectId')
-  if (queryProjectId) {
-    console.log(`📍 ProjectId from query: ${queryProjectId}`)
-    return queryProjectId
+/** Returned when the path and the query name different projects. */
+export const PROJECT_ID_CONFLICT = Symbol('PROJECT_ID_CONFLICT')
+
+/**
+ * The decision itself, as a pure function.
+ *
+ * Separated from the request so it can be tested without constructing a
+ * NextRequest - which the test environment's Request polyfill cannot build.
+ * The rule is the security-relevant part; reading two values off a request is
+ * not, and tying them together would have left the rule untested.
+ */
+export function resolveProjectId(
+  pathname: string,
+  queryProjectId: string | null,
+): string | null | typeof PROJECT_ID_CONFLICT {
+  // The path is authoritative. `/projects/<id>/...` is part of the route's
+  // identity; a query parameter is something a caller appended.
+  const pathMatch = pathname.match(/\/projects\/([a-zA-Z0-9-_]+)/)
+  const pathProjectId = pathMatch?.[1] ?? null
+
+  if (pathProjectId && queryProjectId && pathProjectId !== queryProjectId) {
+    return PROJECT_ID_CONFLICT
   }
-  
-  // 2. Check URL path (e.g., /api/projects/abc123/database)
-  const pathMatch = request.nextUrl.pathname.match(/\/projects\/([a-zA-Z0-9-_]+)/)
-  if (pathMatch && pathMatch[1]) {
-    console.log(`📍 ProjectId from path: ${pathMatch[1]}`)
-    return pathMatch[1]
-  }
-  
-  // 3. For POST/PUT, check body (note: this consumes the body)
-  // We'll handle this in the API route if needed
-  
-  console.warn(`⚠️ No projectId found in request: ${request.method} ${request.nextUrl.pathname}`)
+  if (pathProjectId) return pathProjectId
+  if (queryProjectId) return queryProjectId
   return null
+}
+
+export function extractProjectId(
+  request: NextRequest,
+): string | null | typeof PROJECT_ID_CONFLICT {
+  const url = new URL(request.url)
+  const resolved = resolveProjectId(request.nextUrl.pathname, url.searchParams.get('projectId'))
+
+  if (resolved === PROJECT_ID_CONFLICT) {
+    console.warn(
+      `⚠️ Refusing a request naming two different projects: ` +
+      `${request.method} ${request.nextUrl.pathname}?projectId=${url.searchParams.get('projectId')}`,
+    )
+  } else if (resolved === null) {
+    console.warn(`⚠️ No projectId found in request: ${request.method} ${request.nextUrl.pathname}`)
+  }
+  return resolved
 }
 
 /**
