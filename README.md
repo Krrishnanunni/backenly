@@ -130,6 +130,38 @@ and reconciles until the deployment reports ready. Then:
 npm run dev                   # dashboard :3000 · runtime :3001
 ```
 
+Then **claim the deployment**. The installer prints a setup token; the first
+account to present it at signup becomes the administrator and takes ownership
+of this deployment's single project in the same step. There is no second
+command to run.
+
+The token is in `.env` as `BACKENLY_SETUP_TOKEN`. It gates the claim because a
+deployment is often reachable before its operator gets to it — an open port on
+a VPS, a preview environment, a colleague pointed at the wrong host — and
+without it the single administrator slot would go to whoever loaded the page
+first. Once the deployment is claimed the token stops working, whatever it is
+set to.
+
+#### The four credentials
+
+The install creates a separate PostgreSQL role for each job, rather than one
+that does everything:
+
+| Role | Used by | Properties |
+| --- | --- | --- |
+| `backenly_user` | the install scripts only | `SUPERUSER`. Creates roles, installs event triggers. Never in `DATABASE_URL`. |
+| `backenly_app` | web and runtime | **`NOSUPERUSER NOBYPASSRLS`**. Owns the platform tables and workspace schemas, so governed typed actions keep their DDL rights. |
+| `backenly_authenticator` | PostgREST | `NOINHERIT`; can only switch into `anon` / `authenticated` / `service_role`. |
+| `backenly_backup` | `pg_dump` only | `NOSUPERUSER BYPASSRLS`, with `CONNECT`, `USAGE`, `SELECT` and nothing else. |
+
+`backenly_app` not being a superuser is the one that matters most. A superuser
+bypasses row-level security — including `FORCE ROW LEVEL SECURITY` — so an
+application running as one has its own policies applied only by convention.
+Ownership plus `FORCE` is what keeps DDL working while leaving RLS in force.
+
+Restore runs over the application connection, not the backup one, so the
+application keeps ownership of the schema it restored.
+
 `npm run selfhost` is **safe to rerun**. It fills in what is missing and never
 rotates a secret that already exists, so a rerun cannot sign out your sessions
 or break a running PostgREST.

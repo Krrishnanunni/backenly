@@ -14,6 +14,8 @@ import {
   SignupSlotTakenError,
 } from '@/lib/platform-controls'
 import { onSignupCompleted, recordProductEvent, verifySignupChallenge } from '@/lib/platform-signals'
+import { assertSetupTokenAdmits, SetupTokenError } from '@/lib/auth/setup-token'
+import { currentEdition } from '@/lib/edition'
 import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
 
 import { z } from 'zod'
@@ -28,6 +30,11 @@ const registerSchema = z.object({
   // Cloudflare Turnstile solve. Required once TURNSTILE_SECRET_KEY is set;
   // ignored before that so shipping this never locks real users out.
   turnstileToken: z.string().max(4096).optional(),
+  // Claims a self-hosted deployment. Printed by `npm run selfhost` and only
+  // readable by somebody who can reach that machine, so possession of the box
+  // grants the single administrator slot rather than whoever loads the page
+  // first. Ignored on Cloud and on installs that configured no token.
+  setupToken: z.string().max(256).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -134,9 +141,14 @@ export async function POST(request: NextRequest) {
     // relying on it alone lets two concurrent first signups both read zero
     // accounts and both succeed, which is exactly the state a single-operator
     // install must not reach. On Cloud this takes no lock and inserts directly.
+    // Refused before anything is written. On a self-hosted deployment with a
+    // configured token this is what stops a stranger who can reach the host
+    // from taking the operator's administrator slot.
+    await assertSetupTokenAdmits(parsed.setupToken)
+
     const now = new Date()
-    const user = await createUserClaimingSignupSlot(tx =>
-      tx.user.create({
+    const user = await createUserClaimingSignupSlot(async tx => {
+      const created = await tx.user.create({
         data: {
           email,
           name: name || null,
@@ -155,7 +167,32 @@ export async function POST(request: NextRequest) {
           role: true,
         },
       })
-    )
+
+      // Adopt THE project, in the same transaction that created the account.
+      //
+      // This is the second half of "one command produces a ready deployment".
+      // Bootstrap creates the project before any account exists, so it starts
+      // owner-less; until something adopted the operator, Project.userId stayed
+      // NULL and every path keyed on ownership disagreed with every other one —
+      // the dashboard listed no projects to the only account there was.
+      //
+      // `userId: null` in the WHERE is what makes it safe: only an unowned
+      // project is ever claimed, so a later account cannot take it and two
+      // requests racing cannot disagree. The database decides, once. Doing it
+      // HERE rather than in a second `npm run bootstrap` is what removes the
+      // hidden step.
+      //
+      // Single-tenant only. On Cloud, projects belong to whoever created them
+      // and an unowned project is not a state that occurs.
+      if (currentEdition() === 'single-tenant') {
+        await tx.project.updateMany({
+          where: { userId: null },
+          data: { userId: created.id },
+        })
+      }
+
+      return created
+    })
 
     
     // Give the new account its entitlements. A no-op in single-tenant, where
@@ -230,6 +267,12 @@ export async function POST(request: NextRequest) {
     // written and the loser simply gets the closed-registration answer.
     if (error instanceof SignupSlotTakenError) {
       return NextResponse.json({ error: error.guard.reason }, { status: error.guard.status })
+    }
+    // A missing or wrong setup token, or a deployment already claimed. Its
+    // message is written for an operator standing at the machine and says
+    // nothing useful to anybody else.
+    if (error instanceof SetupTokenError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -186,6 +186,11 @@ function ensureEnvFile(): { projectId: string } {
     // announced only in a log line, so a self-hosted install that followed the
     // README encrypted its secrets with a key that is public knowledge.
     ['MASTER_ENCRYPTION_KEY', hex32],
+    // Claims this deployment. The first signup must present it, so the single
+    // administrator slot goes to whoever can read this machine rather than to
+    // whoever loads the page first — a deployment is often reachable before
+    // its operator gets to it.
+    ['BACKENLY_SETUP_TOKEN', hex32],
   ]
   for (const [key, gen] of secrets) {
     if (ensureEnvVar(lines, key, gen) === 'generated') generated.push(key)
@@ -247,6 +252,68 @@ function psqlScalar(sql: string): string | null {
     'psql', '-h', '127.0.0.1', '-U', user, '-d', db, '-tAc', sql,
   ])
   return r.code === 0 ? r.out.trim() : null
+}
+
+/**
+ * Split the credential the application runs as from the one that installs it.
+ *
+ * Before this, web and runtime connected as POSTGRES_USER — the role initdb
+ * creates, which is a SUPERUSER. A superuser bypasses row-level security,
+ * including FORCE ROW LEVEL SECURITY, so every policy the platform wrote was
+ * advisory for the application itself. Isolation held because the code scoped
+ * its own queries, not because the database would have refused.
+ *
+ * Runs BEFORE the schema is pushed, deliberately. `prisma db push` creates the
+ * platform tables as whoever it connects as, and in PostgreSQL only an owner
+ * may ALTER or DROP a table. Creating the role first means the application owns
+ * what it has to manage, rather than needing a second pass to hand it over.
+ *
+ * It also runs before the superuser SQL, because that SQL grants EXECUTE on its
+ * SECURITY DEFINER helpers to whatever `backenly.app_role` names. Set the role
+ * afterwards and those grants land on the wrong one.
+ */
+function configureAppRole(): void {
+  heading('separating the application credential from the admin one')
+
+  const lines = readEnvLines()
+  const current = envValue(lines, 'DATABASE_URL') || ''
+
+  // Persisted on the first run, because from the second run onwards
+  // DATABASE_URL names the non-superuser role and can no longer serve as the
+  // admin connection. Without this a rerun would have nothing elevated to use.
+  let admin = envValue(lines, 'BACKENLY_ADMIN_DATABASE_URL') || ''
+  if (!admin) {
+    admin = current
+    setEnvVar(lines, 'BACKENLY_ADMIN_DATABASE_URL', admin)
+    writeFileSync(ENV_PATH, lines.join('\n'), 'utf8')
+    info('recorded the current superuser connection as BACKENLY_ADMIN_DATABASE_URL')
+  }
+
+  const r = capture('npx', ['tsx', 'scripts/setup-app-role.ts', '--apply'], {
+    BACKENLY_ADMIN_DATABASE_URL: admin,
+  })
+  process.stdout.write(r.out)
+  if (r.code !== 0) {
+    throw new InstallFailure(
+      'could not create the application role',
+      'see the output above; BACKENLY_ADMIN_DATABASE_URL must reach the database as a superuser'
+    )
+  }
+
+  // The script prints a connection string only when it issued a password,
+  // which is the first run. On a rerun it leaves the password alone — rotating
+  // it would break a deployment already authenticating with the old one — and
+  // .env already names the role.
+  const match = r.out.match(/postgresql:\/\/[^\s]+/)
+  if (match) {
+    const next = readEnvLines()
+    setEnvVar(next, 'DATABASE_URL', match[0])
+    setEnvVar(next, 'DIRECT_URL', match[0])
+    writeFileSync(ENV_PATH, next.join('\n'), 'utf8')
+    ok('DATABASE_URL and DIRECT_URL now use the non-superuser application role')
+  } else {
+    info('application role already had a password; left DATABASE_URL alone')
+  }
 }
 
 function createTables(): void {
@@ -325,7 +392,16 @@ function installSuperuserPrerequisites(projectId: string): void {
   // captured and written to .env here. Doing this by hand was the step most
   // likely to be got wrong: the connection string is easy to mis-copy and a
   // wrong value shows up only as PostgREST restarting in a loop.
-  const r = capture('npx', ['tsx', 'scripts/setup-postgrest-roles.ts', '--project', projectId, '--apply'])
+  // Run against the ADMIN connection. This step creates roles and sets
+  // passwords, both of which need elevation, and DATABASE_URL is deliberately
+  // no longer elevated. It reads DATABASE_URL through Prisma, so the admin URL
+  // is passed under that name for this one call.
+  const adminUrl = envValue(readEnvLines(), 'BACKENLY_ADMIN_DATABASE_URL') || ''
+  const r = capture(
+    'npx',
+    ['tsx', 'scripts/setup-postgrest-roles.ts', '--project', projectId, '--apply'],
+    adminUrl ? { DATABASE_URL: adminUrl, DIRECT_URL: adminUrl } : {}
+  )
   process.stdout.write(r.out)
   if (r.code !== 0) {
     throw new InstallFailure('could not issue the authenticator password and grants', 'see the output above')
@@ -378,6 +454,7 @@ function main(): void {
   checkPrerequisites()
   const { projectId } = ensureEnvFile()
   startInfrastructure()
+  configureAppRole()
   createTables()
 
   // First run. Exit 3 is expected and documented: it provisions the project,
@@ -404,13 +481,21 @@ function main(): void {
     startDataPlane()
   }
 
+  const setupToken = envValue(readEnvLines(), 'BACKENLY_SETUP_TOKEN') || ''
+
   console.log('')
   console.log('  Backenly is installed.')
   console.log('')
   console.log('    npm run dev          dashboard :3000 · runtime :3001')
   console.log('')
-  console.log('  There is no account yet. Sign up in the dashboard, then run')
-  console.log('  `npm run bootstrap` once more to issue the anon key your frontend embeds.')
+  console.log('  Then claim this deployment with the setup token below. The first')
+  console.log('  account to present it becomes the administrator and takes ownership')
+  console.log('  of this project in the same step — there is no second command to run.')
+  console.log('')
+  console.log(`    ${setupToken}`)
+  console.log('')
+  console.log('  It is in .env as BACKENLY_SETUP_TOKEN. Once the deployment is claimed')
+  console.log('  the token stops working, whatever it is set to.')
   console.log('')
 }
 
