@@ -415,6 +415,20 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       JWT_SECRET: ci-not-a-real-secret
+      # Keep the workspace pools inside a default Postgres.
+      #
+      # lib/services/workspace-pool.ts keeps one pool PER PROJECT, defaulting to
+      # 50 pools of 5 connections. That is 250 connections; postgres:16 ships
+      # max_connections=100. A suite that touches enough distinct projects
+      # therefore exhausts the server and fails with "sorry, too many clients
+      # already" from whichever query happens to run next - which is why the
+      # failures landed in computeSubsystems rather than anywhere near the
+      # cause.
+      #
+      # Product runtime is unaffected: a self-hosted deployment is one project
+      # and one pool. This is a test-environment budget, set where it applies.
+      WORKSPACE_POOL_MAX: '2'
+      WORKSPACE_POOL_MAX_POOLS: '8'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -474,6 +488,20 @@ jobs:
       # fixtures create and drop their own schema inside it.
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       JWT_SECRET: ci-not-a-real-secret
+      # Keep the workspace pools inside a default Postgres.
+      #
+      # lib/services/workspace-pool.ts keeps one pool PER PROJECT, defaulting to
+      # 50 pools of 5 connections. That is 250 connections; postgres:16 ships
+      # max_connections=100. A suite that touches enough distinct projects
+      # therefore exhausts the server and fails with "sorry, too many clients
+      # already" from whichever query happens to run next - which is why the
+      # failures landed in computeSubsystems rather than anywhere near the
+      # cause.
+      #
+      # Product runtime is unaffected: a self-hosted deployment is one project
+      # and one pool. This is a test-environment budget, set where it applies.
+      WORKSPACE_POOL_MAX: '2'
+      WORKSPACE_POOL_MAX_POOLS: '8'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -535,6 +563,20 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       JWT_SECRET: ci-not-a-real-secret
+      # Keep the workspace pools inside a default Postgres.
+      #
+      # lib/services/workspace-pool.ts keeps one pool PER PROJECT, defaulting to
+      # 50 pools of 5 connections. That is 250 connections; postgres:16 ships
+      # max_connections=100. A suite that touches enough distinct projects
+      # therefore exhausts the server and fails with "sorry, too many clients
+      # already" from whichever query happens to run next - which is why the
+      # failures landed in computeSubsystems rather than anywhere near the
+      # cause.
+      #
+      # Product runtime is unaffected: a self-hosted deployment is one project
+      # and one pool. This is a test-environment budget, set where it applies.
+      WORKSPACE_POOL_MAX: '2'
+      WORKSPACE_POOL_MAX_POOLS: '8'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -595,6 +637,20 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       JWT_SECRET: ci-not-a-real-secret
+      # Keep the workspace pools inside a default Postgres.
+      #
+      # lib/services/workspace-pool.ts keeps one pool PER PROJECT, defaulting to
+      # 50 pools of 5 connections. That is 250 connections; postgres:16 ships
+      # max_connections=100. A suite that touches enough distinct projects
+      # therefore exhausts the server and fails with "sorry, too many clients
+      # already" from whichever query happens to run next - which is why the
+      # failures landed in computeSubsystems rather than anywhere near the
+      # cause.
+      #
+      # Product runtime is unaffected: a self-hosted deployment is one project
+      # and one pool. This is a test-environment budget, set where it applies.
+      WORKSPACE_POOL_MAX: '2'
+      WORKSPACE_POOL_MAX_POOLS: '8'
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
