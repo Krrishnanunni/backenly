@@ -30,7 +30,7 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `848207f2` on 2026-09-18 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `49c408da` on 2026-09-18 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
@@ -68,6 +68,44 @@ backend nothing calls. Both cross-tenant defects found so far lived
 in routes with no UI, because nothing ever exercised them.
 
 <!-- END DERIVED REGISTER -->
+## Surface integrity, verified 2026-09-19
+
+Every surface self-host shows was walked in a browser against the deployment
+`npm run selfhost` builds, with the API calls each page made recorded and
+checked. Source review cannot settle this: a page can import the right module,
+call the right route, and still render an error boundary or paint a success
+message over a failed request.
+
+**Result: zero DEAD/RETIRED, PLACEHOLDER/MOCK, Cloud-only-as-visible or BROKEN
+surfaces.** All twelve navigable surfaces load, no page calls a removed
+endpoint, none receives a server error.
+
+| Class | Finding |
+|---|---|
+| WORKING | all 12 nav destinations, backends answering |
+| HONEST_EMPTY | logs and schema history on a fresh install state they are empty rather than inventing rows |
+| CLOUD_GATED | branches, absent from sidebar AND command palette, with page-level `notFound()` behind them |
+| DEAD/RETIRED | none remain — `connect/handshake`, `example-protected`, `test-services` and `app/connect/[provider]` were deleted |
+| PLACEHOLDER/MOCK | none found; the only `hardcoded` references in the tree are comments recording its removal |
+| BROKEN | none |
+
+Two things worth recording, because both were nearly missed:
+
+`app/connect/[provider]` called a handshake endpoint that had been retired to a
+410, so the page could only ever display "Connection failed". A UI control
+pointing at a deliberately dead backend is the exact shape this sweep exists to
+find, and it had survived because nothing linked to it.
+
+The realtime surface initially "passed" while proving less than its siblings.
+It holds an EventSource open, so waiting for network quiet timed out, the catch
+swallowed it, and the assertion never ran. It now asserts the stream opened.
+
+**The PARTIAL rows do not over-promise.** Storage offers no per-bucket policy
+editor and the auth page offers no SMTP or template editing, so those remain
+product gaps rather than surface-integrity defects — the UI does not claim what
+the backend cannot do.
+
+
 
 ---
 
