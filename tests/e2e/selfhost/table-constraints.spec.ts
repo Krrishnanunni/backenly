@@ -22,20 +22,50 @@ function projectId(): string {
   return JSON.parse(readFileSync(HANDOFF, 'utf8')).id
 }
 
+/**
+ * A fresh install has no tables.
+ *
+ * The database page filters out an empty `users` scaffold, so a deployment the
+ * installer just produced shows nothing, and the add-column modal is not
+ * reachable because no table is selected. The fixture is created through the
+ * real create-table route rather than by raw SQL, so the tables it makes are
+ * the same ones the editor lists - platform rows included.
+ */
+test.beforeAll(async ({ request }) => {
+  const id = projectId()
+  for (const tableName of ['e2e_documents', 'e2e_organizations']) {
+    const res = await request.post(`/api/database/create-table?projectId=${id}`, {
+      data: {
+        tableName,
+        columns: [
+          { name: 'title', type: 'text', nullable: true },
+        ],
+      },
+    })
+    // 409 means a previous run in this deployment already made it, which is
+    // fine. Anything else is a fixture that did not build, and the specs below
+    // would fail for an unrelated reason.
+    expect(
+      res.ok() || res.status() === 409,
+      `could not create ${tableName} (${res.status()}): ${await res.text()}`
+    ).toBe(true)
+  }
+})
+
 test.beforeEach(async ({ page }) => {
   await page.goto(`/app/projects/${projectId()}/database`)
-  // The page loads its table list before anything here is meaningful.
-  await expect(page.getByRole('heading', { name: /database/i }).first()).toBeVisible({
-    timeout: 30_000,
+  // "Add column" is the anchor: it exists only once the page has loaded its
+  // table list AND selected a table, which is exactly the state these specs
+  // need. Waiting on a heading asserted markup the page does not have.
+  await expect(page.getByRole('button', { name: /add column/i }).first()).toBeVisible({
+    timeout: 45_000,
   })
 })
 
 test('the add-column modal offers constraints, not just name and type', async ({ page }) => {
   // The gap this tranche closed: the backend accepted unique, check and
   // foreign_key, and the modal sent only {name, type, nullable}.
-  const addColumn = page.getByRole('button', { name: /add column/i }).first()
-  await expect(addColumn).toBeVisible({ timeout: 30_000 })
-  await addColumn.click()
+  await page.getByRole('button', { name: /add column/i }).first().click()
 
   await expect(page.getByText('Constraints', { exact: true })).toBeVisible()
   await expect(page.getByLabel(/unique/i).or(page.getByText('Unique', { exact: true }))).toBeVisible()

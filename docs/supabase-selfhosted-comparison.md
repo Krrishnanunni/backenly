@@ -505,6 +505,16 @@ path the brain uses. One defect found:
   regression fixture makes inference and the choice disagree with both targets
   present, and asserts on the catalog; 2 of its 6 tests fail without the fix.
 
+**Found by the browser suite, 2026-09-18, not yet fixed.** A freshly installed
+deployment repeatedly logs `relation "workspace_<id>.users" does not exist`,
+along with `_magic_links`, `_password_resets` and `_email_verifications`.
+Something queries the end-user auth tables on a loop before anything has
+created them, so the server log of a brand-new install fills with raw Prisma
+errors. Same class as a0 5 — an expected state reported as a crash — and found
+the same way, by running the thing rather than reading it. The browser suite
+saw it because it is the first harness that starts a real app against a real
+fresh install.
+
 **Open, carried forward.** a0 4 — the application still connects to Postgres as
 a superuser on the default Compose path — is a decision about the role model
 rather than a capability to build, and it is the one item in this tranche that
