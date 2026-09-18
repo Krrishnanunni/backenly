@@ -240,10 +240,6 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/users/[userId]",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/v1/[projectId]",
     "reason": "UNREVIEWED"
   },

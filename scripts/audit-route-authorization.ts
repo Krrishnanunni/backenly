@@ -200,10 +200,19 @@ function classify(file: string): RouteRecord {
   )
   const scopedByCallerIdentity = callerScoped.test(src)
 
+  // A route may also authorize by COMPARING the caller to the resource, which
+  // is what a self-or-admin rule looks like: `caller.userId !== params.userId`
+  // guarded by a requireAdmin escape. That is authorization, and recognising
+  // it is what lets a fixed route leave the baseline instead of sitting there
+  // permanently UNREVIEWED and teaching everyone to ignore the list.
+  const selfOrAdmin =
+    /requireAdmin\s*\(/.test(src) &&
+    /(?:caller|user|auth|session)\.userId\s*[!=]==\s*params\./.test(src)
+
   if (authn === 'none' && verbs.length > 0) {
     why.push('no authentication guard found')
   }
-  if (identifiesOnly && takesResourceId && authz.length === 0 && !scopedByCallerIdentity) {
+  if (identifiesOnly && takesResourceId && authz.length === 0 && !scopedByCallerIdentity && !selfOrAdmin) {
     why.push(
       `${authn} identifies the caller but no authorization helper is called, ` +
       `while the route accepts ${pathParams.length ? `path param(s) ${pathParams.join(', ')}` : 'a projectId from input'}`
@@ -213,7 +222,7 @@ function classify(file: string): RouteRecord {
   // canWriteProject and THEN looks the project up by id, which is the correct
   // order — the lookup is not the boundary, the check before it is. Flagging
   // that was a false positive.
-  if (bareFindUnique && takesResourceId && !scopedByCallerIdentity && authz.length === 0) {
+  if (bareFindUnique && takesResourceId && !scopedByCallerIdentity && authz.length === 0 && !selfOrAdmin) {
     why.push('findUnique by bare id: a resource id is not proof of ownership')
   }
 
