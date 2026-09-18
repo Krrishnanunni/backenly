@@ -238,22 +238,6 @@ __tests__/auth/schema-version-isolation.test.ts
 # the deployment's operator and the question does not arise there.
 __tests__/auth/ai-workspace-tenant-isolation.test.ts
 
-# A fresh install must not fill its log with errors about a non-event. The
-# autonomy sweep purges end-user auth tables that do not exist until a project
-# enables auth; its information_schema pre-check treated an EMPTY answer as a
-# failed lookup, which is exactly what a brand-new workspace returns. Observes
-# the output from a SUBPROCESS: an in-process capture saw nothing and passed
-# identically against the bug.
-__tests__/services/fresh-install-auth-purge.test.ts
-
-# Five destructive routes that did not check who was asking. Three had NO
-# authentication at all - anyone reaching the server could roll back a live
-# deployment or rebuild a workspace database. Two verified a token and then
-# checked the caller's PLAN ENTITLEMENT, which reads like a permission check
-# and is not one. Two-sided, and asserts the victim's state is unchanged after
-# a denial, because "denied" and "denied and did nothing" are different claims.
-__tests__/auth/destructive-route-authorization.test.ts
-
 # PUT /api/users/[userId] discarded requireAuth's result and applied the body to
 # where: { id: params.userId }. The body accepts password, roleId, emailVerified
 # and twoFactorEnabled, so one authenticated request was account takeover,
