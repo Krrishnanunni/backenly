@@ -56,6 +56,7 @@ export interface RouteRecord {
   authn:
     | 'withProjectAccess' | 'withTenantIsolation' | 'withProjectValidation'
     | 'withAuth' | 'requireAuth' | 'authenticateRequest' | 'requireAdmin' | 'verifySession'
+    | 'v1ApiMiddleware'
     | 'mcpGuard' | 'verifyToken' | 'sharedSecret' | 'none'
   /** Explicit authorization helpers called in the file. */
   authz: string[]
@@ -106,6 +107,14 @@ function classify(file: string): RouteRecord {
   const authn: RouteRecord['authn'] =
     /withProjectAccess\s*[(<]/.test(src) ? 'withProjectAccess'
     : /withProjectValidation\s*[(<]/.test(src) ? 'withProjectValidation'
+    // The public end-user runtime. It authenticates with the PROJECT's API key
+    // rather than a dashboard session, and lib/api/v1/middleware.ts refuses a
+    // key whose projectId does not match the one in the path, recording a
+    // security event when that happens. That is a tenant boundary, and a
+    // stricter one than most: not knowing about it flagged all 32 /api/v1
+    // routes as unauthenticated, which was the largest single block of false
+    // positives in the first report.
+    : /v1ApiMiddleware\s*\(/.test(src) ? 'v1ApiMiddleware'
     : /withTenantIsolation\s*[(<]/.test(src) ? 'withTenantIsolation'
     : /requireAdmin\s*\(/.test(src) ? 'requireAdmin'
     : /withAuth\s*\(/.test(src) ? 'withAuth'
@@ -121,8 +130,18 @@ function classify(file: string): RouteRecord {
       ? 'sharedSecret'
     : 'none'
 
-  const authz = ['canAccessProject', 'canAdministerProject', 'canWriteProject', 'requireProjectAccess']
-    .filter(h => new RegExp(`\\b${h}\\s*\\(`).test(src))
+  // Helpers that answer "may this caller touch this project".
+  //
+  // createOrchestrationContext is included because it calls
+  // validateProjectAccess(projectId, userId) before anything else, so a route
+  // handing it both is authorized. Not knowing that flagged the two
+  // /api/testing routes as unguarded when the check was simply one call
+  // deeper — the limit this file's header warns about, erring toward false
+  // positives rather than false negatives.
+  const authz = [
+    'canAccessProject', 'canAdministerProject', 'canWriteProject',
+    'requireProjectAccess', 'validateProjectAccess', 'createOrchestrationContext',
+  ].filter(h => new RegExp(`\\b${h}\\s*\\(`).test(src))
 
   const pathParams = Array.from(route.matchAll(/\[([^\]]+)\]/g)).map(m => m[1])
 
@@ -163,9 +182,21 @@ function classify(file: string): RouteRecord {
   // and every route is reported as unscoped - a clean check that is actually
   // a blind one. That happened here, and it is the same decay this repository
   // has recorded before.
+  // It must be in a WHERE clause, not merely somewhere in the file.
+  //
+  // The first version matched the caller's id anywhere, and
+  // /api/ai-workspace/apply-changes writes `userId: auth.userId` into an audit
+  // log while passing an UNCHECKED `projectId` from the request body straight
+  // to applyChangesFromPlan. So a confirmed cross-tenant write was cleared by
+  // its own logging — a false negative, which is far worse than the false
+  // positives this heuristic exists to remove. Narrowing to `where:` is what
+  // distinguishes "the query is scoped by the caller" from "the caller is
+  // mentioned".
   const WORD_BOUNDARY = String.fromCharCode(92) + 'b'
   const callerScoped = new RegExp(
-    WORD_BOUNDARY + '(?:userId|ownerId):\\s*(?:auth|user|session|ctx)\\.[A-Za-z]+'
+    'where:\\s*\\{[^}]{0,400}' +
+    WORD_BOUNDARY + '(?:userId|ownerId):\\s*(?:auth|user|session|ctx)\\.[A-Za-z]+',
+    's'
   )
   const scopedByCallerIdentity = callerScoped.test(src)
 
@@ -178,7 +209,11 @@ function classify(file: string): RouteRecord {
       `while the route accepts ${pathParams.length ? `path param(s) ${pathParams.join(', ')}` : 'a projectId from input'}`
     )
   }
-  if (bareFindUnique && takesResourceId && !scopedByCallerIdentity) {
+  // Only when nothing authorized the caller first. /api/project/deploy calls
+  // canWriteProject and THEN looks the project up by id, which is the correct
+  // order — the lookup is not the boundary, the check before it is. Flagging
+  // that was a false positive.
+  if (bareFindUnique && takesResourceId && !scopedByCallerIdentity && authz.length === 0) {
     why.push('findUnique by bare id: a resource id is not proof of ownership')
   }
 
@@ -310,7 +345,7 @@ function main(): void {
   console.log('')
   console.log(`  routes              ${records.length}`)
   console.log(`  with a guard        ${records.filter(r => r.authn !== 'none').length}`)
-  const AUTHORIZING = new Set(['withProjectAccess', 'withTenantIsolation', 'withProjectValidation'])
+  const AUTHORIZING = new Set(['withProjectAccess', 'withTenantIsolation', 'withProjectValidation', 'v1ApiMiddleware'])
   console.log(`  authorizing guard   ${records.filter(r => AUTHORIZING.has(r.authn)).length}`)
   console.log(`  scoped by caller    ${records.filter(r => r.scopedByCallerIdentity).length}`)
   console.log(`  explicit authz call ${records.filter(r => r.authz.length > 0).length}`)
