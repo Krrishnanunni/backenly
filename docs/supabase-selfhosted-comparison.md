@@ -68,6 +68,54 @@ backend nothing calls. Both cross-tenant defects found so far lived
 in routes with no UI, because nothing ever exercised them.
 
 <!-- END DERIVED REGISTER -->
+## Recovery: two products, and what each does not cover
+
+**Contract frozen 2026-09-19, before implementation.** `lib/recovery/contract.ts`
+is the source; `tests/unit/recovery-contract.spec.ts` pins it.
+
+This is where a platform accidentally promises more than it restores. An
+operator who clicks something called "Backup" and concludes their server is safe
+has been misled by the product, not by their own carelessness. So there are
+exactly two things, they are never conflated, and the UI never says a bare
+"Backup".
+
+| | **Database snapshot** | **Deployment recovery** |
+|---|---|---|
+| Scope | one workspace schema | the whole self-hosted installation |
+| Contains | tables, rows, indexes, constraints, RLS, in-schema triggers/functions | platform DB, every workspace schema, storage objects, function definitions, project secrets, operator ownership, deployment metadata |
+| Does NOT contain | storage files, platform accounts, API keys, project config/env, function source, deployment config | — |
+| Honest description | schema/data rollback and portability | **disaster recovery** |
+
+### Three decisions worth recording
+
+**The component list is machine-readable, and absence is meaningful.** A bundle
+written before storage support existed would otherwise be indistinguishable from
+one whose storage was empty, and a restore would silently produce a deployment
+missing files nobody knew were gone. A present-but-empty component records zero
+items; an unsupported one is absent. Only the second is ambiguous, and the
+manifest removes the ambiguity.
+
+**The recovery credential never enters the bundle.** A bundle holding both the
+encrypted secrets and the key that opens them is not encrypted; it is a tarball
+with a lock painted on it. Sensitive sections use a per-bundle data key, wrapped
+by an operator-held credential kept outside the archive. Losing the bundle alone
+discloses nothing.
+
+**Validation completes before anything is touched.** The restore order is
+dependency-ordered and every validation step precedes every mutating one — a
+property the tests assert rather than describe. The workspace backup path
+learned this the expensive way: it dropped a schema and then discovered the dump
+was unreadable, which is terminal however loudly it fails afterwards.
+
+`verify-health-and-integrity` is deliberately last, so "recovery succeeded" is a
+claim about the restored system rather than about a command exiting 0.
+
+### Still to build
+
+The contract is frozen; export, restore and the destructive acceptance test are
+not written. The workspace snapshot stays Cloud-gated until this tranche is
+coherent, so that nothing is exposed under a name that implies more than it does.
+
 ## Surface integrity, verified 2026-09-19
 
 Every surface self-host shows was walked in a browser against the deployment
