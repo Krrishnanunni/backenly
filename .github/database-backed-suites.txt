@@ -221,3 +221,11 @@ __tests__/auth/deployment-claim.test.ts
 # suite bypasses the parser deliberately and asserts POSTGRES refuses, with
 # positive reads present so the refusals cannot pass because nothing works.
 __tests__/database/sql-workspace-isolation.test.ts
+
+# Cross-tenant schema history. The route called verifyToken and stopped, so any
+# authenticated account could read another tenant's schema snapshots and roll
+# back their schema. Underneath, getSchemaVersion looked up by version id alone
+# and stripped projectId from its result, so no caller could have checked even
+# if it tried - and rollbackToVersion used it. Tested at the library boundary,
+# because scoping the query is what makes the bug unrepresentable.
+__tests__/auth/schema-version-isolation.test.ts
