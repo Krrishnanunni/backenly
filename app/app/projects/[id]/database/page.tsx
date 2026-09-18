@@ -37,7 +37,7 @@ import {
   FileCode, Save, Edit2, Trash2, Copy, Download, Upload,
   Table2, Columns, Settings, Eye, EyeOff, Key,
   Info, MoreVertical, Play, Building2, Folder, Activity, Network, CheckCircle2, Loader2,
-  Maximize2, Minimize2, HelpCircle, AlertCircle, Terminal
+  Maximize2, Minimize2, HelpCircle, AlertCircle, Terminal, History
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { KIT, KitNote } from '@/components/inspector/kit'
@@ -62,6 +62,7 @@ import {
 } from '@/lib/api/database'
 import { isForeignKeyShaped, suggestForeignKeyColumn } from '@/lib/db/fk-shape'
 import { SqlWorkspace } from '@/components/database/SqlWorkspace'
+import { SchemaHistory } from '@/components/database/SchemaHistory'
 import { useParams, useRouter } from 'next/navigation'
 import { getCurrentProjectId } from '@/lib/api/client'
 import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisualizer'
@@ -69,7 +70,7 @@ import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisual
 
 type ViewMode = 'data' | 'structure'
 type TableView = 'data' | 'structure'
-type DatabaseView = 'tables' | 'visualization' | 'sql'
+type DatabaseView = 'tables' | 'visualization' | 'sql' | 'history'
 
 // Rows fetched per page in the data browser. Kept in one place so the
 // pagination footer, the "step back a page after delete" math, and the query
@@ -1278,6 +1279,17 @@ export default function ProjectDatabasePage() {
               <Terminal className="w-3 h-3" />
               SQL
             </button>
+            <button
+              onClick={() => setShowVisualization('history')}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+                showVisualization === 'history'
+                  ? 'bg-white/[0.06] text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <History className="w-3 h-3" />
+              History
+            </button>
           </div>
         )}
       </div>
@@ -1314,7 +1326,7 @@ export default function ProjectDatabasePage() {
       <div className="absolute inset-0 flex">
 
         {/* Sidebar - Table List (Hidden in visualization mode) */}
-        {showVisualization !== 'visualization' && showVisualization !== 'sql' && (
+        {showVisualization !== 'visualization' && showVisualization !== 'sql' && showVisualization !== 'history' && (
           <div className={`flex w-[248px] flex-shrink-0 flex-col border-r border-white/[0.06] ${KIT.rail}`}>
 
             {/* Workspace row */}
@@ -1455,7 +1467,9 @@ export default function ProjectDatabasePage() {
 
         {/* Main Panel - Table Data / Visualization */}
           <div className="flex min-w-0 flex-1 flex-col">
-              {showVisualization === 'sql' && resolvedProjectId ? (
+              {showVisualization === 'history' && resolvedProjectId ? (
+                <SchemaHistory projectId={resolvedProjectId} />
+              ) : showVisualization === 'sql' && resolvedProjectId ? (
                 // Project-scoped, like the schema graph: it needs no selected
                 // table, and a deployment whose tables have not loaded yet can
                 // still be queried.
