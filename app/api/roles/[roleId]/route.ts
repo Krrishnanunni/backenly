@@ -2,7 +2,17 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/postgres'
-import { requireAuth } from '@/lib/auth/middleware'
+import { requireAdmin } from '@/lib/auth/middleware'
+
+/**
+ * Role definitions. PLATFORM ADMIN ONLY.
+ *
+ * Every verb called `requireAuth` and discarded the result, so any
+ * authenticated account could read, edit or delete a role - including editing
+ * its `permissions` array. Granting yourself an admin role was one request;
+ * editing what "admin" MEANS was another, and the second is worse because it
+ * changes the privilege of every account already holding that role.
+ */
 import { z } from 'zod'
 
 const updateRoleSchema = z.object({
@@ -14,7 +24,8 @@ const updateRoleSchema = z.object({
 export async function GET(request: NextRequest, props: { params: Promise<{ roleId: string }> }) {
   const params = await props.params;
   try {
-    await requireAuth(request)
+    const adminError = await requireAdmin(request)
+    if (adminError) return adminError
     
     const role = await prisma.role.findUnique({
       where: { id: params.roleId },
@@ -53,7 +64,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ roleI
 export async function PUT(request: NextRequest, props: { params: Promise<{ roleId: string }> }) {
   const params = await props.params;
   try {
-    await requireAuth(request)
+    const adminError = await requireAdmin(request)
+    if (adminError) return adminError
     const body = await request.json()
     const data = updateRoleSchema.parse(body)
     
@@ -95,7 +107,8 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ roleI
 export async function DELETE(request: NextRequest, props: { params: Promise<{ roleId: string }> }) {
   const params = await props.params;
   try {
-    await requireAuth(request)
+    const adminError = await requireAdmin(request)
+    if (adminError) return adminError
     
     // Check if role is in use
     const role = await prisma.role.findUnique({
