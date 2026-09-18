@@ -31,21 +31,32 @@ const projectId = () => JSON.parse(readFileSync(HANDOFF, 'utf8')).id
 
 test.setTimeout(120_000)
 
-/** Every destination the self-host navigation and command palette offer. */
+/**
+ * Every destination the self-host navigation and command palette offer.
+ *
+ * `streams` marks a surface that holds a connection open on purpose.
+ *
+ * Realtime opens an EventSource, so the network NEVER goes idle and waiting for
+ * it burns the full timeout — 60s against ~1s for every other page. Worse, it
+ * made realtime the one surface this spec did not really assert: the wait
+ * failed, the catch swallowed it, and the test passed having proved less than
+ * the others. These assert the stream OPENED instead, which is the stronger
+ * claim anyway.
+ */
 const NAV = [
   { id: 'overview', path: '' },
   { id: 'database', path: '/database' },
   { id: 'auth', path: '/auth' },
   { id: 'storage', path: '/storage' },
   { id: 'functions', path: '/functions' },
-  { id: 'realtime', path: '/realtime' },
+  { id: 'realtime', path: '/realtime', streams: '/realtime' },
   { id: 'integrations', path: '/integrations' },
   { id: 'autonomy', path: '/autonomy' },
   { id: 'monitoring', path: '/monitoring' },
   { id: 'deploy', path: '/deploy' },
   { id: 'connect', path: '/connect' },
   { id: 'settings', path: '/settings' },
-] as const
+] as const satisfies ReadonlyArray<{ id: string; path: string; streams?: string }>
 
 /**
  * Collect the API calls a page makes, with their status.
@@ -77,7 +88,21 @@ test.describe('every navigable surface loads against a real backend', () => {
       // The shell is enough to know routing worked; each page owns its own
       // loading state beyond that.
       await expect(page.locator('body')).toBeVisible({ timeout: 60_000 })
-      await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => {})
+
+      const streams = (nav as { streams?: string }).streams
+      if (streams) {
+        // Wait for the stream itself rather than for quiet that will never come.
+        const opened = await page
+          .waitForResponse(r => r.url().includes(streams), { timeout: 45_000 })
+          .catch(() => null)
+        expect(opened, `${nav.id} never opened its ${streams} stream`).not.toBeNull()
+        expect(
+          opened!.status(),
+          `${nav.id} stream answered ${opened!.status()}`,
+        ).toBeLessThan(400)
+      } else {
+        await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {})
+      }
 
       await assertNoErrorBoundary(page, nav.id)
 
