@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest } from 'next/server'
+import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
 import { createErrorResponse, createSuccessResponse, ErrorCodes } from '@/lib/api/v1/errors'
 import { signInSchema } from '@/lib/api/v1/schemas'
 import { validateRequestBody } from '@/lib/validation/schemas'
@@ -23,6 +24,28 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
   const params = await props.params;
   try {
     const projectId = params.projectId
+
+    // Throttled per IP AND per project. This surface had no rate limiting of
+    // any kind: it is unauthenticated by design, because it is how a
+    // customer's own users sign in, but the platform's own /api/auth/login has
+    // IP brute-force protection and this had none. That left credential
+    // stuffing against every end user of every project unthrottled.
+    //
+    // Keyed on both so one project under attack cannot lock out sign-in attempts for a
+    // different project behind the same egress address.
+    const ip = clientIp(request)
+    const limit = consume(
+      `v1:endUserSignin:${projectId}:${ip}`,
+      AUTH_LIMITS.endUserSignin.ip.limit,
+      AUTH_LIMITS.endUserSignin.ip.windowMs,
+    )
+    if (!limit.allowed) {
+      return createErrorResponse(
+        ErrorCodes.RATE_LIMIT_EXCEEDED,
+        'Too many attempts. Please try again later.',
+        429,
+      )
+    }
 
     // Validate project exists
     const project = await prisma.project.findUnique({
@@ -48,6 +71,32 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     const { email, password } = validation.data
+
+    // A SECOND budget, keyed on the identity being guessed.
+    //
+    // The per-IP limit above is weak against distributed credential stuffing:
+    // a botnet spends one attempt per address and never trips it. Keying on
+    // project + normalised email means a single account cannot be hammered
+    // from many sources either. The platform's own login has account lockout
+    // for the same reason; this is its end-user equivalent.
+    //
+    // Normalised, so `Alice@x.com` and `alice@x.com` share one budget rather
+    // than doubling it.
+    const identityLimit = consume(
+      `v1:endUserSignin:${projectId}:${String(email).trim().toLowerCase()}`,
+      AUTH_LIMITS.endUserSignin.ip.limit,
+      AUTH_LIMITS.endUserSignin.ip.windowMs,
+    )
+    if (!identityLimit.allowed) {
+      // Deliberately the same answer as an IP trip, and the same shape as a
+      // wrong password: a different response here would confirm the address
+      // exists and is being defended.
+      return createErrorResponse(
+        ErrorCodes.RATE_LIMIT_EXCEEDED,
+        'Too many attempts. Please try again later.',
+        429,
+      )
+    }
     const schemaName = `workspace_${projectId}`
 
     // Check if users table exists

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest } from 'next/server'
+import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
 import { createErrorResponse, createSuccessResponse, ErrorCodes } from '@/lib/api/v1/errors'
 import { signUpSchema } from '@/lib/api/v1/schemas'
 import { validateRequestBody } from '@/lib/validation/schemas'
@@ -29,6 +30,28 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
   const params = await props.params;
   try {
     const projectId = params.projectId
+
+    // Throttled per IP AND per project. This surface had no rate limiting of
+    // any kind: it is unauthenticated by design, because it is how a
+    // customer's own users sign in, but the platform's own /api/auth/login has
+    // IP brute-force protection and this had none. That left credential
+    // stuffing against every end user of every project unthrottled.
+    //
+    // Keyed on both so one project under attack cannot lock out sign-up attempts for a
+    // different project behind the same egress address.
+    const ip = clientIp(request)
+    const limit = consume(
+      `v1:endUserSignup:${projectId}:${ip}`,
+      AUTH_LIMITS.endUserSignup.ip.limit,
+      AUTH_LIMITS.endUserSignup.ip.windowMs,
+    )
+    if (!limit.allowed) {
+      return createErrorResponse(
+        ErrorCodes.RATE_LIMIT_EXCEEDED,
+        'Too many attempts. Please try again later.',
+        429,
+      )
+    }
 
     // Validate project exists
     const project = await prisma.project.findUnique({

@@ -264,7 +264,11 @@ function classify(file: string): RouteRecord {
 
   if (
     bareFindUnique && takesResourceId && !scopedByCallerIdentity &&
-    authz.length === 0 && !selfOrAdmin && !authorizingGuard && !comparesOwningProject
+    authz.length === 0 && !selfOrAdmin && !authorizingGuard && !comparesOwningProject &&
+    // An admin-gated route looking a resource up by id is not a finding: the
+    // caller has already been established as a platform administrator, and
+    // these resources are not project-scoped.
+    authn !== 'requireAdmin' && !/requireAdmin\s*\(/.test(src)
   ) {
     why.push('findUnique by bare id: a resource id is not proof of ownership')
   }

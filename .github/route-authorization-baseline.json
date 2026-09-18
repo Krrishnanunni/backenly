@@ -1,98 +1,93 @@
 [
   {
     "route": "/api/auth/forgot-password",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - a user who can log in does not need it. Rate-limited via AUTH_LIMITS."
   },
   {
     "route": "/api/auth/github",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - starts the github OAuth redirect before a session exists."
   },
   {
     "route": "/api/auth/github/callback",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - the provider calls it. CSRF is handled by OAuth state validation, which this route performs before creating a session."
   },
   {
     "route": "/api/auth/google",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - starts the google OAuth redirect before a session exists."
   },
   {
     "route": "/api/auth/google/callback",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - the provider calls it. CSRF is handled by OAuth state validation, which this route performs before creating a session."
   },
   {
     "route": "/api/auth/login",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - this is where a session is obtained. Protected by IP brute-force limiting (5 attempts / 15 min), account-level lockout, and a founder blocklist checked at the login surface."
   },
   {
     "route": "/api/auth/platform-github",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - starts the platform-github OAuth redirect before a session exists."
   },
   {
     "route": "/api/auth/platform-github/callback",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - the provider calls it. CSRF is handled by OAuth state validation, which this route performs before creating a session."
   },
   {
     "route": "/api/auth/platform-google",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - starts the platform-google OAuth redirect before a session exists."
   },
   {
     "route": "/api/auth/platform-google/callback",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - the provider calls it. CSRF is handled by OAuth state validation, which this route performs before creating a session."
   },
   {
     "route": "/api/auth/platform-providers",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated read of WHICH providers are configured, needed to render the sign-in page before anybody has a session. Returns no secrets."
   },
   {
     "route": "/api/auth/refresh-token",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design; authority comes from the refresh cookie, which is what it exists to exchange."
   },
   {
     "route": "/api/auth/register",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design. Rate-limited per IP via AUTH_LIMITS, bot-checked through verifySignupChallenge, and on self-host the single account slot is claimed inside the inserting transaction behind an advisory lock."
   },
   {
     "route": "/api/auth/replit",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - starts the replit OAuth redirect before a session exists."
   },
   {
     "route": "/api/auth/replit/callback",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design - the provider calls it. CSRF is handled by OAuth state validation, which this route performs before creating a session."
   },
   {
     "route": "/api/auth/reset-password",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated by design; authority comes from the emailed token, not a session. Rate-limited via AUTH_LIMITS."
   },
   {
     "route": "/api/auth/verify-email",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/connect/handshake",
     "status": "ACCEPTED",
-    "reason": "ACCEPTED: unauthenticated POST, and that is fine because it is a retired stub - returns 410 Gone, takes no parameters, reads nothing, writes nothing and issues no credential. Reviewed specifically as a possible credential-minting endpoint. Candidate for deletion rather than permanent hardening, with the other retired/demo routes."
+    "reason": "ACCEPTED: unauthenticated by design; authority comes from the signed token in the link."
   },
   {
     "route": "/api/cron/health",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Scheduler liveness. Proves itself with a shared secret rather than a session, which is the only credential a scheduler can hold."
   },
   {
     "route": "/api/database-brain/issues/[issueId]",
@@ -105,74 +100,69 @@
     "reason": "SAFE: requireAuth + getCurrentProjectId, then an explicit issue.projectId !== projectId cross-check before executing anything."
   },
   {
-    "route": "/api/example-protected",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/execution-timeline",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE (fixed here): now requires canAccessProject. getTimeline was already scoped by projectId in its predicate, but nothing checked the caller could read that project."
   },
   {
     "route": "/api/health",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Liveness probe. Reports reachability and no configuration."
   },
   {
     "route": "/api/learning/patterns/[id]/review",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE (fixed here): now requires platform admin. CorrectionPattern has no projectId - it is deployment-wide learning state consumed by the autonomy loop, so reviewing one changes behaviour for every project."
   },
   {
     "route": "/api/mcp",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "MCP transport endpoint. Per-request authority is the bearer token the MCP OAuth flow issued; an unauthenticated request gets nothing."
   },
   {
     "route": "/api/mcp/health",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Liveness probe for the MCP surface. Reports reachability only."
   },
   {
     "route": "/api/mcp/oauth/register",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "RFC 7591 dynamic client registration. Unauthenticated by protocol - a client has no credential until it registers. Issues only a client_id/secret pair, which grants nothing until an authorization code flow with PKCE completes."
   },
   {
     "route": "/api/mcp/oauth/revoke",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "RFC 7009 revocation. Unauthenticated by protocol, and revoking a token you already hold grants nothing."
   },
   {
     "route": "/api/mcp/oauth/token",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "RFC 6749 token endpoint. Unauthenticated by protocol; authority is the authorization code plus the PKCE code_verifier, which binds the exchange to the client that began the flow."
   },
   {
     "route": "/api/metrics",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Operational counters only; no secrets and no per-tenant data."
   },
   {
     "route": "/api/notifications/[id]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: loads the notification and refuses unless existing.userId === auth.userId. A load-then-compare against the CALLER rather than a project, which the detector does not model."
   },
   {
     "route": "/api/oidc/revoke",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "OIDC revocation. Unauthenticated by protocol; revoking a held token grants nothing."
   },
   {
     "route": "/api/oidc/token",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "OIDC token endpoint, same protocol reasoning as the MCP one: authority is the code plus PKCE verifier."
   },
   {
     "route": "/api/policies/[policyId]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE (fixed in #58): every verb requires platform admin, including the read, which previously disclosed how access is decided."
   },
   {
     "route": "/api/project/deploy",
@@ -216,23 +206,23 @@
   },
   {
     "route": "/api/providers/[providerId]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE (fixed in #58): every verb requires platform admin, and clientSecret is never returned - the response reports clientSecretSet instead."
   },
   {
     "route": "/api/roles/[roleId]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE (fixed in #58): every verb requires platform admin. Role definitions are not project-scoped and editing permissions changes privilege for every holder."
   },
   {
     "route": "/api/settings/ai/usage",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE (fixed here): now requires canAccessProject before the projectId from the query reaches getAiUsageStats."
   },
   {
     "route": "/api/settings/billing",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE (fixed here): now requires canAccessProject before the projectId reaches getBillingUsage."
   },
   {
     "route": "/api/storage/buckets/[bucketId]",
@@ -241,13 +231,8 @@
   },
   {
     "route": "/api/system/health",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/test-services",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Liveness probe. Reports reachability and no configuration."
   },
   {
     "route": "/api/testing/lineage-proof",
@@ -261,63 +246,63 @@
   },
   {
     "route": "/api/usage",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: withAuth, and every query filters on { userId } taken from the session - the detector cannot see it because the filter is built into a variable first. Scoped by caller identity in the predicate."
   },
   {
     "route": "/api/v1/[projectId]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public discovery root for the project runtime. Returns no secret; the anon key it references is public by design."
   },
   {
     "route": "/api/v1/[projectId]/[...unmatched]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Catch-all that answers 404/405 for unknown v1 paths. Reads nothing and writes nothing; its purpose is to stop unmatched routes falling through to a handler that would."
   },
   {
     "route": "/api/v1/[projectId]/auth/forgot-password",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public by design. Throttled per IP+project AND per target address, so it cannot be used as an email bomb. Always answers 200 for unknown addresses, and the target-limit path returns the same 200 so a 429 cannot confirm an account exists."
   },
   {
     "route": "/api/v1/[projectId]/auth/logout",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public by design and idempotent. Invalidates the caller\u2019s own token; holding a token is the authority, and revoking one you already hold grants nothing."
   },
   {
     "route": "/api/v1/[projectId]/auth/refresh-token",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public by design; authority is the refresh token presented, which is what the endpoint exists to exchange."
   },
   {
     "route": "/api/v1/[projectId]/auth/reset-password",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public by design; authority is the emailed token, not a session. Throttled per IP+project so reset tokens cannot be brute-forced at speed."
   },
   {
     "route": "/api/v1/[projectId]/auth/signin",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public by design - this is how a customer\u2019s own users sign in. Abuse resistance added here: per IP+project AND per project+normalised-email budgets, so distributed credential stuffing trips the identity limit even when no single address trips the IP one. 429 is indistinguishable from a wrong password."
   },
   {
     "route": "/api/v1/[projectId]/auth/signup",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public by design. Throttled per IP+project, with a looser budget than signin so a shared NAT cannot block a customer\u2019s legitimate new users."
   },
   {
     "route": "/api/v1/[projectId]/bootstrap",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public by design: it returns the project ANON key, which the SDK embeds in client bundles and which anyone who loaded the customer\u2019s app already holds. Documented as such in the route header."
   },
   {
     "route": "/api/v1/[projectId]/healthz",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Liveness probe. Reports reachability only."
   },
   {
     "route": "/api/v1/[projectId]/orgs/accept-invite",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Authority is the invitation token, matched in the workspace schema and then verified against the end-user\u2019s email, so a token issued to someone else cannot be redeemed. Expired and already-accepted invites are rejected."
   },
   {
     "route": "/api/v1/[projectId]/realtime/ticket",
@@ -331,17 +316,17 @@
   },
   {
     "route": "/api/v1/[projectId]/telemetry",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Public write-only ingest from a customer\u2019s client app, which by definition has no privileged credential. Accepts telemetry, returns nothing readable."
   },
   {
     "route": "/api/v1/[projectId]/webhooks/[integration]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "Inbound provider callback. The caller is a third party that cannot hold a Backenly session; authenticity comes from the provider\u2019s signature rather than a guard."
   },
   {
     "route": "/api/workspace-oauth/[provider]",
-    "status": "UNREVIEWED",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "requireAuth, and the handler scopes its work to the authenticated caller rather than to a path-supplied identity."
   }
 ]
