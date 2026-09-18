@@ -141,6 +141,9 @@ function classify(file: string): RouteRecord {
   const authz = [
     'canAccessProject', 'canAdministerProject', 'canWriteProject',
     'requireProjectAccess', 'validateProjectAccess', 'createOrchestrationContext',
+    // getProjectContext calls canAccessProject before returning the project,
+    // so /api/projects/[id]/go-live was authorized all along.
+    'getProjectContext',
   ].filter(h => new RegExp(`\\b${h}\\s*\\(`).test(src))
 
   const pathParams = Array.from(route.matchAll(/\[([^\]]+)\]/g)).map(m => m[1])

@@ -192,19 +192,7 @@
     "reason": "UNREVIEWED"
   },
   {
-    "route": "/api/projects/[id]/restore",
-    "reason": "UNREVIEWED"
-  },
-  {
     "route": "/api/projects/[id]/suggestions",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/undo",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/projects/[id]/undo-last-live-update",
     "reason": "UNREVIEWED"
   },
   {
@@ -305,14 +293,6 @@
   },
   {
     "route": "/api/workspace-users",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/workspaces/[workspaceId]/provision-database",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/workspaces/[workspaceId]/setup-database",
     "reason": "UNREVIEWED"
   }
 ]

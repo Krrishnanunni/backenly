@@ -251,3 +251,11 @@ __tests__/auth/user-record-authorization.test.ts
 # the output from a SUBPROCESS: an in-process capture saw nothing and passed
 # identically against the bug.
 __tests__/services/fresh-install-auth-purge.test.ts
+
+# Five destructive routes that did not check who was asking. Three had NO
+# authentication at all - anyone reaching the server could roll back a live
+# deployment or rebuild a workspace database. Two verified a token and then
+# checked the caller's PLAN ENTITLEMENT, which reads like a permission check
+# and is not one. Two-sided, and asserts the victim's state is unchanged after
+# a denial, because "denied" and "denied and did nothing" are different claims.
+__tests__/auth/destructive-route-authorization.test.ts
