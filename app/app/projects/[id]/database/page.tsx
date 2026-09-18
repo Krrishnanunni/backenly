@@ -37,7 +37,7 @@ import {
   FileCode, Save, Edit2, Trash2, Copy, Download, Upload,
   Table2, Columns, Settings, Eye, EyeOff, Key,
   Info, MoreVertical, Play, Building2, Folder, Activity, Network, CheckCircle2, Loader2,
-  Maximize2, Minimize2, HelpCircle, AlertCircle
+  Maximize2, Minimize2, HelpCircle, AlertCircle, Terminal
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { KIT, KitNote } from '@/components/inspector/kit'
@@ -61,6 +61,7 @@ import {
   type DatabaseType,
 } from '@/lib/api/database'
 import { isForeignKeyShaped, suggestForeignKeyColumn } from '@/lib/db/fk-shape'
+import { SqlWorkspace } from '@/components/database/SqlWorkspace'
 import { useParams, useRouter } from 'next/navigation'
 import { getCurrentProjectId } from '@/lib/api/client'
 import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisualizer'
@@ -68,7 +69,7 @@ import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisual
 
 type ViewMode = 'data' | 'structure'
 type TableView = 'data' | 'structure'
-type DatabaseView = 'tables' | 'visualization'
+type DatabaseView = 'tables' | 'visualization' | 'sql'
 
 // Rows fetched per page in the data browser. Kept in one place so the
 // pagination footer, the "step back a page after delete" math, and the query
@@ -1266,6 +1267,17 @@ export default function ProjectDatabasePage() {
               <Network className="w-3 h-3" />
               Schema
             </button>
+            <button
+              onClick={() => setShowVisualization('sql')}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+                showVisualization === 'sql'
+                  ? 'bg-white/[0.06] text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Terminal className="w-3 h-3" />
+              SQL
+            </button>
           </div>
         )}
       </div>
@@ -1302,7 +1314,7 @@ export default function ProjectDatabasePage() {
       <div className="absolute inset-0 flex">
 
         {/* Sidebar - Table List (Hidden in visualization mode) */}
-        {showVisualization !== 'visualization' && (
+        {showVisualization !== 'visualization' && showVisualization !== 'sql' && (
           <div className={`flex w-[248px] flex-shrink-0 flex-col border-r border-white/[0.06] ${KIT.rail}`}>
 
             {/* Workspace row */}
@@ -1443,7 +1455,12 @@ export default function ProjectDatabasePage() {
 
         {/* Main Panel - Table Data / Visualization */}
           <div className="flex min-w-0 flex-1 flex-col">
-              {showVisualization === 'visualization' && activeDb === 'postgresql' && selectedSchema ? (
+              {showVisualization === 'sql' && resolvedProjectId ? (
+                // Project-scoped, like the schema graph: it needs no selected
+                // table, and a deployment whose tables have not loaded yet can
+                // still be queried.
+                <SqlWorkspace projectId={resolvedProjectId} />
+              ) : showVisualization === 'visualization' && activeDb === 'postgresql' && selectedSchema ? (
                 <>
                   {/* Visualization Header */}
                   <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">

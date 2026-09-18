@@ -212,3 +212,12 @@ __tests__/database/app-role-separation.test.ts
 # possession of the machine grants the claim rather than whoever loads the page
 # first. Covers the race, the replay, and adoption itself.
 __tests__/auth/deployment-claim.test.ts
+
+# The read-only SQL workspace. /api/database/query used to run queryRaw on the
+# APPLICATION connection with a deny-list regex as its only tenant boundary -
+# and before the credential split that connection was a superuser. Its sibling
+# /api/cli/query was moved onto the governed bkn_ro_ engine in July for exactly
+# that reason; this route was left behind, with no callers and no tests. The
+# suite bypasses the parser deliberately and asserts POSTGRES refuses, with
+# positive reads present so the refusals cannot pass because nothing works.
+__tests__/database/sql-workspace-isolation.test.ts
