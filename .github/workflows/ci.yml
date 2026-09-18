@@ -972,6 +972,16 @@ jobs:
           PLAYWRIGHT_SERVER_ALREADY_RUNNING: '1'
         run: npx playwright test --project=selfhost
 
+      # The rendered page, not a guess at it. Without this, diagnosing a
+      # selector that does not match means another full CI cycle per attempt.
+      - name: keep the browser evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          if-no-files-found: ignore
+
       - name: app log on failure
         if: failure()
         run: tail -120 app.log || true

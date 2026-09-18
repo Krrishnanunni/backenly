@@ -52,13 +52,24 @@ test.beforeAll(async ({ request }) => {
   }
 })
 
+// A real install has to build its stack, load a table list and fetch rows
+// before any of this is reachable, which is slower than the 30s default.
+test.setTimeout(90_000)
+
 test.beforeEach(async ({ page }) => {
   await page.goto(`/app/projects/${projectId()}/database`)
-  // "Add column" is the anchor: it exists only once the page has loaded its
-  // table list AND selected a table, which is exactly the state these specs
-  // need. Waiting on a heading asserted markup the page does not have.
+
+  // The table list has to load and select a table first. `Structure` appears
+  // once one is selected, so waiting on it covers both.
+  const structure = page.getByRole('button', { name: 'Structure', exact: true })
+  await expect(structure).toBeVisible({ timeout: 60_000 })
+
+  // "Add column" lives in the STRUCTURE view. The page opens on Data, where
+  // the button does not exist at all — which is why waiting for it directly
+  // timed out rather than merely being slow.
+  await structure.click()
   await expect(page.getByRole('button', { name: /add column/i }).first()).toBeVisible({
-    timeout: 45_000,
+    timeout: 30_000,
   })
 })
 
