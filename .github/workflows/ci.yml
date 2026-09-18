@@ -89,6 +89,20 @@ jobs:
       - name: Suite accounting balances
         run: npx tsx scripts/verify-suite-accounting.ts
 
+      # A route that accepts a resource identifier and never authorizes the
+      # caller is the exact shape that let any authenticated account read
+      # another tenant's schema snapshots and roll back their schema. That
+      # route had no UI, which is why nothing noticed for as long as it
+      # existed.
+      #
+      # This is a ratchet over a reviewed baseline, not a clean-tree claim: the
+      # routes already carrying that shape are listed and being worked through,
+      # and a NEW one cannot be added without either fixing it or writing down
+      # why the shape is correct there. It also fails when a baseline entry
+      # stops being flagged, so the list cannot quietly go stale.
+      - name: No new unauthorized-by-shape routes
+        run: npx tsx scripts/audit-route-authorization.ts --check
+
       # The repository had accumulated ~70 independent answers to "may this
       # caller reach this project", and the owner-only one won on volume, so an
       # invited organization member was denied storage, logs, monitoring,

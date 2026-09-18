@@ -218,3 +218,6 @@ evidence/
 # Local agent tooling (skills installed per-machine). Not product code.
 .agents/
 skills-lock.json
+
+# Ad-hoc audit output. The reviewed baseline in .github/ is what is tracked.
+route-authorization.json

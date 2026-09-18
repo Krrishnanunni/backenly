@@ -1,0 +1,478 @@
+[
+  {
+    "route": "/api/ai-workspace/generate-plan",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/ai-workspace/preview-diff",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/forgot-password",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/github",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/github/callback",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/google",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/google/callback",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/login",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/platform-github",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/platform-github/callback",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/platform-google",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/platform-google/callback",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/platform-providers",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/refresh-token",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/register",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/replit",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/replit/callback",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/reset-password",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/auth/verify-email",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/connect/handshake",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/cron/health",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/database-brain/issues/[issueId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/database-brain/issues/[issueId]/apply-fix",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/database-brain/issues/[issueId]/generate-fix",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/example-protected",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/execution-timeline",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/health",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/learning/patterns/[id]/review",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/mcp",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/mcp/health",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/mcp/oauth/register",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/mcp/oauth/revoke",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/mcp/oauth/token",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/metrics",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/monitoring/usage-alerts",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/notifications/[id]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/oidc/revoke",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/oidc/token",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/policies/[policyId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/project/deploy",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/ai-cost",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/ai-suggestions",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/anon-key",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/architecture-memory",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/auth-email-settings",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/auth-state",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/connection-health",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/credentials",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/debug-state",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/export/database",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/export/functions",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/export/schema",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/go-live",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/health",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/integrations",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/restore",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/rollback",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/rollback/archives",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/sdk-test",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/state",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/suggestions",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/timeline",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/undo",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/projects/[id]/undo-last-live-update",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/providers/[providerId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/roles/[roleId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/settings/ai/usage",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/storage/buckets/[bucketId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/storage/files/[fileId]/download",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/system/health",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/test-services",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/testing/lineage-proof",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/testing/time-travel",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/usage",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/users/[userId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/[...unmatched]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/ai/generate",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/auth/forgot-password",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/auth/logout",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/auth/refresh-token",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/auth/reset-password",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/auth/signin",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/auth/signup",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/bootstrap",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/broadcast",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/cart",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/cart/clear",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/cart/items",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/cart/items/[productId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/checkout",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/database/delete",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/database/insert",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/database/query",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/database/update",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/db/[tableName]/vector-search",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/functions",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/functions/invoke",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/healthz",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/logs",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/orgs/accept-invite",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/presence",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/realtime",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/realtime/ticket",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/stats/summary",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/storage/confirm-upload",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/storage/files",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/storage/files/[fileId]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/storage/signed-upload",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/storage/upload",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/storage/upload-multipart",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/stripe/session",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/telemetry",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/v1/[projectId]/webhooks/[integration]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/workspace-oauth/[provider]",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/workspace-users",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/workspaces/[workspaceId]/provision-database",
+    "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/workspaces/[workspaceId]/setup-database",
+    "reason": "UNREVIEWED"
+  }
+]
