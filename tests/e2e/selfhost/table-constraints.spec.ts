@@ -78,10 +78,22 @@ test('the add-column modal offers constraints, not just name and type', async ({
   // foreign_key, and the modal sent only {name, type, nullable}.
   await page.getByRole('button', { name: /add column/i }).first().click()
 
-  await expect(page.getByText('Constraints', { exact: true })).toBeVisible()
-  await expect(page.getByLabel(/unique/i).or(page.getByText('Unique', { exact: true }))).toBeVisible()
-  await expect(page.getByText('References', { exact: true })).toBeVisible()
-  await expect(page.getByText('Check', { exact: true })).toBeVisible()
+  // Scoped to the form controls, not to the words.
+  //
+  // The structure view behind the modal already has a "Constraints" column
+  // header, so getByText matched two elements and failed on strict mode. The
+  // controls are what the operator actually uses and what only the modal has.
+  await expect(page.locator('label').filter({ hasText: /^Constraints$/ })).toBeVisible()
+
+  // The foreign-key picker, listing the deployment's other tables.
+  const references = page.locator('select').filter({ hasText: /no foreign key/i }).first()
+  await expect(references).toBeVisible()
+
+  // The check expression field, identified by its own placeholder.
+  await expect(page.getByPlaceholder('e.g. price > 0')).toBeVisible()
+
+  // The unique toggle: a checkbox, reachable through its own label.
+  await expect(page.locator('label').filter({ hasText: /^Unique$/ }).locator('input[type="checkbox"]')).toBeVisible()
 })
 
 test('a foreign key on a badly named column is blocked before it is submitted', async ({ page }) => {
