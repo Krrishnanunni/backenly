@@ -151,6 +151,10 @@ function classify(file: string): RouteRecord {
     // /api/storage/buckets/[bucketId] uses it on every verb, which is the
     // correct pattern for a globally unique child id.
     'validateProjectOwnership',
+    // Resolves the project FOR THE CALLER via resolveForUser and throws on a
+    // cross-tenant request, recording a security event. It is authentication
+    // and authorization in one call.
+    'getCurrentProjectId',
   ].filter(h => new RegExp(`\\b${h}\\s*\\(`).test(src))
 
   const pathParams = Array.from(route.matchAll(/\[([^\]]+)\]/g)).map(m => m[1])
@@ -215,6 +219,22 @@ function classify(file: string): RouteRecord {
   // guarded by a requireAdmin escape. That is authorization, and recognising
   // it is what lets a fixed route leave the baseline instead of sitting there
   // permanently UNREVIEWED and teaching everyone to ignore the list.
+  // A route may authorize by loading the resource and COMPARING its owning
+  // project to the authorized one - `issue.projectId !== projectId`. That is
+  // weaker than a scoped predicate, because the row is fetched before the
+  // check, but it is a real check and apply-fix does it before executing
+  // anything. Recognising it is what lets a reviewed route leave the baseline.
+  // The strongest form: projectId in the query PREDICATE, so a wrong tenant
+  // simply matches nothing. `findFirst({ where: { id, projectId } })`.
+  // Recognised because it is what the audit is trying to push routes toward,
+  // and a route that already does it should not stay on the list.
+  const scopedPredicate =
+    /where:\s*\{[^}]{0,200}projectId/s.test(src)
+
+  const comparesOwningProject =
+    /\.projectId\s*[!=]==\s*projectId/.test(src) ||
+    /projectId\s*[!=]==\s*\w+\.projectId/.test(src)
+
   const selfOrAdmin =
     /requireAdmin\s*\(/.test(src) &&
     /(?:caller|user|auth|session)\.userId\s*[!=]==\s*params\./.test(src)
@@ -222,7 +242,10 @@ function classify(file: string): RouteRecord {
   if (authn === 'none' && verbs.length > 0) {
     why.push('no authentication guard found')
   }
-  if (identifiesOnly && takesResourceId && authz.length === 0 && !scopedByCallerIdentity && !selfOrAdmin) {
+  if (
+    identifiesOnly && takesResourceId && authz.length === 0 &&
+    !scopedByCallerIdentity && !selfOrAdmin && !comparesOwningProject && !scopedPredicate
+  ) {
     why.push(
       `${authn} identifies the caller but no authorization helper is called, ` +
       `while the route accepts ${pathParams.length ? `path param(s) ${pathParams.join(', ')}` : 'a projectId from input'}`
@@ -239,7 +262,7 @@ function classify(file: string): RouteRecord {
 
   if (
     bareFindUnique && takesResourceId && !scopedByCallerIdentity &&
-    authz.length === 0 && !selfOrAdmin && !authorizingGuard
+    authz.length === 0 && !selfOrAdmin && !authorizingGuard && !comparesOwningProject
   ) {
     why.push('findUnique by bare id: a resource id is not proof of ownership')
   }

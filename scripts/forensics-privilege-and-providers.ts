@@ -127,6 +127,55 @@ async function providerConfiguration(): Promise<void> {
   )
 }
 
+/**
+ * /api/workspace-users — the endpoint that returned every platform account.
+ *
+ * It authenticated the caller and then passed a projectId from the query
+ * string to getWorkspaceUsers, which IGNORED it and ran an unqualified
+ * `SELECT ... FROM users` on the platform connection. That resolved to
+ * public.users, the account table.
+ *
+ * This one is different from the others in the incident, and worse in one
+ * specific way: it needed only an ORDINARY authenticated session and no
+ * guessed identifier. Any signed-in account could enumerate every account
+ * email on the deployment. The others needed a target id or admin-shaped
+ * intent; this needed a login and a single request.
+ */
+async function workspaceUserEnumeration(): Promise<void> {
+  const rows = await prisma.log.findMany({
+    where: {
+      timestamp: { gte: INTRODUCED, lte: FIXED },
+      OR: [
+        { endpoint: { contains: '/api/workspace-users' } },
+        { message: { contains: '/api/workspace-users' } },
+      ],
+    },
+    select: { timestamp: true, method: true, endpoint: true, statusCode: true, userId: true },
+    orderBy: { timestamp: 'desc' },
+    take: 200,
+  }).catch(() => [])
+
+  record(
+    'requests logged against /api/workspace-users',
+    rows.length > 0,
+    rows.length > 0
+      ? `${rows.length} request(s) recorded in the window. Compare each caller against who should have been listing that project's end users - and note the response contained PLATFORM account emails regardless of the projectId asked for.`
+      : 'No requests recorded. If request logging did not cover this route, that is not evidence it was never called.',
+    rows.slice(0, 50),
+  )
+
+  const accounts = await prisma.user.count().catch(() => -1)
+  record(
+    'email addresses reachable through that endpoint',
+    accounts > 1,
+    accounts < 0
+      ? 'Could not count accounts.'
+      : accounts > 1
+        ? `${accounts} account email(s) were returned by a single authenticated request. On a reachable multi-account deployment, treat these addresses as potentially disclosed unless the logs above show the endpoint was never used.`
+        : `${accounts} account, so there was nothing to enumerate beyond the caller's own.`,
+  )
+}
+
 async function policyReads(): Promise<void> {
   const count = await prisma.authPolicy.count().catch(() => -1)
   record(
@@ -141,13 +190,14 @@ async function policyReads(): Promise<void> {
 async function main(): Promise<void> {
   const target = (process.env.DATABASE_URL ?? '').replace(/:[^:@/]*@/, ':***@')
   console.log('')
-  console.log('  Incident verification: role definitions and identity providers')
+  console.log('  Incident verification: privilege model, identity providers, account enumeration')
   console.log(`  Database: ${target || '(DATABASE_URL unset)'}`)
   console.log(`  Window:   ${INTRODUCED.toISOString().slice(0, 10)} .. ${FIXED.toISOString().slice(0, 10)}`)
   console.log('')
 
   await roleDefinitions()
   await providerConfiguration()
+  await workspaceUserEnumeration()
   await policyReads()
 
   if (process.argv.includes('--json')) {
