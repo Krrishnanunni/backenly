@@ -228,12 +228,14 @@ function classify(file: string): RouteRecord {
   // simply matches nothing. `findFirst({ where: { id, projectId } })`.
   // Recognised because it is what the audit is trying to push routes toward,
   // and a route that already does it should not stay on the list.
-  const scopedPredicate =
-    /where:\s*\{[^}]{0,200}projectId/s.test(src)
+  const scopedPredicate = new RegExp(
+    `where:\\s*\\{[^}]{0,200}${WORD_BOUNDARY}projectId${WORD_BOUNDARY}`,
+    's',
+  ).test(src)
 
   const comparesOwningProject =
     /\.projectId\s*[!=]==\s*projectId/.test(src) ||
-    /projectId\s*[!=]==\s*\w+\.projectId/.test(src)
+    new RegExp(`${WORD_BOUNDARY}projectId\\s*[!=]==\\s*\\w+\\.projectId`).test(src)
 
   const selfOrAdmin =
     /requireAdmin\s*\(/.test(src) &&
