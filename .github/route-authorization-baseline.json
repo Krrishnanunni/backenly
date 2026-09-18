@@ -1,274 +1,347 @@
 [
   {
     "route": "/api/auth/forgot-password",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/github",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/github/callback",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/google",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/google/callback",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/login",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/platform-github",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/platform-github/callback",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/platform-google",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/platform-google/callback",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/platform-providers",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/refresh-token",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/register",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/replit",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/replit/callback",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/reset-password",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/auth/verify-email",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/connect/handshake",
-    "reason": "UNREVIEWED"
+    "status": "ACCEPTED",
+    "reason": "ACCEPTED: unauthenticated POST, and that is fine because it is a retired stub - returns 410 Gone, takes no parameters, reads nothing, writes nothing and issues no credential. Reviewed specifically as a possible credential-minting endpoint. Candidate for deletion rather than permanent hardening, with the other retired/demo routes."
   },
   {
     "route": "/api/cron/health",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/database-brain/issues/[issueId]",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE: getCurrentProjectId resolves the project FOR THE CALLER (resolveForUser, which records a security event on a cross-tenant attempt), and the query is findFirst({ id, projectId }) - tenant-scoped in the predicate."
   },
   {
     "route": "/api/database-brain/issues/[issueId]/apply-fix",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/database-brain/issues/[issueId]/generate-fix",
-    "reason": "UNREVIEWED"
+    "status": "SAFE",
+    "reason": "SAFE: requireAuth + getCurrentProjectId, then an explicit issue.projectId !== projectId cross-check before executing anything."
   },
   {
     "route": "/api/example-protected",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/execution-timeline",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/health",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/learning/patterns/[id]/review",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/mcp",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/mcp/health",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/mcp/oauth/register",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/mcp/oauth/revoke",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/mcp/oauth/token",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/metrics",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/notifications/[id]",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/oidc/revoke",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/oidc/token",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/policies/[policyId]",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
+  },
+  {
+    "route": "/api/project/deploy",
+    "status": "SAFE",
+    "reason": "SAFE: calls canWriteProject BEFORE the findUnique. The lookup is not the boundary; the check preceding it is."
   },
   {
     "route": "/api/projects/[id]/anon-key",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: withProjectValidation, and the findUnique uses the authorized projectId from the callback, not params.id.",
+    "status": "SAFE"
   },
   {
     "route": "/api/projects/[id]/connection-health",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: withProjectValidation; the route header states owner-only access and the handler uses the authorized id.",
+    "status": "SAFE"
   },
   {
     "route": "/api/projects/[id]/credentials",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: runs under withProjectValidation and uses validated.projectId throughout, never params.id, so the authorized project is the one acted on.",
+    "status": "SAFE"
   },
   {
     "route": "/api/projects/[id]/export/database",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: same shape as credentials - withProjectValidation, and every use is validated.projectId. Reviewed specifically as a data-exfiltration path.",
+    "status": "SAFE"
   },
   {
     "route": "/api/projects/[id]/go-live",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: getProjectContext calls canAccessProject before returning the project.",
+    "status": "SAFE"
   },
   {
     "route": "/api/projects/[id]/health",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: withProjectValidation; queries scope on the authorized projectId.",
+    "status": "SAFE"
   },
   {
     "route": "/api/projects/[id]/integrations",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: withProjectValidation on both verbs; every query and service call uses validated.projectId.",
+    "status": "SAFE"
   },
   {
     "route": "/api/providers/[providerId]",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/roles/[roleId]",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/settings/ai/usage",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/settings/billing",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/storage/buckets/[bucketId]",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: storageService.getBucket(bucketId, projectId) is tenant-scoped in its signature, AND the route cross-checks bucketRecord.projectId via validateProjectOwnership on GET, PATCH and DELETE.",
+    "status": "SAFE"
   },
   {
     "route": "/api/system/health",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/test-services",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
+    "route": "/api/testing/lineage-proof",
+    "status": "SAFE",
+    "reason": "SAFE: createOrchestrationContext(projectId, userId) calls validateProjectAccess before returning. Authorization is one call deeper than the route file."
+  },
+  {
+    "route": "/api/testing/time-travel",
+    "status": "SAFE",
+    "reason": "SAFE: same as lineage-proof - authorized inside createOrchestrationContext."
+  },
+  {
     "route": "/api/usage",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/[...unmatched]",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/auth/forgot-password",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/auth/logout",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/auth/refresh-token",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/auth/reset-password",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/auth/signin",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/auth/signup",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/bootstrap",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/healthz",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/orgs/accept-invite",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/realtime/ticket",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: v1ApiMiddleware refuses an API key whose projectId does not match the path and records a security event, so params.projectId IS the authorized id here.",
+    "status": "SAFE"
   },
   {
     "route": "/api/v1/[projectId]/storage/upload-multipart",
-    "reason": "UNREVIEWED"
+    "reason": "SAFE: v1ApiMiddleware plus requirePermission; same key-to-path binding as the rest of the v1 runtime.",
+    "status": "SAFE"
   },
   {
     "route": "/api/v1/[projectId]/telemetry",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/v1/[projectId]/webhooks/[integration]",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   },
   {
     "route": "/api/workspace-oauth/[provider]",
-    "reason": "UNREVIEWED"
-  },
-  {
-    "route": "/api/workspace-users",
+    "status": "UNREVIEWED",
     "reason": "UNREVIEWED"
   }
 ]

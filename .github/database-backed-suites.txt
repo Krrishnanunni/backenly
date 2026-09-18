@@ -259,3 +259,12 @@ __tests__/services/fresh-install-auth-purge.test.ts
 # and is not one. Two-sided, and asserts the victim's state is unchanged after
 # a denial, because "denied" and "denied and did nothing" are different claims.
 __tests__/auth/destructive-route-authorization.test.ts
+
+# Passing a tenant id into a service is not evidence the service uses it.
+# getWorkspaceUsers took a projectId, ignored it, and ran an unqualified
+# SELECT ... FROM users on the PLATFORM connection - returning every account
+# email on the deployment for any projectId. generate-fix had no auth and could
+# regenerate a victim's stored sqlFix, the field apply-fix runs through
+# $executeRawUnsafe: cross-tenant fix poisoning, not SQL injection. Asserts the
+# victim's fix is byte-for-byte unchanged after a denied write.
+__tests__/auth/tenant-scoped-service-queries.test.ts
