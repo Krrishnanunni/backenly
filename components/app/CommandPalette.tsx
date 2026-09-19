@@ -25,6 +25,7 @@ import {
   GitBranch,
   Rocket,
   Cable,
+  Webhook,
   Settings,
   FolderKanban,
   Gauge,
@@ -85,6 +86,7 @@ export function CommandPalette() {
             : []),
           { id: 'p-deploy',       label: 'Deploy',        icon: Rocket,          category: 'Project',  action: go(`${base}/deploy`),        keywords: ['publish', 'release', 'rollback'] },
           { id: 'p-connect',      label: 'Connect agent', icon: Cable,           category: 'Project',  action: go(`${base}/connect`),       keywords: ['mcp', 'cursor', 'claude', 'agent', 'sdk', 'api key'] },
+          { id: 'p-webhooks',     label: 'Webhooks',      icon: Webhook,         category: 'Project',  action: go(`${base}/webhooks`),      keywords: ['hook', 'endpoint', 'event', 'delivery', 'signature', 'hmac'] },
           { id: 'p-settings',     label: 'Project settings', icon: Settings,     category: 'Project',  action: go(`${base}/settings`),      keywords: ['config', 'keys', 'danger'] },
         ]
       : []

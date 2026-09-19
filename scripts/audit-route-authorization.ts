@@ -161,6 +161,14 @@ function classify(file: string): RouteRecord {
     // cross-tenant request, recording a security event. It is authentication
     // and authorization in one call.
     'getCurrentProjectId',
+    // Delegates straight to canAccessProject / canWriteProject /
+    // canAdministerProject by access level, then applies the plan entitlement
+    // SECOND and separately. Listed here rather than baselining the five
+    // webhook routes: a baseline entry per route would turn the file this
+    // detector guards into a suppression list, which is the one thing it must
+    // never become. Teaching the detector about a helper that really does
+    // authorize keeps the ratchet meaningful for the next route that uses it.
+    'guardWebhookRoute',
   ].filter(h => new RegExp(`\\b${h}\\s*\\(`).test(src))
 
   const pathParams = Array.from(route.matchAll(/\[([^\]]+)\]/g)).map(m => m[1])

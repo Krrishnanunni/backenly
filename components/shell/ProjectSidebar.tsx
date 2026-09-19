@@ -28,6 +28,7 @@ import {
   Activity,
   Rocket,
   Cable,
+  Webhook,
   GitBranch,
   Settings,
   ChevronDown,
@@ -95,6 +96,7 @@ const NAV: NavGroup[] = [
     label: 'Connect',
     items: [
       { id: 'connect', title: 'Connect', icon: Cable, href: '/connect', match: ['/connect', '/mcp'], tag: 'MCP' },
+      { id: 'webhooks', title: 'Webhooks', icon: Webhook, href: '/webhooks', match: ['/webhooks'] },
     ],
   },
   {
