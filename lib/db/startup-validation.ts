@@ -274,7 +274,6 @@ export async function runHealthCheck(): Promise<{
   const checks: Record<string, boolean> = {
     database: false,
     schema: false,
-    rateLimiter: false,
   }
 
   try {
@@ -299,8 +298,20 @@ export async function runHealthCheck(): Promise<{
   //
   // Message only, never the connection string: this response is served to
   // whoever can reach /api/health, and REDIS_URL carries a password.
+  //
+  // Reported ALONGSIDE `checks`, deliberately not inside it.
+  //
+  // `checks` drives the 200/503 that a load balancer acts on. A limiter whose
+  // store is unreachable is a real and serious fault, but it is not a reason to
+  // pull this instance out of rotation: the data plane, functions, storage and
+  // dashboard are all still serving. Folding it in would take every instance
+  // out at once when Redis went away, converting an auth outage into a total
+  // outage — the opposite of what a health check is for.
+  //
+  // So alert on `rateLimiter.ready` rather than on the status code. That is the
+  // field that says protected sign-in is being denied for an infrastructural
+  // reason rather than because callers are actually abusing it.
   const limiter = rateLimitHealth()
-  checks.rateLimiter = limiter.ready
 
   return {
     healthy: Object.values(checks).every(v => v),
