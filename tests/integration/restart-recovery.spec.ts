@@ -39,96 +39,26 @@
  * simulated process boundary.
  */
 
-import net from 'net'
 import crypto from 'crypto'
 import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
 
 import { RedisRateLimitBackend, createRateLimitRedis } from '@/lib/security/rate-limit-backend'
 import { redisProcessControl, waitForRedis } from '../helpers/redis-process'
+import { severableProxy, throughProxy } from '../helpers/severable-proxy'
 
 const REDIS_URL = process.env.REDIS_URL?.trim()
 const prisma = new PrismaClient()
-
-// ── A proxy that can be severed and reopened ─────────────────────────────────
-
-interface Severable {
-  port: number
-  sever: () => Promise<void>
-  restore: () => Promise<void>
-  close: () => Promise<void>
-}
-
-/**
- * A TCP proxy in front of a real service.
- *
- * `sever()` stops listening AND destroys every live socket, which is what makes
- * it equivalent to the service going away rather than merely refusing new
- * connections.
- */
-async function severableProxy(targetHost: string, targetPort: number): Promise<Severable> {
-  let sockets: net.Socket[] = []
-  let server: net.Server | null = null
-  let port = 0
-
-  const build = () =>
-    net.createServer(client => {
-      sockets.push(client)
-      const upstream = net.connect(targetPort, targetHost)
-      sockets.push(upstream)
-      client.pipe(upstream)
-      upstream.pipe(client)
-      client.on('error', () => {})
-      upstream.on('error', () => {})
-    })
-
-  server = build()
-  await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
-  port = (server.address() as net.AddressInfo).port
-
-  const shutdown = async (s: net.Server) => {
-    // close() only calls back once every existing connection has ended, so the
-    // sockets are destroyed first. Awaiting before destroying waits for
-    // something nobody is doing.
-    const closed = new Promise<void>(resolve => s.close(() => resolve()))
-    for (const sock of sockets.splice(0)) sock.destroy()
-    await closed
-  }
-
-  return {
-    get port() {
-      return port
-    },
-    async sever() {
-      if (server) {
-        await shutdown(server)
-        server = null
-      }
-    },
-    async restore() {
-      if (server) return
-      server = build()
-      await new Promise<void>(resolve => server!.listen(port, '127.0.0.1', resolve))
-    },
-    async close() {
-      if (server) await shutdown(server)
-      server = null
-    },
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('a connection pool survives losing PostgreSQL under it', () => {
   it('recovers without the application being restarted', async () => {
     const target = new URL(process.env.TEST_DATABASE_URL!)
     const proxy = await severableProxy(target.hostname, Number(target.port || 5432))
 
-    const url = new URL(target.toString())
-    url.hostname = '127.0.0.1'
-    url.port = String(proxy.port)
-
-    const pool = new Pool({ connectionString: url.toString(), max: 3 })
+    const pool = new Pool({
+      connectionString: throughProxy(process.env.TEST_DATABASE_URL!, proxy.port),
+      max: 3,
+    })
     // A pooled client whose server went away emits this. Unhandled, it takes the
     // process down, which is itself a restart-survival property.
     pool.on('error', () => {})

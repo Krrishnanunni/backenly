@@ -71,28 +71,59 @@ function git(args: string[]): string {
 /**
  * Make sure a commit exists locally, fetching it if the clone is shallow.
  *
- * Failing here must say WHY: without the old release there is no genuine old
- * install to upgrade from, and quietly substituting the current schema would
- * turn this suite into a test of a hand-made artefact.
+ * Failing here must say WHY, and must say what git said. The first version
+ * reported only `Command failed: git fetch --depth 1 origin <sha>` — execFileSync
+ * puts the actual reason on `err.stderr`, not on `err.message`, so the one fact
+ * that would have explained a CI failure was the one fact being discarded.
+ *
+ * Several fetch shapes are tried because which one works depends on the server
+ * and on how the clone was made: fetching a bare SHA needs the remote to allow
+ * it, and a shallow clone whose boundary excludes the commit needs deepening.
+ * CI also asks for full history (fetch-depth: 0), so none of this should be
+ * reached there — it exists for a contributor's shallow clone.
  */
 function ensureRefPresent(ref: string): void {
-  try {
-    git(['cat-file', '-e', `${ref}^{commit}`])
-    return
-  } catch {
-    // Not present; fall through to fetching it.
+  const present = () => {
+    try {
+      git(['cat-file', '-e', `${ref}^{commit}`])
+      return true
+    } catch {
+      return false
+    }
   }
 
-  try {
-    git(['fetch', '--depth', '1', 'origin', ref])
-    git(['cat-file', '-e', `${ref}^{commit}`])
-  } catch (err: any) {
-    throw new Error(
-      `the old release ${ref} is not in this clone and could not be fetched: ` +
-        `${String(err?.message ?? err).split(/\r?\n/)[0]}. This suite upgrades from a REAL ` +
-        `older release, so without that commit there is nothing to upgrade from.`,
-    )
+  if (present()) return
+
+  const attempts: string[][] = [
+    ['fetch', '--depth', '1', 'origin', ref],
+    ['fetch', 'origin', ref],
+    ['fetch', '--unshallow', 'origin'],
+    ['fetch', 'origin', '+refs/heads/*:refs/remotes/origin/*'],
+  ]
+
+  const failures: string[] = []
+  for (const args of attempts) {
+    try {
+      git(args)
+      if (present()) return
+      failures.push(`${args.join(' ')}: succeeded but the commit is still absent`)
+    } catch (err: any) {
+      const said = String(err?.stderr ?? err?.message ?? err)
+        .split(/\r?\n/)
+        .map((l: string) => l.trim())
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(' | ')
+      failures.push(`${args.join(' ')}: ${said}`)
+    }
   }
+
+  throw new Error(
+    `the old release ${ref} is not in this clone and could not be fetched. This suite ` +
+      `upgrades from a REAL older release, so without that commit there is nothing to ` +
+      `upgrade from. Tried:\n  ` +
+      failures.join('\n  '),
+  )
 }
 
 function prismaPush(schemaPath: string, url: string): void {

@@ -448,6 +448,17 @@ jobs:
       WORKSPACE_POOL_MAX_POOLS: '8'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # selfhost-upgrade.spec.ts builds a genuine OLD install from an
+          # earlier release's own schema.prisma, so it needs that commit. The
+          # default shallow clone does not have it, and fetching a bare SHA
+          # afterwards depends on what the remote is willing to serve - it
+          # failed here with nothing but "Command failed: git fetch".
+          #
+          # Asking for the history up front removes the network step from the
+          # test entirely. The suite keeps its own fallback for a contributor
+          # working in a shallow clone, but CI no longer relies on it.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
