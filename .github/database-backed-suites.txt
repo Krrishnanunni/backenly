@@ -278,3 +278,13 @@ __tests__/auth/tenant-scoped-service-queries.test.ts
 # planted for the same reason, so "no session rows" cannot pass against a
 # database that simply had none.
 __tests__/recovery/export-bundle.test.ts
+
+# Recovery onto a machine that has never seen the deployment. The target is a
+# database created empty seconds earlier, so nothing can be silently borrowed
+# from the environment - which is what makes a restore test run on the source
+# machine worthless. Asserts both locked semantics: the project signing secret
+# comes back byte-for-byte, the revoked JTI is still revoked, and the planted
+# session and magic link are gone while their tables exist and are empty. Each
+# has a paired assertion that the source really held the row, so none can pass
+# vacuously.
+__tests__/recovery/clean-machine-restore.test.ts

@@ -212,12 +212,22 @@ export async function exportDeploymentBundle(options: ExportOptions): Promise<Ex
 
 // ─── Component collection ────────────────────────────────────────────────────
 
-interface DeploymentMetadata {
+export interface DeploymentMetadata {
   backenlyVersion: string
   schemaVersion: string
   postgresVersion: string
   requiredExtensions: string[]
   edition: string
+  /**
+   * Exactly which schemas this bundle will create on restore.
+   *
+   * Recorded rather than derived, because the restorer has to drop them before
+   * replaying - pg_dump emits CREATE SCHEMA, which collides with anything
+   * already there. The alternative is parsing CREATE SCHEMA out of the dump,
+   * and a restore that decides what to drop by pattern-matching SQL is a
+   * restore that will one day drop the wrong thing.
+   */
+  schemas: string[]
 }
 
 async function collectDeploymentMetadata(): Promise<DeploymentMetadata> {
@@ -254,7 +264,16 @@ async function collectDeploymentMetadata(): Promise<DeploymentMetadata> {
     postgresVersion: server_version,
     requiredExtensions: extensions.map(e => e.extname),
     edition: process.env.BACKENLY_EDITION ?? 'single-tenant',
+    schemas: ['public', ...(await workspaceSchemaNames())],
   }
+}
+
+/** Every workspace schema in the source deployment, in a stable order. */
+export async function workspaceSchemaNames(): Promise<string[]> {
+  const rows = await prisma.$queryRawUnsafe<{ nspname: string }[]>(
+    `SELECT nspname FROM pg_namespace WHERE nspname LIKE 'workspace\_%' ORDER BY nspname`,
+  )
+  return rows.map(r => r.nspname)
 }
 
 async function collectPlatformDatabase(): Promise<CollectedComponent[]> {
