@@ -288,3 +288,14 @@ __tests__/recovery/export-bundle.test.ts
 # has a paired assertion that the source really held the row, so none can pass
 # vacuously.
 __tests__/recovery/clean-machine-restore.test.ts
+
+# Restoring over a deployment that is already running. The clean-machine case is
+# what the product is for; this is the one that can do damage. A marker row is
+# written into a live target, a deliberately corrupted bundle and then a wrong
+# credential are offered, and the marker must still be there afterwards -
+# workspace-backup restored by dropping the schema first and reading the dump
+# second, so an unreadable dump destroyed a working schema. Then the good bundle
+# must REPLACE rather than merge, because a restore that leaves newer rows
+# produces a deployment matching no point in time at all. Run twice, since an
+# interrupted restore gets re-run.
+__tests__/recovery/destructive-restore.test.ts
