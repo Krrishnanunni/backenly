@@ -1,11 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   AnimatePresence,
   motion,
-  useReducedMotion,
   type Variants,
 } from 'framer-motion'
 import {
@@ -13,14 +12,13 @@ import {
   Calendar,
   ChevronDown,
   Gauge,
-  GitBranch,
   Moon,
   Play,
   ShieldCheck,
-  UsersRound,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { AutonomyFilm } from '@/components/site/AutonomyFilm'
+import { CodeBlock } from '@/components/site/CodeBlock'
 import {
   AuthDiagram,
   DatabaseDiagram,
@@ -31,6 +29,86 @@ import {
 } from '@/components/landing/CapabilityDiagrams'
 import { HeroConsole } from '@/components/landing/HeroConsole'
 import { ROUTES, SiteShell } from '@/components/site/SiteShell'
+import { useSettledReducedMotion } from '@/lib/hooks/useSettledReducedMotion'
+
+/* ─────────────────────────────────────────────────────────────
+   Design tokens
+
+   Added 2026-09-18. An audit of this file found 14 distinct font sizes,
+   9 hairline alphas and 11 body measures, with exactly 2 tracking values
+   spread flat across all of it. Individually none of that is visible.
+   Together it is the whole difference between a page that looks clean and
+   one that looks expensive, because a reader feels inconsistency long
+   before they can name it.
+
+   Everything below is a token. Reach for one; do not write a new
+   `text-[17px]` or a tenth shade of white.
+───────────────────────────────────────────────────────────── */
+
+/**
+ * Type scale.
+ *
+ * The part that was missing is that **tracking scales inversely with size**.
+ * One flat `tracking-tight` (-0.025em) ran from 20px card headings up to the
+ * 80px hero, so the display type sat loose and the small type sat cramped.
+ * Reference points from the benchmark set: Linear runs about -3.75% at 80px,
+ * -3.2% at 56px, -2.5% at 40px and -2.1% at 28px. These follow that curve.
+ *
+ * SIZES ARE `px` HERE, AND THAT IS DELIBERATE. A first pass at this block
+ * converted them to `rem` on the usual reasoning above. It was wrong for this
+ * codebase: app/globals.css sets `--font-body: 13px` on `html`, so **1rem is
+ * 13px here, not 16px**, and the conversion silently shrank every body size by
+ * about 19% (15px copy rendered at 12px, 21px hero subline at 17px). The
+ * accessibility argument does not apply either, because a hardcoded root
+ * font-size has already overridden the reader's browser setting before any of
+ * these tokens are read. Making `rem` correct here is a globals.css change,
+ * not a landing-page one. Until then: px.
+ *
+ * The heading steps below are the exception and are still `rem` (`1.875rem`,
+ * `2.75rem`, `3.25rem`). Those are the values the page always shipped, so they
+ * render exactly as before; only the sizes this file had as px were affected.
+ *
+ * LINE HEIGHT, READ THIS BEFORE EDITING: every Tailwind font-size utility
+ * ships its own line-height, and a bare `leading-*` only wins where no LATER
+ * breakpoint reintroduces a size. So each token restates `leading-*` at every
+ * breakpoint where it sets a size. Dropping one is how the closing headline
+ * ended up with a 42px font on a 32px line, with the two lines overlapping.
+ */
+const DISPLAY =
+  'font-semibold leading-[1.03] tracking-[-0.042em] sm:leading-[1.02] md:leading-[1.01] xl:leading-[1.0]'
+const TITLE = 'font-semibold leading-[1.1] tracking-[-0.032em] md:leading-[1.06]'
+const HEADING = 'font-semibold leading-[1.35] tracking-[-0.018em]'
+const LEDE = 'leading-[1.65] tracking-[-0.012em] md:leading-[1.55]'
+const BODY = 'text-[15px] leading-[1.75] tracking-[-0.004em]'
+
+/**
+ * Hairlines. Three jobs, three tokens, replacing nine ad-hoc alphas
+ * (0.06 / 0.07 / 0.08 / 0.1 / 0.12 / 0.14 / 10 / 20 / 25).
+ */
+const RULE = 'border-white/[0.07]' // divides items inside one group
+const RULE_LEAD = 'border-white/[0.14]' // opens a section, or closes it
+const EDGE = 'border-white/[0.10]' // the outline of an actual object
+
+/** Measure. Prose gets one comfortable column; captions get a narrow one. */
+const MEASURE = 'max-w-[60ch]'
+const MEASURE_TIGHT = 'max-w-[44ch]'
+
+/**
+ * Rhythm. One vertical scale for the whole page.
+ *
+ * Sections used to carry `py-16 sm:py-20 md:py-28` on BOTH edges, so every
+ * boundary stacked two full paddings into roughly 224px of empty black, and a
+ * centered header then floated in the middle of it with nothing to align to.
+ */
+const SECTION = 'px-5 py-14 sm:px-6 md:py-20'
+const CONTAINER = 'mx-auto w-full max-w-[100rem]'
+
+/** One recipe, so the hero CTA and the finale CTA cannot drift apart. */
+const PRIMARY_CTA =
+  'group inline-flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-white px-6 text-[14px] font-semibold tracking-[-0.006em] text-black shadow-[0_12px_45px_-14px_rgba(255,255,255,0.4)] transition duration-200 hover:bg-zinc-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black md:text-[15px]'
+
+const SECONDARY_CTA =
+  `inline-flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-md border ${EDGE} px-6 text-[14px] font-semibold tracking-[-0.006em] text-white transition duration-200 hover:border-white/25 hover:bg-white/[0.04] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black md:text-[15px]`
 
 /* ─────────────────────────────────────────────────────────────
    Content
@@ -73,25 +151,52 @@ const capabilities: Capability[] = [
   },
 ]
 
+/**
+ * The three things the grid above does not draw. Deliberately typographic:
+ * the autonomy band below owns the icon-and-paragraph treatment, and running
+ * it here too made the page repeat one layout family twice in four screens.
+ */
 const capabilitySummaries = [
   {
-    icon: ShieldCheck,
     title: 'Row-level security by description',
     body: 'Say who can read and write what; Backenly writes and enforces the Postgres policies.',
   },
   {
-    icon: GitBranch,
     title: 'Branches for risky work',
     body: 'Clone the backend into a branch, let your agent experiment, review the diff, merge what works.',
   },
   {
-    icon: UsersRound,
     title: 'Teams and organizations',
     body: 'Invite teammates and clients with roles. Every actor writes to the same change ledger.',
   },
 ]
 
+/**
+ * The real command the dashboard mints, with the project id and key stood in
+ * for. Source of truth: components/connect/AgentInstallGuide.tsx. If that
+ * builder changes shape, change this with it.
+ *
+ * The backslash is a genuine shell line continuation, not decoration: on one
+ * line this runs past the column and the block shows a command sawn off
+ * mid-flag, which is worse than a wrap. Pasting either form works.
+ */
+const CONNECT_COMMAND = `claude mcp add backenly -- \\
+  npx -y @backenly/mcp-server --project <project-id> --key <api-key>`
 
+const connectChannels = [
+  {
+    title: 'MCP server',
+    body: 'Typed tools for schema, data, auth, storage, and functions, in Claude Code, Cursor, Codex, Cline, or any MCP host. Driving the backend this way is never metered as AI.',
+  },
+  {
+    title: 'CLI',
+    body: 'npx @backenly/cli for schema, generated types, CI diffs, logs, and read-only SQL: the part of the workflow that belongs in a pipeline rather than in a chat.',
+  },
+  {
+    title: 'Agent skill',
+    body: 'A canonical skill at backenly.com/skill.md, so an agent learns how the platform expects to be driven before it touches anything.',
+  },
+]
 
 const autonomyItems = [
   {
@@ -120,91 +225,73 @@ type Capability = {
 
 /* ─────────────────────────────────────────────────────────────
    Motion
+
+   One element type in every branch. `useReducedMotion()` is read during
+   render and the server has no media query, so letting it choose the element
+   type (or the `initial` prop) made the server and the first client render
+   disagree: React #425 / #418 / #423, after which the root gave up and
+   re-rendered the whole landing page on the client for every reduced-motion
+   visitor.
+
+   So the reduced branch is gated behind `useQuietMotion`, which reads the
+   media query through `useSyncExternalStore`. Server and first client render
+   are identical by construction; the pass after hydration then gives
+   reduced-motion visitors duration 0, so the tree snaps to its resting state
+   instead of animating into it.
 ───────────────────────────────────────────────────────────── */
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const
+
+/** See lib/hooks/useSettledReducedMotion for why this is not framer's hook. */
+const useQuietMotion = useSettledReducedMotion
 
 // Scroll-triggered reveals stay on GPU-composited properties only
 // (opacity + transform). Animating `filter: blur()` here forces a full-layer
 // re-raster every frame exactly as the section scrolls in — the main cause of
 // scroll stutter. Blur-in is kept only for the one-time hero entrance.
 const revealVariants: Variants = {
-  hidden: {
-    opacity: 0,
-    y: 34,
-    scale: 0.985,
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.9,
-      ease: EASE_OUT,
-    },
-  },
-}
-
-const heroStaggerVariants: Variants = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.05,
-    },
-  },
+  hidden: { opacity: 0, y: 34, scale: 0.985 },
+  visible: { opacity: 1, y: 0, scale: 1 },
 }
 
 const heroItemVariants: Variants = {
-  hidden: {
-    opacity: 0,
-    y: 18,
-    filter: 'blur(10px)',
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    filter: 'blur(0px)',
-    transition: {
-      duration: 0.9,
-      ease: EASE_OUT,
-    },
-  },
-}
-
-const staggerVariants: Variants = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.105,
-      delayChildren: 0.1,
-    },
-  },
+  hidden: { opacity: 0, y: 18, filter: 'blur(10px)' },
+  visible: { opacity: 1, y: 0, filter: 'blur(0px)' },
 }
 
 const cardVariants: Variants = {
-  hidden: {
-    opacity: 0,
-    y: 24,
-    scale: 0.985,
-  },
+  hidden: { opacity: 0, y: 24, scale: 0.985 },
+  visible: { opacity: 1, y: 0, scale: 1 },
+}
+
+const heroStagger = (quiet: boolean): Variants => ({
+  hidden: {},
   visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
     transition: {
-      duration: 0.72,
-      ease: EASE_OUT,
+      staggerChildren: quiet ? 0 : 0.12,
+      delayChildren: quiet ? 0 : 0.05,
     },
   },
-}
+})
+
+const listStagger = (quiet: boolean): Variants => ({
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: quiet ? 0 : 0.105,
+      delayChildren: quiet ? 0 : 0.1,
+    },
+  },
+})
 
 export default function LandingPage() {
   return (
     <SiteShell>
-      <main className="relative overflow-x-hidden">
+      {/* Matches the shell's skip link, so it still resolves without JS. */}
+      <main id="main-content" className="relative overflow-x-hidden">
         <Hero />
         <CapabilitiesSection />
+        <ConnectSection />
         <AutonomySection />
         <DemoClipsSection />
         <FaqSection />
@@ -216,21 +303,24 @@ export default function LandingPage() {
 
 /* ─────────────────────────────────────────────────────────────
    Hero
+
+   Copy is locked; see project-two-door-positioning. The headline names the
+   category and the subline explains it. Only the rhythm and the type moved.
 ───────────────────────────────────────────────────────────── */
 
 function Hero() {
   const sectionRef = useRef<HTMLElement>(null)
-  const reduceMotion = useReducedMotion()
+  const quiet = useQuietMotion()
 
   return (
     <motion.section
       ref={sectionRef}
       // Generous air between the navbar and the headline, like the benchmark —
       // the headline should start after a beat of ground, not under the nav.
-      className="relative isolate overflow-hidden px-0 pb-14 pt-16 sm:pt-20 md:pb-20 md:pt-28 xl:pt-32"
-      initial={reduceMotion ? false : 'hidden'}
+      className="relative isolate overflow-hidden px-0 pb-12 pt-16 sm:pt-20 md:pb-16 md:pt-28 xl:pt-32"
+      initial="hidden"
       animate="visible"
-      variants={heroStaggerVariants}
+      variants={heroStagger(quiet)}
     >
       {/* Fade to black that the console panel sits against. */}
       <div
@@ -242,52 +332,48 @@ function Hero() {
         className="absolute inset-x-0 top-0 -z-10 h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.22),transparent)]"
       />
 
-      <div className="mx-auto w-full max-w-[100rem] px-5 sm:px-6">
-        {/* Wide like the benchmark: the headline runs most of the container
-            and the paragraph holds long lines — a narrow column centered in
-            an 88rem band read as timid. */}
-        {/* The headline names the CATEGORY — "autonomous backend", the locked
-            positioning and the one word the agent-cloud competitors cannot
-            claim. Deliberately NOT "cloud platform": we do not run your app's
-            compute, and borrowing that phrase would read as a clone of the
-            two YC heros it came from. The old headline pair moved into the
-            subline — it is the explanation, not the claim. */}
+      <div className={`${CONTAINER} px-5 sm:px-6`}>
         <motion.h1
           variants={heroItemVariants}
-          className="max-w-6xl text-[clamp(2.3rem,9vw,3.1rem)] font-semibold leading-[1.06] tracking-tight text-white [text-wrap:balance] sm:text-6xl md:text-[4.4rem] xl:text-[5rem]"
+          transition={{ duration: quiet ? 0 : 0.9, ease: EASE_OUT }}
+          className={`max-w-[22ch] text-[clamp(2.3rem,9vw,3.1rem)] text-white [text-wrap:balance] sm:text-6xl md:text-[4.4rem] xl:text-[5rem] ${DISPLAY}`}
         >
           The autonomous backend
           <span className="block">built for coding agents</span>
         </motion.h1>
 
         <div className="mt-8 flex flex-col gap-8 md:flex-row md:items-center md:justify-between md:gap-12">
-          <div className="max-w-4xl">
-            <motion.p
-              variants={heroItemVariants}
-              className="text-[16px] leading-7 text-zinc-400 [text-wrap:pretty] md:text-[21px] md:leading-9"
-            >
-              Real Postgres, APIs, auth, storage, and realtime, driven by your
-              agent over MCP, with every change governed, verified, and
-              reversible.
-            </motion.p>
-          </div>
+          <motion.p
+            variants={heroItemVariants}
+            transition={{ duration: quiet ? 0 : 0.9, ease: EASE_OUT }}
+            className={`max-w-[52ch] text-[17px] text-zinc-400 [text-wrap:pretty] md:text-[21px] ${LEDE}`}
+          >
+            Real Postgres, APIs, auth, storage, and realtime, driven by your
+            agent over MCP, with every change governed, verified, and
+            reversible.
+          </motion.p>
 
           <motion.div
             variants={heroItemVariants}
+            transition={{ duration: quiet ? 0 : 0.9, ease: EASE_OUT }}
             className="flex shrink-0 flex-col gap-3 sm:flex-row"
           >
-            <Link
-              href={ROUTES.signup}
-              className="group inline-flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-white px-6 text-sm font-semibold text-black shadow-[0_12px_45px_-14px_rgba(255,255,255,0.4)] transition duration-200 hover:bg-zinc-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black md:text-[15px]"
-            >
+            <Link href={ROUTES.signup} className={PRIMARY_CTA}>
               Start free
-              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+              <ArrowRight
+                aria-hidden
+                className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
+              />
             </Link>
           </motion.div>
         </div>
 
         {/* The dashboard, drawn in DOM — see components/landing/HeroConsole. */}
-        <motion.div variants={heroItemVariants} className="mt-12 md:mt-16">
+        <motion.div
+          variants={heroItemVariants}
+          transition={{ duration: quiet ? 0 : 0.9, ease: EASE_OUT }}
+          className="mt-12 md:mt-16"
+        >
           <HeroConsole />
         </motion.div>
       </div>
@@ -298,18 +384,18 @@ function Hero() {
 /* ─────────────────────────────────────────────────────────────
    Capabilities — the primitives
 
-   An engineering-drawing band: faint crosshair ground, hairline rules
-   between transparent cells, and diagrams drawn as line art on top of it.
-   The previous version boxed the grid into its own rounded, bordered slab —
-   one more "component" sitting on the page — and boxed every diagram again
-   inside it; boxes-inside-boxes is the strongest single tell of template
-   output. Flat rules, open left and right edges, one shared ground.
+   An engineering-drawing band: hairline rules between transparent cells, with
+   the diagrams drawn as line art on the page's own ground. An earlier version
+   boxed the grid into a rounded, bordered slab — one more "component" sitting
+   on the page — and boxed every diagram again inside it. Boxes inside boxes is
+   the strongest single tell of template output. Flat rules, open left and
+   right edges, one shared ground.
 ───────────────────────────────────────────────────────────── */
 
 /**
  * Hairlines between cells, never around them. Per-cell borders replace the
  * old gap-px lit-background trick because the cells are transparent now —
- * the crosshair ground has to run through the whole band uninterrupted.
+ * the ground has to run through the whole band uninterrupted.
  * Index-mapped for the 1 / md:2 / lg:3 column layouts of six cells.
  */
 const CELL_RULES = [
@@ -323,29 +409,26 @@ const CELL_RULES = [
 
 function CapabilitiesSection() {
   return (
-    <section
-      id="capabilities"
-      className="relative scroll-mt-20 px-5 py-16 sm:px-6 sm:py-20 md:scroll-mt-24 md:py-28"
-    >
-
-      <div className="mx-auto max-w-[100rem]">
+    <section id="capabilities" className={`relative scroll-mt-20 md:scroll-mt-24 ${SECTION}`}>
+      <div className={CONTAINER}>
         <Reveal>
-          <SectionHeader
-            eyebrow="Platform surface"
+          <SectionHead
             title="The primitives are built in, not bolted on"
-            body="Choosing the platform that runs itself doesn’t mean giving anything up. Everything a production backend needs is already here, wired together, governed, and watched."
+            body="Everything a production backend needs, wired together from the first table: Postgres, REST, auth, storage, realtime, and functions. Governed and watched the whole time."
           />
         </Reveal>
 
-        <Stagger className="mt-14 grid border-y border-white/[0.08] md:grid-cols-2 lg:grid-cols-3">
+        <Stagger
+          className={`mt-10 grid border-y ${RULE} md:mt-12 md:grid-cols-2 lg:grid-cols-3`}
+        >
           {capabilities.map((capability, index) => (
             <CapabilityCard key={capability.title} capability={capability} index={index} />
           ))}
         </Stagger>
 
-        <Stagger className="mt-12 grid gap-8 border-t border-white/[0.06] pt-10 md:grid-cols-3 md:gap-6">
+        <Stagger className="mt-10 grid gap-x-10 gap-y-8 lg:grid-cols-3">
           {capabilitySummaries.map((item) => (
-            <IconRow key={item.title} item={item} />
+            <SummaryColumn key={item.title} item={item} />
           ))}
         </Stagger>
       </div>
@@ -355,14 +438,16 @@ function CapabilitiesSection() {
 
 function CapabilityCard({ capability, index }: { capability: Capability; index: number }) {
   const Diagram = capability.diagram
+  const quiet = useQuietMotion()
 
   return (
     <motion.article
       variants={cardVariants}
+      transition={{ duration: quiet ? 0 : 0.72, ease: EASE_OUT }}
       // overflow-hidden is load-bearing: the REST window is cropped by this
-      // edge on purpose. Transparent over the crosshair ground; hover only
-      // lifts the cell a hair's worth.
-      className={`group relative flex flex-col overflow-hidden border-white/[0.08] p-7 transition-colors duration-500 hover:bg-white/[0.015] md:p-8 ${CELL_RULES[index] ?? 'border-t'}`}
+      // edge on purpose. Transparent over the page ground; hover only lifts
+      // the cell a hair's worth.
+      className={`group relative flex flex-col overflow-hidden ${RULE} p-7 transition-colors duration-500 hover:bg-white/[0.015] md:p-8 ${CELL_RULES[index] ?? 'border-t'}`}
     >
       {/* Hover rail: the only thing that marks the active cell, so the grid
           stays quiet until the cursor picks one. White, not brand-colored —
@@ -371,12 +456,12 @@ function CapabilityCard({ capability, index }: { capability: Capability; index: 
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px origin-left scale-x-0 bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.35),transparent)] transition-transform duration-500 ease-out group-hover:scale-x-100 motion-reduce:transition-none"
       />
-      <h3 className="text-xl font-semibold tracking-tight text-white">{capability.title}</h3>
-      {/* Three-line floor from md up (3 × leading-7). The diagrams are
-          bottom-aligned, so the dead air above one is the row's tallest cell
-          minus this one; a floor keeps a paragraph that wraps one line further
-          from spending that line as space over its neighbours' drawings. */}
-      <p className="mt-2.5 max-w-[46ch] text-[15px] leading-7 text-zinc-400 md:min-h-[84px]">
+      <h3 className={`text-[1.25rem] text-white ${HEADING}`}>{capability.title}</h3>
+      {/* Three-line floor from md up. The diagrams are bottom-aligned, so the
+          dead air above one is the row's tallest cell minus this one; a floor
+          keeps a paragraph that wraps one line further from spending that line
+          as space over its neighbours' drawings. */}
+      <p className={`mt-3 ${MEASURE_TIGHT} ${BODY} text-zinc-400 md:min-h-[84px]`}>
         {capability.body}
       </p>
       <div className="mt-auto">
@@ -387,24 +472,82 @@ function CapabilityCard({ capability, index }: { capability: Capability; index: 
 }
 
 /**
- * The icon-and-paragraph row under both the capabilities grid and the autonomy
- * film. Capabilities used to carry a light-theme twin of this; once the section
- * went dark the two were the same component with different hex values.
+ * Typographic three-up: a hairline over each column, no icon chrome. The
+ * autonomy band owns the icon-and-paragraph treatment, so this one is
+ * deliberately the quieter sibling and the two never read as one row pasted
+ * twice.
  */
-function IconRow({ item }: { item: { icon: LucideIcon; title: string; body: string } }) {
-  const Icon = item.icon
+function SummaryColumn({ item }: { item: { title: string; body: string } }) {
+  const quiet = useQuietMotion()
 
   return (
-    <motion.div variants={cardVariants} className="group flex gap-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] transition-colors duration-300 group-hover:border-white/25 group-hover:bg-white/[0.05]">
-        <Icon className="h-4 w-4 text-zinc-400 transition-colors duration-300 group-hover:text-zinc-100" />
+    <motion.div
+      variants={cardVariants}
+      transition={{ duration: quiet ? 0 : 0.72, ease: EASE_OUT }}
+      className={`border-t ${RULE_LEAD} pt-5`}
+    >
+      <h3 className={`text-[17px] text-white ${HEADING}`}>{item.title}</h3>
+      <p className={`mt-2 ${MEASURE_TIGHT} ${BODY} text-zinc-400`}>{item.body}</p>
+    </motion.div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Connect
+
+   The beat the page was missing. A reader who has just seen the primitives
+   asks "how do I point my agent at it", and the answer used to live only in
+   the FAQ, eight screens down. The command is the real one the dashboard
+   mints, and the block is the site's syntax-highlighted CodeBlock rather than
+   a drawn-on terminal.
+───────────────────────────────────────────────────────────── */
+
+function ConnectSection() {
+  return (
+    <section className={`relative ${SECTION}`}>
+      <div className={CONTAINER}>
+        <Reveal>
+          <SectionHead
+            title="Point your agent at it, and it reads the real schema"
+            body="One command registers Backenly with your coding agent. The key is scoped to a single project and revocable from the dashboard, and it can request a destructive change but never approve one."
+          />
+        </Reveal>
+
+        <div className="mt-10 grid gap-10 md:mt-12 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:gap-14">
+          <Reveal>
+            <CodeBlock code={CONNECT_COMMAND} language="bash" label="Claude Code" />
+            <p className={`mt-4 ${MEASURE} ${BODY} text-zinc-500`}>
+              MCP servers connect when the host process starts, so the tools
+              appear after a restart. Cursor, Codex and Cline take the same
+              server through their own install command.
+            </p>
+          </Reveal>
+
+          <Stagger className={`divide-y divide-white/[0.07] border-y ${RULE}`}>
+            {connectChannels.map((channel) => (
+              <ChannelRow key={channel.title} channel={channel} />
+            ))}
+          </Stagger>
+        </div>
       </div>
-      <div className="min-w-0">
-        <h3 className="text-[17px] font-semibold leading-6 tracking-[-0.01em] text-white">
-          {item.title}
-        </h3>
-        <p className="mt-2 text-[15px] leading-7 text-zinc-400">{item.body}</p>
-      </div>
+    </section>
+  )
+}
+
+function ChannelRow({ channel }: { channel: { title: string; body: string } }) {
+  const quiet = useQuietMotion()
+
+  return (
+    <motion.div
+      variants={cardVariants}
+      transition={{ duration: quiet ? 0 : 0.72, ease: EASE_OUT }}
+      className="py-5"
+    >
+      <h3 className={`text-[17px] text-white ${HEADING}`}>{channel.title}</h3>
+      {/* Capped: this column is ~620px at desktop, which ran these sentences
+          out to about 95 characters. Anything past ~70 costs the reader the
+          line return. */}
+      <p className={`mt-2 ${MEASURE} ${BODY} text-zinc-400`}>{channel.body}</p>
     </motion.div>
   )
 }
@@ -415,11 +558,10 @@ function IconRow({ item }: { item: { icon: LucideIcon; title: string; body: stri
 
 function AutonomySection() {
   return (
-    <section className="relative px-5 py-16 sm:px-6 sm:py-20 md:py-28">
-      <div className="mx-auto max-w-[100rem]">
+    <section className={`relative ${SECTION}`}>
+      <div className={CONTAINER}>
         <Reveal>
-          <SectionHeader
-            eyebrow="Autonomy"
+          <SectionHead
             title="It fixes problems while you sleep"
             body="A resident loop watches every project: detect, fix safely, verify, document, keep it reversible. No prompt, no session, nobody at the keyboard."
           />
@@ -429,7 +571,7 @@ function AutonomySection() {
             different widths — the film at max-w-7xl inside a 100rem section —
             so the rule above the three points ran wider than the frame it was
             meant to close off. Keep both on this container. */}
-        <div className="mx-auto mt-12 w-full max-w-7xl">
+        <div className="mx-auto mt-10 w-full max-w-7xl md:mt-12">
           <Reveal delay={0.06}>
             {/* Drawn, not filmed. A screen recording of this exact claim shipped
                 and was pulled once already: the product moved and the footage
@@ -438,7 +580,9 @@ function AutonomySection() {
             <AutonomyFilm />
           </Reveal>
 
-          <Stagger className="mt-14 grid gap-8 border-t border-white/[0.06] pt-10 md:grid-cols-3 md:gap-8">
+          <Stagger
+            className={`mt-12 grid gap-8 border-t ${RULE} pt-10 md:grid-cols-3 md:gap-8`}
+          >
             {autonomyItems.map((item) => (
               <IconRow key={item.title} item={item} />
             ))}
@@ -446,6 +590,37 @@ function AutonomySection() {
         </div>
       </div>
     </section>
+  )
+}
+
+/**
+ * The icon-and-paragraph row under the autonomy film. This treatment belongs
+ * to this band alone; see SummaryColumn for why the capabilities three-up no
+ * longer borrows it.
+ */
+function IconRow({ item }: { item: { icon: LucideIcon; title: string; body: string } }) {
+  const Icon = item.icon
+  const quiet = useQuietMotion()
+
+  return (
+    <motion.div
+      variants={cardVariants}
+      transition={{ duration: quiet ? 0 : 0.72, ease: EASE_OUT }}
+      className="group flex gap-4"
+    >
+      <div
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border ${EDGE} bg-white/[0.03] transition-colors duration-300 group-hover:border-white/25 group-hover:bg-white/[0.05]`}
+      >
+        <Icon
+          aria-hidden
+          className="h-4 w-4 text-zinc-400 transition-colors duration-300 group-hover:text-zinc-100"
+        />
+      </div>
+      <div className="min-w-0">
+        <h3 className={`text-[17px] text-white ${HEADING}`}>{item.title}</h3>
+        <p className={`mt-2 ${BODY} text-zinc-400`}>{item.body}</p>
+      </div>
+    </motion.div>
   )
 }
 
@@ -457,7 +632,6 @@ function AutonomySection() {
    open-source claim still lives in the hero subline, the FAQ, and the footer;
    it does not need a full section of its own. Do not reintroduce either band.
 ───────────────────────────────────────────────────────────── */
-
 
 /* ─────────────────────────────────────────────────────────────
    Demo clips — stays hidden until the recordings exist in
@@ -493,17 +667,16 @@ function DemoClipsSection() {
   const anyReady = demoClips.some((clip) => status[clip.src] === 'ok')
 
   return (
-    <section className={`px-5 pb-16 sm:px-6 sm:pb-20 md:pb-28 ${anyReady ? '' : 'hidden'}`}>
-      <div className="mx-auto max-w-[100rem]">
+    <section className={`${SECTION} ${anyReady ? '' : 'hidden'}`}>
+      <div className={CONTAINER}>
         <Reveal>
-          <SectionHeader
-            eyebrow="See it work"
+          <SectionHead
             title="Real recordings, not mockups"
             body="Short clips of the product doing its actual job: what it builds, what it refuses, what it connects to, and what it fixes on its own."
           />
         </Reveal>
 
-        <Stagger className="mt-12 grid gap-5 sm:grid-cols-2">
+        <Stagger className="mt-10 grid gap-5 sm:grid-cols-2 md:mt-12">
           {demoClips.map((clip) => (
             <DemoClipCard
               key={clip.src}
@@ -538,6 +711,7 @@ function DemoClipCard({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
+  const quiet = useQuietMotion()
 
   function toggleClip() {
     const video = videoRef.current
@@ -556,7 +730,8 @@ function DemoClipCard({
   return (
     <motion.article
       variants={cardVariants}
-      className={`overflow-hidden rounded-xl border border-white/[0.1] bg-[#0a0a0c] ${
+      transition={{ duration: quiet ? 0 : 0.72, ease: EASE_OUT }}
+      className={`overflow-hidden rounded-xl border ${EDGE} bg-[#0a0a0c] ${
         ready ? '' : 'hidden'
       }`}
     >
@@ -583,14 +758,14 @@ function DemoClipCard({
             playing ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
           }`}
         >
-          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/70">
-            <Play className="h-5 w-5 text-white" />
+          <span className={`flex h-12 w-12 items-center justify-center rounded-full border ${EDGE} bg-black/70`}>
+            <Play aria-hidden className="h-5 w-5 text-white" />
           </span>
         </div>
       </button>
-      <div className="border-t border-white/10 px-5 py-4">
-        <h3 className="text-[16px] font-semibold tracking-[-0.01em] text-white">{clip.title}</h3>
-        <p className="mt-1.5 text-[15px] leading-7 text-zinc-400">{clip.body}</p>
+      <div className={`border-t ${RULE} px-5 py-4`}>
+        <h3 className={`text-[16px] text-white ${HEADING}`}>{clip.title}</h3>
+        <p className={`mt-1.5 ${BODY} text-zinc-400`}>{clip.body}</p>
       </div>
     </motion.article>
   )
@@ -627,7 +802,7 @@ const faqs = [
   },
   {
     q: 'What does it cost?',
-    a: 'Self-hosting is free under Apache-2.0: you bring the servers, and an OpenAI key only if you want the natural-language build tools — the self-healing loop itself runs no model. On Backenly Cloud, the Free plan is genuinely free, with no credit card, and includes a real, permanent backend plus the self-healing loop every minute. Pro is $25/month and raises capacity and how much autonomy may fix per window, not the cadence; Enterprise is custom. Driving the backend from your own coding agent through the typed MCP tools is never metered as AI, and autonomy is included on every Cloud tier.',
+    a: 'Self-hosting is free under Apache-2.0: you bring the servers, and an OpenAI key only if you want the natural-language build tools. The self-healing loop itself runs no model. On Backenly Cloud, the Free plan is genuinely free, with no credit card, and includes a real, permanent backend plus the self-healing loop every minute. Pro is $25/month and raises capacity and how much autonomy may fix per window, not the cadence; Enterprise is custom. Driving the backend from your own coding agent through the typed MCP tools is never metered as AI, and autonomy is included on every Cloud tier.',
   },
   {
     q: 'If my agent does the building, what is the dashboard for?',
@@ -646,38 +821,44 @@ const faqSchema = {
 }
 
 /**
- * Two-column: title stays put on the left while the list scrolls on the
+ * Two-column: the title stays put on the left while the list scrolls on the
  * right; rows are open hairlines on the page ground, chevron leading the
- * question. The boxed accordion this replaces was one more rounded
- * container on a page that had already shed them.
+ * question. The boxed accordion this replaced was one more rounded container
+ * on a page that had already shed them.
  */
 function FaqSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
 
   return (
-    <section className="px-5 py-16 sm:px-6 sm:py-20 md:py-28">
+    <section className={SECTION}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
       />
-      <div className="mx-auto grid max-w-[100rem] gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-16">
+      <div
+        className={`${CONTAINER} grid gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-16`}
+      >
         <Reveal className="lg:sticky lg:top-28 lg:self-start">
-          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-zinc-500">
-            Common questions
-          </p>
-          <h2 className="mt-4 max-w-md bg-[linear-gradient(180deg,#fff_20%,rgba(255,255,255,0.66))] bg-clip-text text-3xl font-semibold leading-tight tracking-tight text-transparent [text-wrap:balance] md:text-5xl">
+          {/* Matches SectionHead's scale: this is a section head too, it just
+              sits in the sticky column instead of above the content. */}
+          <h2
+            className={`max-w-[16ch] text-[1.875rem] text-white [text-wrap:balance] md:text-[2.75rem] ${TITLE}`}
+          >
             What people ask before trusting us with production
           </h2>
           <Link
             href={ROUTES.resources}
-            className="group mt-7 inline-flex items-center gap-1.5 text-[15px] font-medium text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            className="group mt-7 inline-flex items-center gap-1.5 text-[15px] font-medium tracking-[-0.006em] text-zinc-400 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             Read the docs
-            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+            <ArrowRight
+              aria-hidden
+              className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
+            />
           </Link>
         </Reveal>
 
-        <Reveal delay={0.08} className="divide-y divide-white/[0.07] border-y border-white/[0.07]">
+        <Reveal delay={0.08} className={`divide-y divide-white/[0.07] border-y ${RULE}`}>
           {faqs.map((faq, index) => (
             <FaqItem
               key={faq.q}
@@ -701,34 +882,42 @@ function FaqItem({
   open: boolean
   onToggle: () => void
 }) {
+  // Ties the button to the panel it controls, so a screen reader announces
+  // what expanded rather than only that something did.
+  const panelId = useId()
+  const quiet = useQuietMotion()
+
   return (
     <div>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
+        aria-controls={panelId}
         className="group flex w-full items-center gap-4 py-6 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/30 md:py-7"
       >
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-zinc-600 transition-all duration-300 group-hover:text-zinc-300 ${
+          aria-hidden
+          className={`h-4 w-4 shrink-0 text-zinc-600 transition-[color,transform] duration-300 group-hover:text-zinc-300 ${
             open ? 'rotate-180 text-zinc-300' : ''
           }`}
         />
-        <span className="min-w-0 flex-1 text-[16px] font-semibold leading-6 tracking-[-0.01em] text-white md:text-[17px]">
+        <span className={`min-w-0 flex-1 text-[16px] text-white md:text-[17px] ${HEADING}`}>
           {faq.q}
         </span>
       </button>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
+            id={panelId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: EASE_OUT }}
+            transition={{ duration: quiet ? 0 : 0.3, ease: EASE_OUT }}
             className="overflow-hidden"
           >
             {/* pl-8 = chevron width + gap, so the answer sits under the question. */}
-            <p className="max-w-2xl pb-6 pl-8 text-sm leading-7 text-zinc-400 [text-wrap:pretty] md:pb-7">
+            <p className={`${MEASURE} pb-6 pl-8 ${BODY} text-zinc-400 [text-wrap:pretty] md:pb-7`}>
               {faq.a}
             </p>
           </motion.div>
@@ -740,50 +929,56 @@ function FaqItem({
 
 /* ─────────────────────────────────────────────────────────────
    Closing CTA
+
+   Bookends the hero on purpose: the same left-aligned headline with the
+   actions held out to the right at desktop. It used to be a centered,
+   bordered slab floating in its own well of black, which made the send-off
+   the one boxed component on a page that had shed every other box.
 ───────────────────────────────────────────────────────────── */
 
-/**
- * The finale in the page's own language: the crosshair ground, one static
- * hairline, monochrome type. It used to be the last colored, animated
- * element left — a pulsing emerald-to-violet edge with a violet glow —
- * which made the send-off the least disciplined moment on the page.
- */
 function ClosingCTA() {
   return (
-    <section className="relative px-5 pb-20 pt-8 sm:px-6 sm:pb-28 sm:pt-12">
-      <Reveal className="relative mx-auto max-w-7xl overflow-hidden rounded-lg border border-white/10 bg-[#0a0a0d] px-5 py-12 text-center sm:px-6 sm:py-14 md:px-12 md:py-16">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.28),transparent)]"
-        />
-        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-zinc-500">
-          One command away
-        </p>
-        <h2 className="mx-auto mt-4 max-w-3xl bg-[linear-gradient(180deg,#fff_20%,rgba(255,255,255,0.66))] bg-clip-text text-3xl font-semibold leading-tight tracking-tight text-transparent [text-wrap:balance] sm:text-4xl md:text-5xl">
-          Give your agent a backend it can’t break
-        </h2>
-        <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-zinc-400 [text-wrap:pretty]">
-          Start free: connect Claude Code or Cursor in one command, ship real
-          infrastructure today, and let autonomy keep it healthy tonight.
-          Every change reviewable. Every change reversible. Every line open source.
-        </p>
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link
-            href={ROUTES.signup}
-            className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-white px-5 text-sm font-semibold text-black transition duration-200 hover:bg-zinc-200 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:w-auto whitespace-nowrap"
-          >
-            Start free
-            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-          </Link>
-          <a
-            href={ROUTES.founder}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md border border-white/12 px-5 text-sm font-semibold text-white transition duration-200 hover:border-white/25 hover:bg-white/[0.04] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:w-auto whitespace-nowrap"
-          >
-            <Calendar className="h-4 w-4" />
-            Talk to founder
-          </a>
+    <section className="relative px-5 pb-20 pt-6 sm:px-6 sm:pb-24">
+      <Reveal className={CONTAINER}>
+        <div className={`border-t ${RULE_LEAD} pt-12 md:pt-16`}>
+          <div className="flex flex-col gap-10 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
+            <div>
+              {/* Size and leading are pinned per breakpoint. A bare `leading-*`
+                  loses to the line-height baked into a responsive font-size
+                  utility, and `sm:text-4xl` once left this headline at a 42px
+                  font on a 32px line: the two lines literally overlapped. */}
+              <h2
+                className={`max-w-[18ch] text-[1.875rem] text-white [text-wrap:balance] sm:text-[2.25rem] md:text-[3.25rem] ${TITLE}`}
+              >
+                Give your agent a backend it can’t break
+              </h2>
+              <p className={`mt-5 ${MEASURE} text-[17px] text-zinc-400 [text-wrap:pretty] ${LEDE}`}>
+                Connect Claude Code or Cursor in one command, ship real
+                infrastructure today, and let autonomy keep it healthy tonight.
+                Every change reviewable, every change reversible, every line
+                open source.
+              </p>
+            </div>
+
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:pb-1">
+              <Link href={ROUTES.signup} className={PRIMARY_CTA}>
+                Start free
+                <ArrowRight
+                  aria-hidden
+                  className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
+                />
+              </Link>
+              <a
+                href={ROUTES.founder}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={SECONDARY_CTA}
+              >
+                <Calendar aria-hidden className="h-4 w-4" />
+                Talk to founder
+              </a>
+            </div>
+          </div>
         </div>
       </Reveal>
     </section>
@@ -803,12 +998,7 @@ function Reveal({
   className?: string
   delay?: number
 }) {
-  const reduceMotion = useReducedMotion()
-  const wrapperClassName = `min-w-0 ${className}`.trim()
-
-  if (reduceMotion) {
-    return <div className={wrapperClassName}>{children}</div>
-  }
+  const quiet = useQuietMotion()
 
   return (
     <motion.div
@@ -816,8 +1006,12 @@ function Reveal({
       whileInView="visible"
       viewport={{ once: true, amount: 0.12, margin: '0px 0px -8% 0px' }}
       variants={revealVariants}
-      transition={{ duration: 0.9, delay, ease: EASE_OUT }}
-      className={wrapperClassName}
+      transition={{
+        duration: quiet ? 0 : 0.9,
+        delay: quiet ? 0 : delay,
+        ease: EASE_OUT,
+      }}
+      className={`min-w-0 ${className}`.trim()}
     >
       {children}
     </motion.div>
@@ -831,48 +1025,42 @@ function Stagger({
   children: React.ReactNode
   className?: string
 }) {
-  const reduceMotion = useReducedMotion()
-  const wrapperClassName = `min-w-0 ${className}`.trim()
-
-  if (reduceMotion) {
-    return <div className={wrapperClassName}>{children}</div>
-  }
+  const quiet = useQuietMotion()
 
   return (
     <motion.div
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true, amount: 0.1, margin: '0px 0px -8% 0px' }}
-      variants={staggerVariants}
-      className={wrapperClassName}
+      variants={listStagger(quiet)}
+      className={`min-w-0 ${className}`.trim()}
     >
       {children}
     </motion.div>
   )
 }
 
-function SectionHeader({
-  eyebrow,
-  title,
-  body,
-  align = 'center',
-}: {
-  eyebrow: string
-  title: string
-  body: string
-  align?: 'left' | 'center'
-}) {
-  const alignment = align === 'center' ? 'mx-auto text-center' : 'text-left'
-
+/**
+ * Left-aligned, stacked, no eyebrow.
+ *
+ * Every section used to open with the same centered mono-caps label over the
+ * same gradient-clipped headline over the same centered paragraph. Five
+ * identical openers is the templated rhythm that makes a page read as
+ * generated, and centering them left each one floating in the middle of a
+ * field of black with nothing to align to. The headline names the section on
+ * its own; the label was never carrying information.
+ */
+function SectionHead({ title, body }: { title: string; body: string }) {
   return (
-    <div className={`w-full max-w-full sm:max-w-3xl ${alignment}`}>
-      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-zinc-500">
-        {eyebrow}
-      </p>
-      <h2 className="mt-4 bg-[linear-gradient(180deg,#fff_20%,rgba(255,255,255,0.66))] bg-clip-text text-3xl font-semibold leading-tight tracking-tight text-transparent [text-wrap:balance] md:text-5xl">
+    <div>
+      <h2
+        className={`max-w-[20ch] text-[1.875rem] text-white [text-wrap:balance] md:text-[2.75rem] ${TITLE}`}
+      >
         {title}
       </h2>
-      <p className="mt-5 text-base leading-7 text-zinc-400 [text-wrap:pretty]">{body}</p>
+      <p className={`mt-4 ${MEASURE} text-[17px] text-zinc-400 [text-wrap:pretty] md:mt-5 ${LEDE}`}>
+        {body}
+      </p>
     </div>
   )
 }

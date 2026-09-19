@@ -101,7 +101,6 @@ export default function ContactPage() {
       />
       <main className="relative z-20">
         <PageHero
-          align="center"
           eyebrow="Contact"
           title="Get the right Backenly help, fast"
           subtitle="Support, billing, production issues, onboarding, and founder conversations all start here."

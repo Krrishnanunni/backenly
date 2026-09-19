@@ -28,8 +28,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion, useInView, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useInView } from 'framer-motion'
 import { Check } from 'lucide-react'
+import { useSettledReducedMotion } from '@/lib/hooks/useSettledReducedMotion'
 
 /* ── Script ──────────────────────────────────────────────────────────────
    Six beats, ~16s a lap. Held long enough that each line is readable at a
@@ -37,13 +38,20 @@ import { Check } from 'lucide-react'
 
 type Beat = 'watch' | 'detect' | 'propose' | 'apply' | 'verify' | 'clear'
 
+/* Dwell times rebalanced 2026-09-18. `watch` is the one beat with nothing
+   written yet: no findings in the header and all four ledger rows still
+   `--:--`. It used to hold for 3s, the second-longest beat in the lap, so a
+   visitor scrolling past had a good chance of meeting this frame at its
+   emptiest and reading the panel as a loading skeleton. It is still a true
+   beat of the loop and it stays, but it no longer gets the floor: `watch` is
+   now the SHORTEST beat and `clear`, the completed repair, is the longest. */
 const SCRIPT: { beat: Beat; ms: number; clock: string }[] = [
-  { beat: 'watch', ms: 3000, clock: '03:12' },
+  { beat: 'watch', ms: 1600, clock: '03:12' },
   { beat: 'detect', ms: 2800, clock: '03:14' },
   { beat: 'propose', ms: 2400, clock: '03:14' },
   { beat: 'apply', ms: 2600, clock: '03:15' },
   { beat: 'verify', ms: 2600, clock: '03:15' },
-  { beat: 'clear', ms: 3600, clock: '03:15' },
+  { beat: 'clear', ms: 5200, clock: '03:15' },
 ]
 
 const LAST = SCRIPT.length - 1
@@ -124,13 +132,26 @@ function headline(beat: Beat): {
 }
 
 export function AutonomyFilm() {
-  const reduced = useReducedMotion()
+  const reduced = useSettledReducedMotion()
   const frameRef = useRef<HTMLDivElement>(null)
   // Motion is expensive and invisible off screen; the script only advances
   // while the frame is actually in front of someone.
   const inView = useInView(frameRef, { amount: 0.3 })
 
-  const [i, setI] = useState(0)
+  /**
+   * Opens on the LAST beat, the completed repair, not on `watch`.
+   *
+   * The lap used to start at 0, so the first frame anyone saw was the empty
+   * one: no findings, four unwritten `--:--` rows. That is the worst possible
+   * first impression for a panel whose entire job is to prove the loop fixes
+   * things, and it is the frame a visitor met every time the section scrolled
+   * into view. Starting at the end shows the outcome first and then replays
+   * how it happened, which is the order a demo should run in.
+   *
+   * It also matches what reduced-motion users already get (`step = LAST`), so
+   * both audiences now open on the same frame.
+   */
+  const [i, setI] = useState(LAST)
 
   useEffect(() => {
     if (reduced || !inView) return
@@ -365,7 +386,7 @@ function Rail({
 }
 
 function Reading({ value, tone, active }: { value: string; tone?: 'bad'; active: boolean }) {
-  const reduced = useReducedMotion()
+  const reduced = useSettledReducedMotion()
   const cls = `font-mono text-[19px] font-medium tabular-nums leading-none tracking-[-0.01em] transition-colors duration-300 sm:text-[24px] ${
     tone === 'bad' ? 'text-rose-300' : active ? 'text-white' : 'text-zinc-300'
   }`

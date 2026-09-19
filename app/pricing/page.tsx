@@ -47,9 +47,9 @@ const plans: Plan[] = [
       { label: 'AI credits', value: '200 monthly' },
     ],
     features: [
-      'Self-healing every minute, repairing everything it safely can — never capped, never metered',
-      'PostgreSQL, auth, storage, realtime, and REST APIs — the full runtime, not a trial',
-      'Build over MCP with your own coding agent — the typed tools are never metered as AI',
+      'Self-healing every minute, repairing everything it safely can: never capped, never metered',
+      'PostgreSQL, auth, storage, realtime, and REST APIs: the full runtime, not a trial',
+      'Build over MCP with your own coding agent: the typed tools are never metered as AI',
     ],
   },
   {
@@ -67,7 +67,7 @@ const plans: Plan[] = [
       { label: 'Database + storage', value: '10 GB Postgres · 100 GB files' },
     ],
     features: [
-      'The same uncapped self-healing loop as Free — you pay for capacity, never for uptime',
+      'The same uncapped self-healing loop as Free: you pay for capacity, never for uptime',
       'Unlimited projects and API requests, 2M function runs, triggers, webhooks, custom domains',
       '5 team seats with org roles, full deployment history and rollback, 30-day logs',
     ],
@@ -102,7 +102,7 @@ const included: { icon: LucideIcon; label: string; body: string }[] = [
   { icon: Zap, label: 'Triggers', body: 'Event workflows for inserts, updates, schedules, and integrations.' },
   { icon: RefreshCcw, label: 'Rollback', body: 'Deployment history and restore paths when changes need reversing.' },
   { icon: Bot, label: 'Autonomy', body: 'Watches your live backend every minute and repairs what is safe to repair. Included on every plan.' },
-  { icon: Terminal, label: 'Bring your own agent', body: 'Drive the backend from Claude Code or Cursor over MCP. Typed tools carry no AI charge — your agent, your tokens.' },
+  { icon: Terminal, label: 'Bring your own agent', body: 'Drive the backend from Claude Code or Cursor over MCP. Typed tools carry no AI charge: your agent, your tokens.' },
 ]
 
 const comparisonRows = [
@@ -131,15 +131,15 @@ const faqs = [
   },
   {
     q: 'What counts as an AI credit?',
-    a: 'One credit is 1,000 tokens of Backenly’s own model usage. Credits are spent when Backenly runs its own model on your behalf: the natural-language MCP tool (backend_chat), including the LLM-powered steps inside that turn such as the architect and function generation. They are a small included line, not the headline — the dashboard assistant answers questions free, the typed MCP tools cost nothing, and autonomy never draws credits.',
+    a: 'One credit is 1,000 tokens of Backenly’s own model usage. Credits are spent when Backenly runs its own model on your behalf: the natural-language MCP tool (backend_chat), including the LLM-powered steps inside that turn such as the architect and function generation. They are a small included line, not the headline: the dashboard assistant answers questions free, the typed MCP tools cost nothing, and autonomy never draws credits.',
   },
   {
     q: 'Does driving the backend from my coding agent cost credits?',
-    a: 'Almost never — it depends which tool your agent calls. The typed MCP tools (create_table, add_column, set_rls, generate_types, run_query and the rest) compile straight to SQL with no model call, so they are free on every plan: your agent supplies the intelligence and you pay your own provider. The exception is the natural-language tools — backend_chat and generate_function — where Backenly runs its own model on your behalf, and those draw credits: you are billed the tokens the call actually burned, nothing more. Point your agent at the typed tools and the AI meter stays at zero.',
+    a: 'Almost never, it depends which tool your agent calls. The typed MCP tools (create_table, add_column, set_rls, generate_types, run_query and the rest) compile straight to SQL with no model call, so they are free on every plan: your agent supplies the intelligence and you pay your own provider. The exception is the natural-language tools: backend_chat and generate_function: where Backenly runs its own model on your behalf, and those draw credits: you are billed the tokens the call actually burned, nothing more. Point your agent at the typed tools and the AI meter stays at zero.',
   },
   {
     q: 'Does autonomy spend my credits?',
-    a: 'Never. Detection and repair are deterministic: probes find drift, and each finding maps to a typed repair that compiles to SQL — no model in the repair path, so there is nothing to bill you for. When the loop cannot fix something and escalates it to you, a model may write up the diagnosis you read; that pass is on us, never your credits. Every plan gets the identical loop — checks every minute, repairs everything it safely can, with no per-window cap and no monthly limit, Free included. We do not meter healing: a backend that stops repairing itself once you hit a quota is the exact failure we built this to remove. Plans differ on capacity — projects, users, storage, AI credits — never on whether your backend is allowed to stay healthy.',
+    a: 'Never. Detection and repair are deterministic: probes find drift, and each finding maps to a typed repair that compiles to SQL: no model in the repair path, so there is nothing to bill you for. When the loop cannot fix something and escalates it to you, a model may write up the diagnosis you read; that pass is on us, never your credits. Every plan gets the identical loop: checks every minute, repairs everything it safely can, with no per-window cap and no monthly limit, Free included. We do not meter healing: a backend that stops repairing itself once you hit a quota is the exact failure we built this to remove. Plans differ on capacity: projects, users, storage, AI credits, never on whether your backend is allowed to stay healthy.',
   },
   {
     q: 'Are database, auth, storage, and realtime paid add-ons?',
@@ -147,7 +147,7 @@ const faqs = [
   },
   {
     q: 'Am I locked in? Can I get my data out?',
-    a: 'Your backend is standard PostgreSQL, and it stays yours. Every plan — including Free — gets a real read-only connection string (psql, TablePlus, any BI tool), an optional read-write one, and one-click pg_dump exports that restore on any Postgres: RDS, Neon, your own server. The platform is open source too, so a full self-hosted Backenly is always an exit path. Schema, data, constraints, indexes — everything leaves with you, anytime, with no exit fee.',
+    a: 'Your backend is standard PostgreSQL, and it stays yours. Every plan: including Free: gets a real read-only connection string (psql, TablePlus, any BI tool), an optional read-write one, and one-click pg_dump exports that restore on any Postgres: RDS, Neon, your own server. The platform is open source too, so a full self-hosted Backenly is always an exit path. Schema, data, constraints, indexes: everything leaves with you, anytime, with no exit fee.',
   },
   {
     q: 'Can I cancel anytime?',
@@ -205,10 +205,12 @@ export default function PricingPage() {
     <SiteShell>
       <main className="relative z-20">
         <section className="px-6 pt-12 pb-16 md:pt-20 md:pb-20">
-          <div className="mx-auto max-w-7xl 2xl:max-w-container">
+          <div className="mx-auto max-w-7xl 2xl:max-w-[100rem]">
             <div className="max-w-3xl">
-              <p className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs font-semibold uppercase text-zinc-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              {/* Matches kit's <Eyebrow>: no status dot. A green dot here put
+                  a second accent colour on the page, and the neutral-first
+                  palette keeps violet as the only one. */}
+              <p className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400">
                 Pricing
               </p>
               <h1 className="mt-6 max-w-3xl text-4xl font-semibold leading-[1.04] text-white md:text-5xl">
@@ -216,7 +218,7 @@ export default function PricingPage() {
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-400 md:text-[17px]">
                 Every plan includes the real Backenly runtime: PostgreSQL, generated REST APIs,
-                auth, storage, realtime, monitoring, and restore points — plus a self-healing
+                auth, storage, realtime, monitoring, and restore points, plus a self-healing
                 loop that never touches your credits. Prefer to run it yourself? Backenly is
                 open source under Apache-2.0 and free to self-host.
               </p>
@@ -235,18 +237,23 @@ export default function PricingPage() {
               </div>
             </div>
 
-            <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {/* 1 -> 3, never 2 + 1. At md:grid-cols-2 a three-tier table put Free and
+                Pro side by side and orphaned Enterprise on a second row at half
+                width, across 768-1279px (12" tablet portrait included). Three
+                columns at lg gives each card ~312px there, the same width it
+                has on a 1440px desktop. */}
+            <div className="mt-12 grid gap-5 lg:grid-cols-3">
               {plans.map((plan) => (
                 <PlanCard key={plan.name} plan={plan} onCta={handleCta} />
               ))}
             </div>
 
-            {/* Portability guarantee — stated where buying decisions happen, not
+            {/* Portability guarantee: stated where buying decisions happen, not
                 buried in the FAQ. Flat by design (locked pricing-page language). */}
             <div className="mt-6 rounded-lg border border-white/10 bg-white/[0.03] px-5 py-4">
               <p className="text-sm leading-6 text-zinc-400">
                 <span className="font-semibold text-zinc-200">No lock-in, on every plan:</span>{' '}
-                your backend is standard PostgreSQL with a real connection string — connect psql or any
+                your backend is standard PostgreSQL with a real connection string, connect psql or any
                 BI tool, and export a full <span className="font-mono text-[13px]">pg_dump</span> backup
                 that restores on any Postgres. And the platform itself is open source (Apache-2.0), so the
                 exit path includes running Backenly on your own servers. Your data leaves with you,
@@ -257,7 +264,7 @@ export default function PricingPage() {
         </section>
 
         <section className="border-t border-white/[0.06] px-6 py-16 md:py-20">
-          <div className="mx-auto max-w-7xl 2xl:max-w-container">
+          <div className="mx-auto max-w-7xl 2xl:max-w-[100rem]">
             <div className="grid gap-10 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
               <div>
                 <p className="text-sm font-semibold text-zinc-500">Included runtime</p>
@@ -302,7 +309,7 @@ export default function PricingPage() {
               </div>
               <p className="max-w-xl text-sm leading-6 text-zinc-500">
                 Running at company scale? Enterprise adds custom limits, SSO, onboarding and
-                migration help, and a 12-hour SLA — email support and we will scope it with you.
+                migration help, and a 12-hour SLA, email support and we will scope it with you.
               </p>
             </div>
 
@@ -400,7 +407,7 @@ function PlanCard({ plan, onCta }: { plan: Plan; onCta: () => void }) {
       }`}
     >
       {plan.highlighted && (
-        <span className="absolute right-5 top-5 rounded-md border border-emerald-300/25 bg-emerald-400/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
+        <span className="absolute right-5 top-5 rounded-md border border-violet-400/25 bg-violet-500/[0.12] px-2.5 py-1 text-xs font-semibold text-violet-200">
           Most popular
         </span>
       )}

@@ -180,7 +180,7 @@ export default async function ComparisonSlugPage(props: { params: Promise<{ slug
           <StrengthList items={c.backenlyStrengths} />
         </Section>
 
-        {/* Operating model — only where it is the actual difference. */}
+        {/* Operating model, only where it is the actual difference. */}
         {c.operating && (
           <Section width="prose">
             <SectionHeading className="!text-xl mb-4">{c.operating.heading}</SectionHeading>
@@ -188,7 +188,7 @@ export default async function ComparisonSlugPage(props: { params: Promise<{ slug
           </Section>
         )}
 
-        {/* Agent workflow — only where the two genuinely diverge. */}
+        {/* Agent workflow, only where the two genuinely diverge. */}
         {c.agents && (
           <Section width="prose">
             <SectionHeading className="!text-xl mb-4">{c.agents.heading}</SectionHeading>
