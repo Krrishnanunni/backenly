@@ -76,10 +76,29 @@ export const RECOVERY_COMPONENTS = [
 
 export type RecoveryComponent = (typeof RECOVERY_COMPONENTS)[number]
 
-/** Components whose contents are encrypted under the recovery credential. */
-export const ENCRYPTED_COMPONENTS: readonly RecoveryComponent[] = [
-  'project-secrets',
+/**
+ * Components readable WITHOUT the recovery credential.
+ *
+ * Deliberately tiny, and the inverse is the interesting half: everything else
+ * is encrypted. An earlier draft encrypted only `project-secrets`, which was
+ * theatre - the platform dump beside it carries `Project.jwtSecret`, every
+ * password hash, every API key record and every stored provider credential in
+ * the clear, and the workspace dumps carry end-user password hashes. Encrypting
+ * the small named box while the large unnamed one sits open next to it protects
+ * nothing.
+ *
+ * `deployment-metadata` stays readable on purpose. A reader has to be able to
+ * answer "is this the right bundle, and can this build even restore it?" BEFORE
+ * anyone goes and fetches the credential. It holds versions and an extension
+ * list, and nothing that identifies a person.
+ */
+export const PLAINTEXT_COMPONENTS: readonly RecoveryComponent[] = [
+  'deployment-metadata',
 ]
+
+/** Components whose contents are encrypted under the recovery credential. */
+export const ENCRYPTED_COMPONENTS: readonly RecoveryComponent[] =
+  RECOVERY_COMPONENTS.filter(c => !PLAINTEXT_COMPONENTS.includes(c))
 
 export interface ComponentEntry {
   component: RecoveryComponent

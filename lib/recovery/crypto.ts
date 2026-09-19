@@ -242,3 +242,58 @@ export function decryptBlob(blob: EncryptedBlob, dataKey: Buffer): Buffer {
 export function sha256(data: Buffer | string): string {
   return crypto.createHash('sha256').update(data).digest('hex')
 }
+
+/**
+ * COMPONENT FILES ARE SEALED AS BINARY, NOT AS JSON
+ * =================================================
+ * `encryptBlob` above returns base64 in a small object, which is right for a
+ * handful of fields. A platform dump is not a handful of fields: base64 would
+ * add a third to every byte and force the whole archive through a JSON string.
+ *
+ * So a sealed component file is laid out as
+ *
+ *   [ 12-byte IV ][ 16-byte GCM tag ][ ciphertext ]
+ *
+ * TWO INTEGRITY CHECKS, DOING DIFFERENT JOBS
+ * ------------------------------------------
+ * The manifest records a SHA-256 of the file exactly as written - that is, of
+ * the sealed bytes. It can therefore be verified BEFORE anyone fetches the
+ * recovery credential, which is what lets `validate-checksums` run as a
+ * validation step rather than a decryption step.
+ *
+ * The GCM tag is the second check and answers a different question: not "did
+ * this file arrive intact" but "was this file produced by someone holding the
+ * key". Corruption is caught by the first; substitution is caught by the
+ * second. A design with only the checksum would accept a re-encrypted file.
+ */
+
+const SEAL_HEADER = IV_LENGTH + TAG_LENGTH
+
+/** Seal a component for writing to disk. */
+export function sealBuffer(plaintext: Buffer, dataKey: Buffer): Buffer {
+  const iv = crypto.randomBytes(IV_LENGTH)
+  const cipher = crypto.createCipheriv(ALGO, dataKey, iv)
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()])
+  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext])
+}
+
+/** Open a sealed component. Throws rather than returning partial plaintext. */
+export function openBuffer(sealed: Buffer, dataKey: Buffer): Buffer {
+  if (sealed.length < SEAL_HEADER) {
+    throw new RecoveryIntegrityError(
+      `Sealed component is ${sealed.length} bytes, shorter than its own header. It is truncated.`,
+    )
+  }
+  const iv = sealed.subarray(0, IV_LENGTH)
+  const tag = sealed.subarray(IV_LENGTH, SEAL_HEADER)
+  const decipher = crypto.createDecipheriv(ALGO, dataKey, iv)
+  decipher.setAuthTag(tag)
+  try {
+    return Buffer.concat([decipher.update(sealed.subarray(SEAL_HEADER)), decipher.final()])
+  } catch {
+    throw new RecoveryIntegrityError(
+      'A sealed component failed its authentication check. It was altered, truncated, ' +
+      'or produced by a different bundle key.',
+    )
+  }
+}

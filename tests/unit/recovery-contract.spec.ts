@@ -12,6 +12,7 @@ import {
   assertRestorable,
   BUNDLE_FORMAT_VERSION,
   ENCRYPTED_COMPONENTS,
+  PLAINTEXT_COMPONENTS,
   missingComponents,
   mutatesTarget,
   RECOVERY_COMPONENTS,
@@ -61,11 +62,30 @@ describe('what a deployment recovery bundle must be able to carry', () => {
     ])
   })
 
-  it('treats secrets as encrypted and nothing else as automatically safe', () => {
-    // If this list ever grows, it should be because somebody decided another
-    // component is sensitive - not because encryption became the default and
-    // hid a component that should have been reviewable.
+  it('encrypts the dumps too, not just the component labelled secrets', () => {
+    // The correction that matters here. Encrypting `project-secrets` alone was
+    // theatre: the platform dump beside it carries Project.jwtSecret, every
+    // password hash and every stored provider credential in the clear, and the
+    // workspace dumps carry end-user password hashes.
     expect(ENCRYPTED_COMPONENTS).toContain('project-secrets')
+    expect(ENCRYPTED_COMPONENTS).toContain('platform-database')
+    expect(ENCRYPTED_COMPONENTS).toContain('workspace-schemas')
+    expect(ENCRYPTED_COMPONENTS).toContain('function-definitions')
+    expect(ENCRYPTED_COMPONENTS).toContain('storage-objects')
+  })
+
+  it('leaves exactly enough readable to identify the bundle', () => {
+    // A reader must be able to answer "is this the right bundle, and can this
+    // build restore it?" before anyone goes and fetches the credential.
+    expect(PLAINTEXT_COMPONENTS).toEqual(['deployment-metadata'])
+  })
+
+  it('covers every component, with none left unclassified', () => {
+    // The two lists are complements by construction. Asserted anyway, because a
+    // component that fell through would be written in the clear by default -
+    // and defaulting to plaintext is the failure worth catching.
+    const covered = [...ENCRYPTED_COMPONENTS, ...PLAINTEXT_COMPONENTS].sort()
+    expect(covered).toEqual([...RECOVERY_COMPONENTS].sort())
   })
 })
 
