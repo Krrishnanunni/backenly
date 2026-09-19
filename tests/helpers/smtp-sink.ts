@@ -254,14 +254,39 @@ function extractAddress(line: string): string | null {
 }
 
 /**
- * Trust one extra certificate for the duration of a suite, and restore the
- * default trust store afterwards.
+ * Trust one extra certificate for the duration of a suite.
  *
- * Deliberately additive: the platform's real CAs stay trusted, so this cannot
- * mask a certificate problem anywhere else. Returns the restore function.
+ * ── Why this wraps tls.connect instead of setting the default trust store ───
+ *
+ * `tls.setDefaultCACertificates` is the obvious way to do this and it does not
+ * exist on Node 20, which is what CI pins. The first version used it, passed
+ * locally on Node 24, and failed every assertion in the suite on the runner with
+ * `getCACertificates is not a function` — a reminder that "works on my machine"
+ * includes the standard library's version.
+ *
+ * So instead every outgoing TLS connection gets this certificate ADDED to the
+ * CA list it would otherwise use. `tls.rootCertificates` has been available
+ * since Node 12, so the real CAs stay trusted and this cannot mask a
+ * certificate problem anywhere else.
+ *
+ * Still additive, and still not `NODE_TLS_REJECT_UNAUTHORIZED=0`: verification
+ * stays fully on, and the exception is one throwaway certificate rather than
+ * every certificate in the process.
  */
 export function trustCertificate(pem: string): () => void {
-  const original = tls.getCACertificates()
-  tls.setDefaultCACertificates([...original, pem])
-  return () => tls.setDefaultCACertificates(original)
+  const original = tls.connect as typeof tls.connect
+  const patched = ((...args: any[]) => {
+    // tls.connect has several overloads; the options object is whichever
+    // argument is a non-null object that is not a callback.
+    const options = args.find(a => a && typeof a === 'object' && !Array.isArray(a))
+    if (options && options.ca === undefined) {
+      options.ca = [...tls.rootCertificates, pem]
+    }
+    return (original as any)(...args)
+  }) as typeof tls.connect
+
+  ;(tls as any).connect = patched
+  return () => {
+    ;(tls as any).connect = original
+  }
 }

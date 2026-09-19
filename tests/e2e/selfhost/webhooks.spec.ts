@@ -99,11 +99,21 @@ test('an endpoint created in the form survives a reload, and its secret does not
   await expect(page.locator('body')).not.toContainText(secret)
 })
 
+const REFUSED_TARGET = 'http://169.254.169.254/latest/meta-data/'
+
 test('a refused destination reports the guard’s real reason, and writes nothing', async ({ page }) => {
+  // Wait for the list to have LOADED before measuring it.
+  //
+  // The first version counted immediately after the shell appeared, which is
+  // before the endpoint list has fetched. It read 0, the reload read 1, and the
+  // test failed having found nothing wrong with the product. It passed the run
+  // it was written in purely on timing, which is the definition of the flake
+  // this program refuses to retry away.
+  await expect(page.getByText(PUBLIC_TARGET).first()).toBeVisible({ timeout: 60_000 })
   const before = await page.getByText(PUBLIC_TARGET).count()
 
   await page.getByRole('button', { name: /add endpoint/i }).first().click()
-  await page.getByPlaceholder('https://example.com/hooks/backenly').fill('http://169.254.169.254/latest/meta-data/')
+  await page.getByPlaceholder('https://example.com/hooks/backenly').fill(REFUSED_TARGET)
 
   const refused = page.waitForResponse(
     r => r.url().includes('/webhooks') && r.request().method() === 'POST',
@@ -123,7 +133,12 @@ test('a refused destination reports the guard’s real reason, and writes nothin
   // and nothing was added to the list.
   await page.keyboard.press('Escape')
   await page.reload()
-  await expect(page.getByText('Outbound webhooks')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(PUBLIC_TARGET).first()).toBeVisible({ timeout: 60_000 })
+
+  // The direct claim, and the one that does not depend on a count: the refused
+  // address is nowhere in the list. A count comparison alone would also pass if
+  // the refusal had somehow replaced an existing row rather than adding one.
+  await expect(page.getByText(REFUSED_TARGET)).toHaveCount(0)
   expect(await page.getByText(PUBLIC_TARGET).count()).toBe(before)
 })
 
