@@ -268,3 +268,13 @@ __tests__/auth/destructive-route-authorization.test.ts
 # $executeRawUnsafe: cross-tenant fix poisoning, not SQL injection. Asserts the
 # victim's fix is byte-for-byte unchanged after a denied write.
 __tests__/auth/tenant-scoped-service-queries.test.ts
+
+# The deployment recovery bundle, written from a real database. The two things
+# most likely to be wrong cannot be seen from the pg_dump arguments alone: that
+# the encryption protects anything, and that the dropped tables are actually
+# empty in the dump. A known secret is planted and must appear nowhere in the
+# bundle bytes AND must appear once opened with the credential - the second half
+# is what proves the first half's search would have noticed. A live session is
+# planted for the same reason, so "no session rows" cannot pass against a
+# database that simply had none.
+__tests__/recovery/export-bundle.test.ts
