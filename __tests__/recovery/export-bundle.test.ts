@@ -113,6 +113,29 @@ beforeAll(async () => {
     `recovery-export-${SUFFIX}@example.test`,
   )
 
+  // The grants scripts/setup-postgrest-roles.ts applies to a real workspace.
+  //
+  // Added after CI failed where a developer machine passed. Locally this
+  // database holds dozens of workspace schemas from other work, some of them
+  // properly granted, so a dump-wide search for GRANT found one belonging to a
+  // DIFFERENT schema and the assertion passed for the wrong reason. On a fresh
+  // CI database there was nothing to find. The fixture now creates what it
+  // intends to assert, and the assertion names this schema.
+  for (const role of ['anon', 'authenticated', 'service_role']) {
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN
+          CREATE ROLE "${role}" NOLOGIN;
+        END IF;
+      END $$;`)
+  }
+  await prisma.$executeRawUnsafe(
+    `GRANT USAGE ON SCHEMA "${schemaName}" TO anon, authenticated, service_role`,
+  )
+  await prisma.$executeRawUnsafe(
+    `GRANT SELECT ON ALL TABLES IN SCHEMA "${schemaName}" TO anon, authenticated, service_role`,
+  )
+
   // A live session row. Without one, "the dump carries no session rows" would
   // pass against a database that simply had none - the shape of test that
   // passes while the thing it guards is broken.
@@ -272,7 +295,14 @@ describe('what the dumps contain', () => {
     // Without these the restore looks complete and the data plane returns
     // nothing. The default privileges matter just as much: tables created after
     // the restore would otherwise be invisible to PostgREST too.
+    //
+    // Scoped to THIS schema. A dump-wide search for GRANT passes on any machine
+    // that happens to hold another properly granted workspace, which is how
+    // this assertion passed locally and failed in CI.
     const sql = await openComponent('workspace-schemas')
-    expect(sql).toMatch(/GRANT .*(anon|authenticated|service_role)/)
+    const grants = sql
+      .split('\n')
+      .filter(line => line.startsWith('GRANT') && line.includes(schemaName))
+    expect(grants.join('\n')).toMatch(/anon|authenticated|service_role/)
   })
 })
