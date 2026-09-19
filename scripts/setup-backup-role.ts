@@ -67,7 +67,23 @@ import { randomBytes } from 'crypto'
 
 const BACKUP_ROLE = process.env.BACKENLY_BACKUP_ROLE?.trim() || 'backenly_backup'
 const APP_ROLE = process.env.BACKENLY_APP_ROLE?.trim() || 'backenly_app'
+/** Roles and databases: plain SQL identifiers. */
 const SAFE_IDENT = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+
+/**
+ * Schemas, which are NOT plain identifiers here.
+ *
+ * A workspace schema is `workspace_<project uuid>`, and a UUID contains
+ * HYPHENS. Validating schema names with the role pattern rejected every real
+ * one - the installer stopped with "unsafe identifier:
+ * workspace_7776fdf8-8e38-4c3e-a162-16c800d4aafc" on a live install, while the
+ * test fixture used a hex name and never saw it.
+ *
+ * Still validated rather than trusted: these come from pg_namespace, but a
+ * name is about to be interpolated into DDL and "it came from the catalog" is
+ * the kind of assumption that stops being true later.
+ */
+const SAFE_SCHEMA = /^[a-zA-Z_][a-zA-Z0-9_-]*$/
 
 const has = (flag: string) => process.argv.includes(flag)
 function arg(flag: string): string | undefined {
@@ -77,6 +93,11 @@ function arg(flag: string): string | undefined {
 
 function quoteIdent(name: string): string {
   if (!SAFE_IDENT.test(name)) throw new Error(`unsafe identifier: ${name}`)
+  return `"${name}"`
+}
+
+function quoteSchema(name: string): string {
+  if (!SAFE_SCHEMA.test(name)) throw new Error(`unsafe schema name: ${name}`)
   return `"${name}"`
 }
 
@@ -241,7 +262,7 @@ async function main(): Promise<void> {
 
     const schemas = await readableSchemas(client)
     for (const schema of schemas) {
-      const s = quoteIdent(schema)
+      const s = quoteSchema(schema)
       await client.query(`GRANT USAGE ON SCHEMA ${s} TO ${ident}`)
       await client.query(`GRANT SELECT ON ALL TABLES IN SCHEMA ${s} TO ${ident}`)
       // pg_dump reads sequence state (last_value) to restore it correctly.
@@ -260,11 +281,11 @@ async function main(): Promise<void> {
       for (const creator of creators) {
         if (!SAFE_IDENT.test(creator)) continue
         await client.query(
-          `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creator)} IN SCHEMA ${quoteIdent(schema)} ` +
+          `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creator)} IN SCHEMA ${quoteSchema(schema)} ` +
             `GRANT SELECT ON TABLES TO ${ident}`,
         )
         await client.query(
-          `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creator)} IN SCHEMA ${quoteIdent(schema)} ` +
+          `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creator)} IN SCHEMA ${quoteSchema(schema)} ` +
             `GRANT SELECT ON SEQUENCES TO ${ident}`,
         )
       }
@@ -278,7 +299,7 @@ async function main(): Promise<void> {
     for (const schema of schemas) {
       await client.query(
         `REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ` +
-          `ON ALL TABLES IN SCHEMA ${quoteIdent(schema)} FROM ${ident}`,
+          `ON ALL TABLES IN SCHEMA ${quoteSchema(schema)} FROM ${ident}`,
       )
     }
     await client.query(`REVOKE CREATE ON SCHEMA public FROM ${ident}`)

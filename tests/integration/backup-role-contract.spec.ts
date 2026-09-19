@@ -36,7 +36,7 @@
  */
 
 import { execFileSync, spawnSync } from 'child_process'
-import { randomBytes } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -50,7 +50,10 @@ const APP_ROLE = `bkn_app_br_${randomBytes(4).toString('hex')}`
 const BACKUP_ROLE = `bkn_backup_br_${randomBytes(4).toString('hex')}`
 const APP_PASSWORD = `app_${randomBytes(10).toString('hex')}`
 
-const WORKSPACE = `workspace_${randomBytes(6).toString('hex')}`
+// A REAL workspace schema name, hyphens and all: `workspace_<project uuid>`.
+// The first version used a hex string, so it never exercised the hyphen and
+// the installer stopped on a live install with "unsafe identifier".
+const WORKSPACE = `workspace_${randomUUID()}`
 const SECRET_ROW = `force-rls-row-${randomBytes(6).toString('hex')}`
 const REGISTRY_ROW = `registry-${randomBytes(6).toString('hex')}`
 
@@ -182,23 +185,23 @@ beforeAll(async () => {
   ])
 
   // Owned by the APPLICATION role, with FORCE RLS, as workspace tables are.
-  await sql(appUrl, `CREATE SCHEMA ${WORKSPACE}`)
+  await sql(appUrl, `CREATE SCHEMA "${WORKSPACE}"`)
   await sql(
     appUrl,
-    `CREATE TABLE ${WORKSPACE}.secrets (id serial PRIMARY KEY, owner_id text NOT NULL, body text NOT NULL)`,
+    `CREATE TABLE "${WORKSPACE}".secrets (id serial PRIMARY KEY, owner_id text NOT NULL, body text NOT NULL)`,
   )
   // Seeded BEFORE the table is protected. Under FORCE RLS the owner is subject
   // to its own policy, so an insert afterwards is refused by the very rule this
   // fixture exists to demonstrate - which is how the first run of this suite
   // failed, in its setup, with "new row violates row-level security policy".
-  await sql(appUrl, `INSERT INTO ${WORKSPACE}.secrets (owner_id, body) VALUES ('someone', $1)`, [
+  await sql(appUrl, `INSERT INTO "${WORKSPACE}".secrets (owner_id, body) VALUES ('someone', $1)`, [
     SECRET_ROW,
   ])
-  await sql(appUrl, `ALTER TABLE ${WORKSPACE}.secrets ENABLE ROW LEVEL SECURITY`)
-  await sql(appUrl, `ALTER TABLE ${WORKSPACE}.secrets FORCE ROW LEVEL SECURITY`)
+  await sql(appUrl, `ALTER TABLE "${WORKSPACE}".secrets ENABLE ROW LEVEL SECURITY`)
+  await sql(appUrl, `ALTER TABLE "${WORKSPACE}".secrets FORCE ROW LEVEL SECURITY`)
   await sql(
     appUrl,
-    `CREATE POLICY only_owner ON ${WORKSPACE}.secrets
+    `CREATE POLICY only_owner ON "${WORKSPACE}".secrets
        USING (owner_id = current_setting('request.jwt.claim.sub', true))`,
   )
 }, 600_000)
@@ -226,11 +229,11 @@ describe('the application credential cannot do this job, which is why the role e
     // FORCE RLS is what makes owning the schema safe. It is also what makes a
     // dump over this credential silently incomplete - the failure that produced
     // four days of empty backups.
-    const rows = await sql(appUrl, `SELECT * FROM ${WORKSPACE}.secrets`)
+    const rows = await sql(appUrl, `SELECT * FROM "${WORKSPACE}".secrets`)
     expect(rows).toHaveLength(0)
 
     // CONTROL: the row is really there, read with elevation.
-    const actual = await sql(dbUrl, `SELECT body FROM ${WORKSPACE}.secrets`)
+    const actual = await sql(dbUrl, `SELECT body FROM "${WORKSPACE}".secrets`)
     expect(actual.map((r: any) => r.body)).toContain(SECRET_ROW)
   }, 300_000)
 })
@@ -327,7 +330,7 @@ describe('what the backup role may read', () => {
   }, 300_000)
 
   it('reads THROUGH FORCE RLS, which is the whole reason for BYPASSRLS', async () => {
-    const rows = await sql<{ body: string }>(backupUrl, `SELECT body FROM ${WORKSPACE}.secrets`)
+    const rows = await sql<{ body: string }>(backupUrl, `SELECT body FROM "${WORKSPACE}".secrets`)
     expect(rows.map(r => r.body)).toContain(SECRET_ROW)
   }, 300_000)
 })
@@ -345,7 +348,7 @@ describe('what the backup role may NOT do', () => {
   it('cannot write a workspace row', async () => {
     const refused = await attempt(
       backupUrl,
-      `INSERT INTO ${WORKSPACE}.secrets (owner_id, body) VALUES ('x', 'nope')`,
+      `INSERT INTO "${WORKSPACE}".secrets (owner_id, body) VALUES ('x', 'nope')`,
     )
     expect(refused.ok).toBe(false)
     expect(refused.code).toBe('42501')
@@ -353,9 +356,9 @@ describe('what the backup role may NOT do', () => {
 
   it('cannot delete, update or truncate', async () => {
     for (const statement of [
-      `UPDATE ${WORKSPACE}.secrets SET body = 'nope'`,
-      `DELETE FROM ${WORKSPACE}.secrets`,
-      `TRUNCATE ${WORKSPACE}.secrets`,
+      `UPDATE "${WORKSPACE}".secrets SET body = 'nope'`,
+      `DELETE FROM "${WORKSPACE}".secrets`,
+      `TRUNCATE "${WORKSPACE}".secrets`,
     ]) {
       const refused = await attempt(backupUrl, statement)
       expect(refused.ok).toBe(false)
