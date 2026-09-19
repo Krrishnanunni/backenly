@@ -37,7 +37,7 @@ import {
   FileCode, Save, Edit2, Trash2, Copy, Download, Upload,
   Table2, Columns, Settings, Eye, EyeOff, Key,
   Info, MoreVertical, Play, Building2, Folder, Activity, Network, CheckCircle2, Loader2,
-  Maximize2, Minimize2, HelpCircle, AlertCircle, Terminal, History, Camera
+  Maximize2, Minimize2, HelpCircle, AlertCircle, Terminal, History, Camera, Shapes, Puzzle
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { KIT, KitNote } from '@/components/inspector/kit'
@@ -63,6 +63,8 @@ import {
 import { isForeignKeyShaped, suggestForeignKeyColumn } from '@/lib/db/fk-shape'
 import { SqlWorkspace } from '@/components/database/SqlWorkspace'
 import { SchemaHistory } from '@/components/database/SchemaHistory'
+import { EnumsPanel } from '@/components/database/EnumsPanel'
+import { ExtensionsPanel } from '@/components/database/ExtensionsPanel'
 import { DatabaseSnapshots } from '@/components/database/DatabaseSnapshots'
 import { useParams, useRouter } from 'next/navigation'
 import { getCurrentProjectId } from '@/lib/api/client'
@@ -71,7 +73,7 @@ import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisual
 
 type ViewMode = 'data' | 'structure'
 type TableView = 'data' | 'structure'
-type DatabaseView = 'tables' | 'visualization' | 'sql' | 'history' | 'snapshots'
+type DatabaseView = 'tables' | 'visualization' | 'sql' | 'history' | 'snapshots' | 'types' | 'extensions'
 
 // Rows fetched per page in the data browser. Kept in one place so the
 // pagination footer, the "step back a page after delete" math, and the query
@@ -1292,6 +1294,28 @@ export default function ProjectDatabasePage() {
               History
             </button>
             <button
+              onClick={() => setShowVisualization('types')}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+                showVisualization === 'types'
+                  ? 'bg-white/[0.06] text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Shapes className="w-3 h-3" />
+              Types
+            </button>
+            <button
+              onClick={() => setShowVisualization('extensions')}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+                showVisualization === 'extensions'
+                  ? 'bg-white/[0.06] text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Puzzle className="w-3 h-3" />
+              Extensions
+            </button>
+            <button
               onClick={() => setShowVisualization('snapshots')}
               className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'snapshots'
@@ -1481,6 +1505,14 @@ export default function ProjectDatabasePage() {
           <div className="flex min-w-0 flex-1 flex-col">
               {showVisualization === 'history' && resolvedProjectId ? (
                 <SchemaHistory projectId={resolvedProjectId} />
+              ) : showVisualization === 'types' && resolvedProjectId ? (
+                // Project-scoped: types live in the workspace schema and need no
+                // selected table.
+                <EnumsPanel projectId={resolvedProjectId} />
+              ) : showVisualization === 'extensions' && resolvedProjectId ? (
+                // Deployment-scoped, reached through a project: extensions are
+                // database-wide, which the panel says.
+                <ExtensionsPanel projectId={resolvedProjectId} />
               ) : showVisualization === 'snapshots' && resolvedProjectId ? (
                 // Project-scoped like the schema graph: it needs no selected
                 // table, and a project whose tables have not loaded can still
