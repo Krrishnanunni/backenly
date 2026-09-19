@@ -450,12 +450,21 @@ async function main(): Promise<void> {
   // the backup one: workspace tables use FORCE ROW LEVEL SECURITY, which keys
   // on the owner, so replaying as anything else silently rebinds every policy.
   // Omitting it produced "Invalid URL" from the first psql call.
+  // TWO connections. Admin provisions - dropping schemas, creating the
+  // PostgREST roles and installing extensions are elevation the application
+  // role must not have - and the application role REPLAYS, so the restored
+  // objects are owned by it and FORCE RLS keys on the right owner.
   const targetUrl = process.env.DATABASE_URL
+  const restoreAdminUrl = envValue('BACKENLY_ADMIN_DATABASE_URL', '') || undefined
   if (!targetUrl) throw new Error('DATABASE_URL is not set; the restore has nowhere to write')
+  if (!restoreAdminUrl) {
+    throw new Error('BACKENLY_ADMIN_DATABASE_URL is not in .env; the installer records it')
+  }
 
   const progress = await restoreDeployment({
     bundleDir: exported.bundleDir,
     credential: exported.credential,
+    adminUrl: restoreAdminUrl,
     targetUrl,
     onStep: r => console.log(`     ${r.step}: ${r.status}${r.error ? ` (${r.error})` : ''}`),
   })

@@ -46,6 +46,10 @@ const STORAGE_BYTES = Buffer.from([0, 1, 2, 253, 254, 255])
 
 let sourceUrl = ''
 let targetUrl = ''
+let adminUrl = ''
+/** The application role the restore replays as. Cluster-wide, so suffixed. */
+const APP_ROLE = `recovery_app_${SUFFIX}`
+const APP_PASSWORD = randomBytes(12).toString('hex')
 let bundleDir = ''
 let credential = ''
 let progress: RestoreProgress
@@ -106,6 +110,19 @@ beforeAll(async () => {
   schemaName = `workspace_${projectId}`
 
   await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`)
+  // An ORDINARY table. Every table in this fixture used to be `_`-prefixed,
+  // which made the grant assertion below meaningless once the restore started
+  // reconciling: `_`-prefixed tables and `users` hold end-user credentials, and
+  // backenly_pgrst_revoke_internal exists to strip anon/authenticated/
+  // service_role from exactly those. So there was nothing left that SHOULD keep
+  // its grants, and nothing to distinguish "grants survived" from "grants were
+  // correctly removed".
+  await prisma.$executeRawUnsafe(
+    `CREATE TABLE IF NOT EXISTS "${schemaName}"."notes" (id serial PRIMARY KEY, body text)`,
+  )
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}"."notes" (body) VALUES ('a row the data plane should serve')`,
+  )
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "${schemaName}"."_token_blacklist" (
       jti TEXT PRIMARY KEY, expires_at TIMESTAMPTZ NOT NULL,
@@ -173,12 +190,40 @@ beforeAll(async () => {
 
   // The clean machine. Created empty, immediately before the restore.
   await onAdmin(`CREATE DATABASE "${TARGET_DB}"`)
-  targetUrl = urlForDatabase(sourceUrl, TARGET_DB)
+  adminUrl = urlForDatabase(sourceUrl, TARGET_DB)
+
+  // ── TWO connections, because a restore has two jobs ─────────────────────
+  //
+  // Admin provisions: dropping schemas, creating the PostgREST roles and
+  // installing extensions are all elevation the application role must not have.
+  // The application role REPLAYS, because pg_dump runs with --no-owner and psql
+  // creates whatever it replays as the role it connected with - so ownership
+  // follows this connection, and FORCE ROW LEVEL SECURITY keys on the owner.
+  //
+  // This used to hand the superuser to both jobs, which is why nobody noticed
+  // that a real deployment's application role cannot drop `public` and that a
+  // superuser replay leaves every table owned by the wrong role.
+  await onAdmin(
+    `CREATE ROLE "${APP_ROLE}" LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE ` +
+      `PASSWORD '${APP_PASSWORD}'`,
+  )
+  await onAdmin(`GRANT CONNECT, CREATE, TEMPORARY ON DATABASE "${TARGET_DB}" TO "${APP_ROLE}"`)
+  targetUrl = urlForDatabase(sourceUrl, TARGET_DB).replace(
+    /\/\/[^@]+@/,
+    `//${APP_ROLE}:${APP_PASSWORD}@`,
+  )
 
   // A separate destination, so files cannot appear to restore by having been
   // there all along.
   targetStorage = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'backenly-storage-dst-'))
-  progress = await restoreDeployment({ bundleDir, credential, targetUrl, storageDir: targetStorage })
+  progress = await restoreDeployment({
+    bundleDir,
+    credential,
+    adminUrl,
+    targetUrl,
+    appRole: APP_ROLE,
+    storageDir: targetStorage,
+  })
 })
 
 afterAll(async () => {
@@ -187,6 +232,8 @@ afterAll(async () => {
   }
   if (projectId) await prisma.project.delete({ where: { id: projectId } }).catch(() => {})
   if (userId) await prisma.user.delete({ where: { id: userId } }).catch(() => {})
+  await onAdmin(`DROP OWNED BY "${APP_ROLE}" CASCADE`).catch(() => {})
+  await onAdmin(`DROP ROLE IF EXISTS "${APP_ROLE}"`).catch(() => {})
   if (targetUrl) {
     await onAdmin(
       `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${TARGET_DB}'`,
@@ -340,14 +387,47 @@ describe('the data plane can work on the recovered machine', () => {
 
   test('the workspace grants survived the trip', async () => {
     // Without these the restore looks complete and the data plane returns
-    // nothing at all. The fixture applies the same grants setup-postgrest-roles
-    // does, so there is something real to lose.
+    // nothing at all. Asserted on an ORDINARY table: the internal ones are
+    // supposed to lose their grants, which the next test covers.
     const rows = await onTarget<{ grantee: string }>(
       `SELECT DISTINCT grantee FROM information_schema.role_table_grants
-       WHERE table_schema = $1 AND grantee IN ('anon','authenticated','service_role')`,
+       WHERE table_schema = $1 AND table_name = 'notes'
+         AND grantee IN ('anon','authenticated','service_role')`,
       [schemaName],
     )
     expect(rows.map(r => r.grantee).sort()).toEqual(['anon', 'authenticated', 'service_role'])
+  })
+
+  test('the end-user credential tables did NOT keep theirs', async () => {
+    // The half the old restore got wrong, and it got it wrong silently.
+    //
+    // The workspace dump carries the source's ACLs, and replaying them put
+    // anon/authenticated/service_role back on `_token_blacklist` and
+    // `_magic_links` - tables holding revoked JTIs and live magic links. A
+    // fresh install revokes those through backenly_pgrst_revoke_internal, so
+    // a restored deployment was strictly more exposed than an installed one.
+    //
+    // reconcile-derived-state now re-runs that revocation under the admin
+    // connection, which is what closes it.
+    const rows = await onTarget<{ table_name: string; grantee: string }>(
+      `SELECT table_name, grantee FROM information_schema.role_table_grants
+       WHERE table_schema = $1 AND table_name LIKE '\\_%'
+         AND grantee IN ('anon','authenticated','service_role')`,
+      [schemaName],
+    )
+    expect(rows).toEqual([])
+  })
+
+  test('the source really had those grants, so the revocation is a change', async () => {
+    // Paired, because "no grants on the internal tables" would be equally true
+    // of a fixture that never granted any.
+    const rows = await prisma.$queryRawUnsafe<{ grantee: string }[]>(
+      `SELECT DISTINCT grantee FROM information_schema.role_table_grants
+       WHERE table_schema = $1 AND table_name = '_token_blacklist'
+         AND grantee IN ('anon','authenticated','service_role')`,
+      schemaName,
+    )
+    expect(rows.length).toBeGreaterThan(0)
   })
 
   test('the source really had those grants to lose', async () => {

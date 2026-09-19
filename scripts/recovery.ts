@@ -176,7 +176,28 @@ async function runVerify(args: Args): Promise<number> {
 async function runRestore(args: Args): Promise<number> {
   if (!args.bundle) usage()
   const bundleDir = path.resolve(args.bundle)
+  // Two connections, because a restore has two jobs with different privileges.
+  //
+  //   admin  provisions - drops and recreates schemas, creates the PostgREST
+  //          roles, installs extensions. None of it available to the app role.
+  //   app    replays the dumps, so the restored objects are OWNED by it.
+  //          pg_dump runs with --no-owner, so ownership follows the connection,
+  //          and FORCE ROW LEVEL SECURITY keys on the owner.
+  //
+  // The backup credential is for export only and is refused here by preflight.
+  const adminUrl = process.env.BACKENLY_ADMIN_DATABASE_URL ?? ''
   const targetUrl = process.env.DATABASE_URL ?? process.env.DIRECT_URL ?? ''
+  if (!adminUrl) {
+    console.error(
+      '\nBACKENLY_ADMIN_DATABASE_URL is not set.\n\n' +
+        '  A restore drops and recreates schemas, creates the PostgREST roles and\n' +
+        '  installs extensions. The application role may do none of those, and must\n' +
+        '  not be given the right to.\n\n' +
+        '  Set it to an elevated connection for the same database as DATABASE_URL.\n' +
+        '  `npm run selfhost` records one on its first run.\n',
+    )
+    return 1
+  }
   if (!targetUrl) {
     console.error('DATABASE_URL is not set. Point it at the deployment to restore INTO.')
     return 2
@@ -203,6 +224,7 @@ the whole archive has been validated.
     const progress = await restoreDeployment({
       bundleDir,
       credential,
+      adminUrl,
       targetUrl,
       onStep: result => {
         const mark = result.status === 'ok' ? 'ok  ' : 'FAIL'
