@@ -21,10 +21,15 @@ import {
   DURABLE_CREDENTIALS,
   EPHEMERAL_CREDENTIALS,
   isEphemeral,
+  dispositionOf,
+  droppedTableData,
+  PLATFORM_CREDENTIAL_TABLES,
   QUIESCED_SUBSYSTEMS,
   subsystemMayRun,
   type RecoveryManifest,
 } from '@/lib/recovery/contract'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 
 function manifest(overrides: Partial<RecoveryManifest> = {}): RecoveryManifest {
   return {
@@ -184,32 +189,36 @@ describe('the recovery credential is not in the bundle', () => {
 
 describe('durable credentials survive recovery, ephemeral ones must not', () => {
   it('keeps the values other people’s code depends on', () => {
-    // These are embedded in client bundles, CI pipelines and other systems.
-    // Issuing fresh ones would be "restored" and would break every caller,
-    // which is not recovery in any sense the operator meant.
-    for (const durable of ['project.jwtSecret', 'project.anonKey', 'apiKey.records']) {
-      expect(DURABLE_CREDENTIALS).toContain(durable)
+    // Baked into client bundles, CI pipelines and other systems. Issuing fresh
+    // ones would be "restored" and would break every caller, which is not
+    // recovery in any sense the operator meant.
+    for (const durable of ['project.jwtSecret', 'project.anonKey', 'api_keys', 'database_credentials']) {
+      expect(dispositionOf(durable)).toBe('carry')
       expect(isEphemeral(durable)).toBe(false)
     }
   })
 
   it('keeps identity, so users still exist after recovery', () => {
-    expect(DURABLE_CREDENTIALS).toContain('user.passwordHash')
-    expect(DURABLE_CREDENTIALS).toContain('user.identity')
+    // Including the second factor: the user holds those codes offline and
+    // cannot re-issue them without first getting in.
+    expect(dispositionOf('users')).toBe('carry')
+    expect(dispositionOf('two_factor_backup_codes')).toBe('carry')
   })
 
   it('drops proof of a past login', () => {
     // Restoring a week-old bundle must not resurrect a session somebody
     // revoked. Identity is durable; having been logged in is not.
-    expect(isEphemeral('session.records')).toBe(true)
+    expect(isEphemeral('sessions')).toBe(true)
   })
 
   it('drops one-time credentials that were already spent or cancelled', () => {
     for (const token of [
-      'passwordResetToken.records',
-      'workspace._magic_links',
-      'workspace._password_resets',
-      'workspace._email_verifications',
+      'password_reset_tokens',
+      'oauth_authorization_codes',
+      'mcp_oauth_codes',
+      '_magic_links',
+      '_password_resets',
+      '_email_verifications',
     ]) {
       expect(isEphemeral(token)).toBe(true)
     }
@@ -217,17 +226,120 @@ describe('durable credentials survive recovery, ephemeral ones must not', () => 
 
   it('drops the setup token', () => {
     // Its whole purpose is to claim an UNCLAIMED deployment. Restoring it into
-    // a claimed one would reintroduce exactly the credential the claim was
-    // meant to consume.
+    // a claimed one would reintroduce exactly the credential the claim
+    // was meant to consume.
     expect(isEphemeral('deployment.setupToken')).toBe(true)
   })
 
+  it('KEEPS the JWT denylist, because dropping it would fail open', () => {
+    // The one that goes the other way from everything around it, and the
+    // reason an earlier draft of this contract got it wrong.
+    //
+    // End-user JWTs are stateless and signed with the project secret, which
+    // recovery carries - so a token revoked before the bundle was written still
+    // verifies afterwards. _token_blacklist is the only thing that refuses it,
+    // and the middleware treats a missing table as "not blacklisted". Dropping
+    // it silently un-revokes every revoked token.
+    expect(dispositionOf('_token_blacklist')).toBe('carry')
+    expect(isEphemeral('_token_blacklist')).toBe(false)
+  })
+
+  it('refuses to guess about anything unclassified', () => {
+    // An exporter that silently carried an unknown credential-shaped table is
+    // the bug the classification exists to prevent, so the lookup fails loudly
+    // rather than defaulting.
+    expect(() => dispositionOf('some_table_added_next_year')).toThrow(RecoveryContractError)
+    expect(() => dispositionOf('some_table_added_next_year')).toThrow(/carry.*drop|drop.*carry/)
+  })
+
   it('never classifies the same thing as both', () => {
-    // The lists are the contract; an overlap would make the contract
-    // unreadable and let an implementation pick whichever it preferred.
-    const durable = new Set<string>(DURABLE_CREDENTIALS)
-    const overlap = EPHEMERAL_CREDENTIALS.filter(e => durable.has(e))
-    expect(overlap).toEqual([])
+    const durable = new Set(DURABLE_CREDENTIALS)
+    expect(EPHEMERAL_CREDENTIALS.filter(e => durable.has(e))).toEqual([])
+  })
+})
+
+describe('the classification is checked against the real schema', () => {
+  /**
+   * The point of keying this by table name rather than prose: a new
+   * credential-shaped model must not quietly inherit whatever the exporter
+   * happens to do with it.
+   *
+   * docs/mcp-catalog-truth-architecture.md records what a hand-maintained
+   * parallel copy of "what exists" cost the platform last time. This reads the
+   * schema instead.
+   */
+  const CREDENTIAL_SHAPED =
+    /Token|Session|Credential|Secret|Code|Otp|Magic|Verification|Reset|ApiKey|Password|Refresh|OAuth|Auth/i
+
+  function credentialShapedTables(): Array<{ model: string; table: string }> {
+    const schema = readFileSync(resolve(__dirname, '../../prisma/schema.prisma'), 'utf8')
+    const out: Array<{ model: string; table: string }> = []
+    const models = schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)
+    for (const m of models) {
+      const [, model, body] = m
+      if (!CREDENTIAL_SHAPED.test(model)) continue
+      const mapped = body.match(/@@map\("([^"]+)"\)/)
+      out.push({ model, table: mapped ? mapped[1] : model })
+    }
+    return out
+  }
+
+  it('finds the models it is meant to be checking', () => {
+    // A regex that matched nothing would make every assertion below vacuous,
+    // which is the way this kind of ratchet usually dies.
+    const found = credentialShapedTables()
+    expect(found.length).toBeGreaterThan(10)
+    expect(found.map(f => f.table)).toContain('sessions')
+    expect(found.map(f => f.table)).toContain('api_keys')
+  })
+
+  it('classifies every credential-shaped model in the platform schema', () => {
+    // A non-empty result names each offender. The fix is to add it to
+    // PLATFORM_CREDENTIAL_TABLES in lib/recovery/contract.ts as carry or drop.
+    const unclassified = credentialShapedTables()
+      .filter(({ table }) => !(table in PLATFORM_CREDENTIAL_TABLES))
+      .map(({ model, table }) => `${model} -> ${table} (needs carry|drop)`)
+
+    expect(unclassified).toEqual([])
+  })
+
+  it('does not classify tables the schema no longer has', () => {
+    // The other direction: a stale entry is dead weight that reads as though a
+    // decision still governs something.
+    //
+    // Checked against EVERY table, not just the credential-shaped ones. Some
+    // entries are classified deliberately despite not matching the regex -
+    // `users` is the obvious one, and dropping it from the map because a regex
+    // did not happen to match "User" is exactly the wrong outcome.
+    const schema = readFileSync(resolve(__dirname, '../../prisma/schema.prisma'), 'utf8')
+    const allTables = new Set<string>()
+    for (const m of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+      const mapped = m[2].match(/@@map\("([^"]+)"\)/)
+      allTables.add(mapped ? mapped[1] : m[1])
+    }
+
+    const stale = Object.keys(PLATFORM_CREDENTIAL_TABLES).filter(t => !allTables.has(t))
+    expect(stale).toEqual([])
+  })
+})
+
+describe('the classification drives the export, not just the docs', () => {
+  it('turns into the set of tables whose data is omitted', () => {
+    const dropped = droppedTableData()
+    expect(dropped.platform).toContain('sessions')
+    expect(dropped.platform).not.toContain('users')
+    expect(dropped.workspace).toContain('_magic_links')
+    // The correction, asserted where the exporter will read it.
+    expect(dropped.workspace).not.toContain('_token_blacklist')
+  })
+
+  it('omits DATA, never the tables themselves', () => {
+    // A restored deployment missing its sessions table cannot sign anybody in.
+    // The distinction lives in the helper's name and is asserted here so a
+    // future edit cannot quietly turn it into --exclude-table.
+    for (const table of droppedTableData().platform) {
+      expect(dispositionOf(table)).toBe('drop')
+    }
   })
 })
 

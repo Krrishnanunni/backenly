@@ -213,62 +213,185 @@ export function missingComponents(manifest: RecoveryManifest): RecoveryComponent
 }
 
 /**
- * DURABLE CREDENTIALS SURVIVE RECOVERY. EPHEMERAL ONES MUST NOT.
- * =============================================================
+ * WHAT RECOVERY CARRIES ACROSS, AND WHAT IT DELIBERATELY DROPS
+ * ===========================================================
  *
- * A bundle that restores everything restores too much. The distinction is not
- * "secret vs not secret" — it is whether a client outside the deployment
- * depends on the value continuing to exist.
+ * A bundle that restores everything restores too much. But the line is not
+ * "secret vs not secret", and it is not "auth-related vs not" either — an
+ * earlier draft of this file dropped the JWT denylist on that reasoning, which
+ * would have un-revoked every revoked end-user token. See below.
  *
- * DURABLE things are why recovery is worth doing. A project's signing secret,
- * its anon key, its API keys and its OAuth configuration are embedded in
- * client bundles, CI pipelines and other people's code. Recovering a
- * deployment that issued fresh ones would technically be "restored" and would
- * break every caller, which is not recovery in any sense the operator meant.
+ * THE TEST, applied to each credential in turn:
  *
- * EPHEMERAL things are the opposite: one-time or time-bounded proofs of a
- * moment. Restoring a week-old bundle must not resurrect a session somebody
- * revoked, a password-reset link that was already used, a magic link that has
- * since been cancelled, or the setup token that claims an unclaimed
- * deployment. Each of those would hand back an authentication path that was
- * deliberately taken away.
+ *   1. Does dropping it FAIL CLOSED? A row that is looked up to GRANT access
+ *      can be dropped safely; its absence denies. A row that is looked up to
+ *      DENY access must never be dropped; its absence allows.
+ *
+ *   2. Can the holder re-establish it through a normal interactive flow?
+ *      A person signs in again. An MCP client re-runs OAuth. But an API key is
+ *      baked into someone else's CI, and a human has to go and change it — so
+ *      dropping it breaks callers silently with nobody in the loop.
+ *
+ * Drop only when both hold. Otherwise carry.
  *
  * Identity is durable; proof of a past login is not. After recovery a user's
- * account and password hash are intact and they sign in again.
+ * account, password hash and second factor are intact, and they sign in again.
+ *
+ * WHY THIS IS KEYED BY TABLE NAME
+ * -------------------------------
+ * Because the list is load-bearing, not documentation: `droppedTableData()`
+ * below is what the exporter turns into pg_dump arguments. A prose list would
+ * drift from the schema silently, which is the failure mode
+ * docs/mcp-catalog-truth-architecture.md records the platform already paid for
+ * once. `recovery-contract.spec.ts` reads prisma/schema.prisma and fails when a
+ * credential-shaped model has no entry here, so adding one forces a decision
+ * rather than defaulting to whatever the exporter happens to do.
  */
 
-/** Restored as-is. Clients outside the deployment depend on these values. */
-export const DURABLE_CREDENTIALS = [
-  'project.jwtSecret',
-  'project.anonKey',
-  'apiKey.records',
-  'authProvider.configuration',
-  'project.envVars',
-  'user.passwordHash',
-  'user.identity',
-] as const
+export type Disposition = 'carry' | 'drop'
 
 /**
- * Deliberately NOT restored, even though they live in the same tables.
+ * Every credential-shaped table in the platform database.
  *
- * `setupToken` is here for a reason worth stating: restoring it into an
- * already-claimed deployment would reintroduce a credential whose whole
- * purpose is to claim an unclaimed one.
+ * Dropping means the table is restored EMPTY, not omitted: the application
+ * expects it to exist. See `droppedTableData`.
  */
-export const EPHEMERAL_CREDENTIALS = [
-  'session.records',
-  'passwordResetToken.records',
-  'oidcAccessToken.records',
-  'shareToken.records',
-  'workspace._magic_links',
-  'workspace._password_resets',
-  'workspace._email_verifications',
-  'workspace._token_blacklist',
-  'deployment.setupToken',
-] as const
+export const PLATFORM_CREDENTIAL_TABLES: Readonly<Record<string, Disposition>> = {
+  // ─── Carried ────────────────────────────────────────────────────────────
+  /** Identity itself, password hash included. Recovery without it is not recovery. */
+  users: 'carry',
+  /** Baked into other people's code and CI. A human would have to go and rotate them. */
+  api_keys: 'carry',
+  /** History, not a credential. */
+  api_key_usage: 'carry',
+  /** The user holds these offline and cannot re-issue them without signing in first. */
+  two_factor_backup_codes: 'carry',
+  /** Project OAuth configuration. External clients are configured against it. */
+  auth_providers: 'carry',
+  auth_policies: 'carry',
+  workspace_oauth_configs: 'carry',
+  project_auth_configs: 'carry',
+  /** Credentials this deployment uses to call OUT. Re-entering them is manual. */
+  provider_credentials: 'carry',
+  /** Connection credentials handed to external tools. Same argument as api_keys. */
+  database_credentials: 'carry',
+  /** Registered MCP client identities; the client secret lives in the client's own config. */
+  mcp_oauth_clients: 'carry',
+  /** Shared externally and long-lived. */
+  referral_codes: 'carry',
+  /**
+   * Borderline, decided as carry and written down rather than decided silently.
+   * Share links are meant to be long-lived, the lookup is by hash so absence
+   * denies, and `revokedAt` rides along on the row — so carrying cannot
+   * resurrect a revoked link, while dropping would break live ones.
+   */
+  share_tokens: 'carry',
 
-export type DurableCredential = (typeof DURABLE_CREDENTIALS)[number]
-export type EphemeralCredential = (typeof EPHEMERAL_CREDENTIALS)[number]
+  // ─── Dropped ────────────────────────────────────────────────────────────
+  /** DB-backed, so absence denies, and signing in again is trivial. */
+  sessions: 'drop',
+  /** One-time, minutes-long, and very likely already spent or cancelled. */
+  password_reset_tokens: 'drop',
+  oauth_authorization_codes: 'drop',
+  mcp_oauth_codes: 'drop',
+  /** Short-lived bearer tokens with a re-issue path. */
+  oidc_access_tokens: 'drop',
+  /**
+   * The long-lived bearer an operator most wants gone after an incident, and
+   * MCP clients re-run the authorization flow on their own.
+   */
+  mcp_oauth_refresh_tokens: 'drop',
+}
+
+/**
+ * The per-project workspace tables holding end-user auth state.
+ *
+ * `_token_blacklist` goes the other way from everything around it, and the
+ * reason is worth stating. End-user JWTs are STATELESS, signed with the
+ * project's own secret, which recovery carries — so a token revoked before the
+ * bundle was written still verifies after the restore. The denylist is the only
+ * thing that refuses it, and `lib/api/v1/middleware.ts` treats a missing table
+ * as "not blacklisted". Dropping it would silently un-revoke every revoked
+ * token, with no error anywhere. It fails OPEN, which is rule 1 above.
+ */
+export const WORKSPACE_CREDENTIAL_TABLES: Readonly<Record<string, Disposition>> = {
+  _token_blacklist: 'carry',
+  _magic_links: 'drop',
+  _password_resets: 'drop',
+  /** Pending tokens only. Whether an address IS verified is a column on the users table. */
+  _email_verifications: 'drop',
+}
+
+/** Credentials that are not rows in a table of their own. */
+export const NON_TABLE_CREDENTIALS: Readonly<Record<string, Disposition>> = {
+  /** Signs every end-user JWT. Issuing a new one invalidates every client at once. */
+  'project.jwtSecret': 'carry',
+  /** Embedded in client bundles. */
+  'project.anonKey': 'carry',
+  'project.envVars': 'carry',
+  /**
+   * Its entire purpose is to claim an UNCLAIMED deployment, so restoring it
+   * into a claimed one would reintroduce the exact credential the claim
+   * consumed.
+   */
+  'deployment.setupToken': 'drop',
+}
+
+const ALL_CREDENTIALS: Readonly<Record<string, Disposition>> = {
+  ...PLATFORM_CREDENTIAL_TABLES,
+  ...WORKSPACE_CREDENTIAL_TABLES,
+  ...NON_TABLE_CREDENTIALS,
+}
+
+/** Restored as-is. Something outside this deployment depends on the value. */
+export const DURABLE_CREDENTIALS: readonly string[] = Object.keys(ALL_CREDENTIALS)
+  .filter(k => ALL_CREDENTIALS[k] === 'carry')
+  .sort()
+
+/** Deliberately not restored, even though they sit beside the durable ones. */
+export const EPHEMERAL_CREDENTIALS: readonly string[] = Object.keys(ALL_CREDENTIALS)
+  .filter(k => ALL_CREDENTIALS[k] === 'drop')
+  .sort()
+
+/**
+ * What recovery does with a named credential.
+ *
+ * Throws on anything unclassified rather than guessing. An exporter that
+ * silently carried an unknown credential-shaped table is precisely the bug this
+ * section exists to prevent.
+ */
+export function dispositionOf(name: string): Disposition {
+  const d = ALL_CREDENTIALS[name]
+  if (!d) {
+    throw new RecoveryContractError(
+      `No recovery disposition for ${JSON.stringify(name)}. ` +
+      `Classify it in lib/recovery/contract.ts as 'carry' or 'drop' before exporting it.`,
+    )
+  }
+  return d
+}
+
+/** A credential the restore must drop rather than carry across. */
+export function isEphemeral(name: string): boolean {
+  return dispositionOf(name) === 'drop'
+}
+
+/**
+ * The tables whose DATA the export omits, split by where they live.
+ *
+ * Data, not the tables themselves: pg_dump's `--exclude-table-data` keeps the
+ * structure so the application still finds what it expects, and the rows are
+ * simply absent. Omitting the tables outright would leave a restored
+ * deployment that cannot sign anybody in.
+ */
+export function droppedTableData(): { platform: string[]; workspace: string[] } {
+  const drop = (r: Readonly<Record<string, Disposition>>) =>
+    Object.keys(r).filter(k => r[k] === 'drop').sort()
+  return {
+    platform: drop(PLATFORM_CREDENTIAL_TABLES),
+    workspace: drop(WORKSPACE_CREDENTIAL_TABLES),
+  }
+}
 
 /**
  * SUBSYSTEMS THAT MUST BE SILENT WHILE A RESTORE IS IN FLIGHT.
@@ -285,9 +408,9 @@ export type EphemeralCredential = (typeof EPHEMERAL_CREDENTIALS)[number]
  * bill and mutate; and autonomy would observe a deliberately partial schema,
  * diagnose it as broken, and "repair" it — fighting the restore step by step.
  *
- * These stay off until `verify-health-and-integrity` passes, not until the
- * last write completes. A restore that finished writing is not yet a restore
- * that worked.
+ * These stay off until `verify-health-and-integrity` passes, not until the last
+ * write completes. A restore that finished writing is not yet a restore that
+ * worked.
  */
 export const QUIESCED_SUBSYSTEMS = [
   'cron-scheduler',
@@ -305,9 +428,4 @@ export function subsystemMayRun(step: RestoreStep, completed: boolean): boolean 
   // Only after the FINAL step has completed successfully. During any step,
   // including the last one while it is still running, everything stays off.
   return completed && step === 'verify-health-and-integrity'
-}
-
-/** A credential the restore must drop rather than carry across. */
-export function isEphemeral(name: string): boolean {
-  return (EPHEMERAL_CREDENTIALS as readonly string[]).includes(name)
 }
