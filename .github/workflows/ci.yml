@@ -1205,6 +1205,40 @@ jobs:
           # regressed, the setup project fails on its own ownership assertion.
           npx playwright test --project=selfhost
 
+      # ── The runtime, and the surfaces that only exist on a deployment ────
+      #
+      # /db/* is served by the EXPRESS runtime against a real PostgREST, and
+      # realtime is a live SSE stream fed by LISTEN/NOTIFY. Neither exists in
+      # the jest integration job - there is no PostgREST there and no
+      # long-lived server - so the dependency-failure suites deliberately do
+      # not pretend to cover them. This is where they are covered.
+      #
+      # It runs AFTER the browser suite, on purpose: the app process started
+      # earlier is still running, which is what makes "the same application
+      # process recovered" a claim about anything.
+      - name: start the runtime
+        env:
+          NODE_ENV: production
+          # The runtime refuses to start in production without this rather
+          # than falling back to allow-all on a public surface.
+          CORS_ORIGIN: http://localhost:3000
+        run: |
+          set -euo pipefail
+          npm run start:runtime > runtime.log 2>&1 &
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/health || true)
+            if [ "$code" != "000" ]; then echo "  runtime answered $code after ${i}s"; break; fi
+            sleep 1
+          done
+          [ "$code" != "000" ] || { echo "the runtime never started"; tail -60 runtime.log; exit 1; }
+
+      - name: /db/*, end-user auth and realtime survive their dependencies
+        run: npx tsx scripts/qualify-selfhost-runtime.ts
+
+      - name: runtime log on failure
+        if: failure()
+        run: tail -120 runtime.log || true
+
       # The rendered page, not a guess at it. Without this, diagnosing a
       # selector that does not match means another full CI cycle per attempt.
       - name: keep the browser evidence
