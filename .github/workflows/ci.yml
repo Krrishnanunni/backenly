@@ -448,6 +448,17 @@ jobs:
       WORKSPACE_POOL_MAX_POOLS: '8'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # selfhost-upgrade.spec.ts builds a genuine OLD install from an
+          # earlier release's own schema.prisma, so it needs that commit. The
+          # default shallow clone does not have it, and fetching a bare SHA
+          # afterwards depends on what the remote is willing to serve - it
+          # failed here with nothing but "Command failed: git fetch".
+          #
+          # Asking for the history up front removes the network step from the
+          # test entirely. The suite keeps its own fallback for a contributor
+          # working in a shallow clone, but CI no longer relies on it.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -1012,6 +1023,44 @@ jobs:
           fi
           echo "  .env byte-identical after a rerun"
 
+      - name: the install is under migration control
+        run: |
+          set -euo pipefail
+          # The invariant that makes UPGRADES possible, asserted on the one
+          # machine where a real install exists.
+          #
+          # `prisma db push` created this schema and recorded no history, so a
+          # later release had nothing to deploy against: the installer saw
+          # `public.projects`, returned, and the deployment kept a frozen schema
+          # until the first query against a newer table failed with P2021. A
+          # fresh install must come out of the box with a COMPLETE
+          # `_prisma_migrations`, not merely with the right tables.
+          expected=$(ls -1d prisma/migrations-canonical/*/ | wc -l | tr -d ' ')
+
+          # The same defaults scripts/selfhost.ts uses. `|| true` because the
+          # installer does NOT write POSTGRES_USER into .env, and under
+          # `set -e` a grep that matches nothing would fail this step for a
+          # reason unrelated to what it is testing - which is what it did.
+          PGUSER=$(grep -E '^POSTGRES_USER=' .env | head -1 | cut -d= -f2- || true)
+          PGDB=$(grep -E '^POSTGRES_DB=' .env | head -1 | cut -d= -f2- || true)
+          PGUSER=${PGUSER:-backenly_user}
+          PGDB=${PGDB:-backenly}
+          echo "  querying as ${PGUSER} on ${PGDB}"
+
+          # The route the installer itself uses: the compose Postgres does not
+          # publish its port, so psql on the runner cannot reach it directly.
+          actual=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL" \
+            | tr -d ' \r' || true)
+
+          echo "  canonical migrations: $expected, recorded as applied: ${actual:-<query failed>}"
+          [ "$actual" = "$expected" ] || {
+            echo "the install did not record every canonical migration;"
+            echo "a deployment in this state cannot be upgraded by a later release."
+            exit 1
+          }
+
       - name: the data plane is actually serving
         run: |
           set -euo pipefail
@@ -1034,6 +1083,87 @@ jobs:
       # in, so they were not evidence for anything. The `selfhost` project
       # signs up through the real register route and asserts against the pages
       # the install produced.
+      - name: the whole stack comes back from persisted state
+        run: |
+          set -euo pipefail
+          # A reboot, as an operator would experience it: every container goes
+          # away and comes back, and NOTHING ELSE is run.
+          #
+          # `npm run selfhost` is installation and upgrade reconciliation. An
+          # operator must not have to run it after every restart, and a
+          # deployment that only works because the installer was re-run is not a
+          # deployment that survives a reboot.
+          PGUSER=$(grep -E '^POSTGRES_USER=' .env | head -1 | cut -d= -f2- || true)
+          PGDB=$(grep -E '^POSTGRES_DB=' .env | head -1 | cut -d= -f2- || true)
+          PGUSER=${PGUSER:-backenly_user}
+          PGDB=${PGDB:-backenly}
+
+          # What must still be true afterwards, captured first so the comparison
+          # is against observed state rather than against an expectation.
+          before_schemas=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM backenly_pgrst_schema_registry" | tr -d ' \r')
+          before_migrations=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL" | tr -d ' \r')
+          echo "  before: $before_schemas registry row(s), $before_migrations migration(s)"
+
+          docker compose -f docker-compose.dev.yml restart
+          echo "  every container restarted; the installer was NOT run"
+
+          # Postgres answering again, from its own persisted volume.
+          for i in $(seq 1 60); do
+            if docker compose -f docker-compose.dev.yml exec -T postgres \
+                 psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc 'select 1' >/dev/null 2>&1; then
+              echo "  postgres answered after ${i}s"; break
+            fi
+            sleep 1
+          done
+
+          after_schemas=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM backenly_pgrst_schema_registry" | tr -d ' \r')
+          after_migrations=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL" | tr -d ' \r')
+
+          [ "$after_schemas" = "$before_schemas" ] || {
+            echo "the PostgREST registry changed across a restart: $before_schemas -> $after_schemas"
+            exit 1
+          }
+          [ "$after_migrations" = "$before_migrations" ] || {
+            echo "migration history changed across a restart: $before_migrations -> $after_migrations"
+            exit 1
+          }
+          echo "  registry and migration history survived"
+
+          # The data plane SERVING, not the container being up. PostgREST
+          # restarts in a loop without a valid credential and `ps` calls that
+          # running, so a response is the only evidence the credential survived.
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3002/ || true)
+            if [ "$code" != "000" ]; then echo "  postgrest answered $code after ${i}s"; break; fi
+            sleep 1
+          done
+          [ "$code" != "000" ] || { echo "postgrest never answered after the restart"; exit 1; }
+
+      - name: a restart did not require the installer
+        run: |
+          set -euo pipefail
+          # The installer is idempotent, so running it would hide the property
+          # under test. What is asserted instead is that the deployment was
+          # already serving BEFORE any installer run, which the step above did.
+          #
+          # This step exists to state the invariant next to the evidence: .env is
+          # untouched, so nothing regenerated a secret to make the stack work.
+          cp .env .env.after-restart
+          diff -q .env.before .env.after-restart || {
+            echo "a restart changed .env, which means something reconciled state"
+            exit 1
+          }
+          echo "  .env byte-identical across the restart"
+
+
       - name: install the browser
         run: npx playwright install --with-deps chromium
 

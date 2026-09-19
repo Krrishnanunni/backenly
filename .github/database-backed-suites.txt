@@ -42,6 +42,23 @@ tests/integration/project-smtp-and-templates.spec.ts
 tests/integration/storage-bucket-policy.spec.ts
 tests/integration/postgres-admin.spec.ts
 
+# Needs a real Postgres AND a git worktree of an older release.
+#
+# It builds a genuine old install from that release's own schema.prisma rather
+# than downgrading the current one, because a hand-made artefact would prove
+# nothing about what operators actually have on disk. It also creates and drops
+# throwaway databases, so it needs CREATEDB.
+tests/integration/selfhost-upgrade.spec.ts
+
+# Needs a real Postgres, and a real Redis for the limiter half.
+#
+# It severs the database at the TRANSPORT through a proxy rather than stopping
+# the server, because the only Postgres on a developer's machine is the one
+# their work depends on - and what the pool experiences is identical either way.
+# A genuine server restart is the self-host CI job's business, where a real
+# deployment exists.
+tests/integration/restart-recovery.spec.ts
+
 # Needs REDIS, not Postgres.
 #
 # The `integration` job is where CI runs suites that require a real backing

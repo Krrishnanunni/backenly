@@ -30,7 +30,7 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `cc9ea8ec` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `3b61a1ec` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
@@ -707,6 +707,201 @@ and jest's `expect` takes no message argument, which is Playwright's.
 ### Register
 
 `DONE 21 · INTENTIONAL 2`. No PARTIAL, no REAL_GAP, no BACKEND_ONLY.
+
+## Upgrade: the register was green and the product was not
+
+The first lifecycle proof failed, with the feature register at `DONE 21`. That
+is the distinction the lifecycle stage exists to draw: capabilities complete,
+production-readiness not established.
+
+### The defect
+
+`scripts/selfhost.ts` returned as soon as `public.projects` existed. Correctly,
+as far as it went — `prisma db push` is unsafe against an installed deployment,
+because the PostgREST registry and its event triggers are created by SQL rather
+than by Prisma, so push sees objects its schema does not describe and sets out to
+drop them. A second run failed with P1014 on
+`backenly_pgrst_schema_registry`; had it succeeded it would have removed the
+registry the data plane reads.
+
+But there was no other branch. And a `db push` install records no
+`_prisma_migrations`, so `migrate deploy` had no history to work from and
+`startup-validation`'s pending-migration check had nothing to compare. `migrate
+deploy` appears only in the Cloud managed-db runner, never in the self-host path.
+
+Verified against a genuine older release rather than reasoned about:
+
+    installer check "to_regclass('public.projects') IS NOT NULL" -> true
+      => createTables() returns early
+    _prisma_migrations table: (absent)
+    current code reading project_email_configs -> P2021, table does not exist
+    pre-upgrade workspace row still present: "pre-upgrade-row"
+
+Data intact, schema frozen, and a runtime failure the first time new code touches
+anything added since. Silent until it isn't. **High, operational rather than
+security.**
+
+### The model now
+
+    empty database    deploy the canonical chain. Under migration control from
+                      birth, so the NEXT upgrade is an ordinary deploy.
+    legacy install    one-time adoption, then deploy. Afterwards it is
+                      indistinguishable from an install born under migrations.
+    tracked install   deploy what is pending, for ever. The legacy path is never
+                      entered again.
+
+`prisma db push` is gone from the installer entirely. Fixing the upgrade while
+leaving push on fresh installs would have fixed this release's problem and
+recreated it for the next one.
+
+### Adoption proves the whole migration, not a headline table
+
+The first design checked one "sentinel" table per migration. That is the
+silent-success shape this programme has spent its length removing: a migration
+creates several tables, indexes, constraints and types, and seeing one of them
+says nothing about the other forty. A migration with no `CREATE TABLE` — a
+backfill, an `ALTER COLUMN` — would have had no sentinel and been waved through.
+
+Postconditions are now parsed from each migration's own SQL: every table with
+its columns, every index, every constraint, every enum type. All of them are
+checked against the live catalog. A statement the parser cannot classify makes
+the migration **unverifiable**, and adoption stops rather than guessing.
+
+Three outcomes, and only one of them writes:
+
+- **satisfied** — recorded with `migrate resolve --applied`, having been proven.
+- **absent** — the prefix ends; `migrate deploy` runs it.
+- **partial** — refused, naming what is present and what is missing. A database
+  in this state is neither the old version nor the new one, and recording it
+  either way is a lie.
+
+Migrations are a prefix, not a set. Finding migration 3 satisfied while 2 is
+absent is not a database that skipped one; it is a database nobody understands,
+and it is refused too.
+
+Every decision is made before anything is written, which is what makes a refusal
+safe to act on.
+
+### `migrate diff` is not the upgrade mechanism
+
+It would generate a script that drops the PostgREST registry and the event
+triggers, for the same reason `db push` did: Prisma deliberately does not model
+every PostgreSQL object Backenly relies on. Useful as an analysis aid, never the
+thing that decides what to remove from a live deployment.
+
+After every run, the objects Prisma cannot see are checked explicitly. A deploy
+that left the schema correct and the registry gone would pass every Prisma check
+and break the data plane.
+
+### The supported floor, measured
+
+`12c740e2` (#49) is the oldest genuinely installable self-host release. Its
+122-table schema **fully satisfies** the baseline and both maintenance
+migrations; only the email migration needs deploying. So every self-host release
+that has ever existed is upgradable, and the floor is the first one.
+
+A database below it — or one that merely has tables with the same names — is
+refused before any mutation, with the minimum supported release named and the
+route out stated: take a deployment recovery bundle while the old deployment is
+still running, install into an EMPTY database, restore the bundle.
+
+### What is proven
+
+`tests/integration/selfhost-upgrade.spec.ts`, against a real PostgreSQL and a
+real git worktree of `645679e2`. The old install is built from **that release's
+own schema.prisma**, pushed the way its installer pushed it — not a downgraded
+copy of the current schema, which would be testing a hand-made artefact.
+
+Seeded as a deployment rather than a table: operator identity, a project with its
+signing secret, a workspace schema with a row, an end-user auth identity with a
+bcrypt hash, an API credential, and the PostgREST support objects.
+
+After upgrade: the feature added since the old release works, and the operator
+identity, project name, signing secret, workspace row, end-user hash, API key
+hash, registry contents and all three event triggers are still there. The second
+run adopts nothing, deploys nothing, and leaves a byte-identical schema
+fingerprint over every column, index and constraint.
+
+Also covered: a half-applied migration refused without writing, by both the
+planner and the executor; a below-floor database refused with its route; and a
+fresh empty database deploying the whole chain and recording all of it.
+
+CI asserts the invariant on the one machine where a real install exists: after
+`npm run selfhost`, the number of migrations recorded as applied must equal the
+number of canonical migrations.
+
+## Restart and reboot
+
+State-based, not process-based. The question is never whether something came
+back up; it is whether the invariants came back with it.
+
+### What is proven where
+
+A **real** Redis restart — `redis-cli shutdown` then `redis-server` — drives the
+limiter cases. PostgreSQL is interrupted at the TRANSPORT, through a proxy this
+suite opens and severs, for two reasons and the second is the one that matters:
+the only PostgreSQL on a developer's machine is the one their work depends on,
+and a suite that stops it to prove a point is a worse bug than the one it is
+testing. What the pool experiences is identical either way — its sockets die,
+its checked-out clients error, and it must re-establish.
+
+What a proxy cannot show is the server losing its own state, so the whole-stack
+restart belongs to the self-host CI job, where a real installed deployment
+exists.
+
+### The pool recovers without the app restarting
+
+The same pool object, in the same process, serves again after the database comes
+back. No new pool, no process restart. Stated as a control first — established
+and serving — so the failure in the middle is the outage rather than a pool that
+never worked.
+
+### Durable work survives; acknowledged work is not re-delivered
+
+The webhook outbox is the durable queue, so it is what gets an item immediately
+before the restart. Across a fresh module registry the item is still there and
+becomes a delivery attempt; the outbox row is then gone, and a second drain
+delivers nothing. At-least-once must not become at-least-twice merely because a
+process restarted.
+
+### The limiter fails closed as an OUTAGE, and recovers on its own
+
+Down: `store_unavailable`, not `limit_exceeded`. Telling a caller "too many
+attempts" while the limiter cannot count accuses them of something they did not
+do and buries an outage in a metric operators read as abuse. Up again: the same
+client, the same process, no restart.
+
+### Redis durability is MEASURED, not assumed
+
+Whether the counters survive a restart is a property of the Redis deployment,
+not of Backenly, so the test asserts that the observed behaviour is one of the
+two coherent outcomes and reports which:
+
+    [restart] Redis durability observed: the counter RESET across a restart
+
+On the configuration used here the counters do not persist. **Operational
+consequence worth stating: a Redis restart resets in-flight rate-limit budgets.**
+An operator who needs budgets to survive a restart has to configure Redis
+persistence; Backenly does not silently pretend either way. Whichever happens,
+the limiter still ENFORCES from wherever it resumed — a restart never leaves it
+permanently allowing, and that is asserted separately.
+
+### The whole stack, in CI
+
+Every container is restarted and **nothing else is run**. `npm run selfhost` is
+installation and upgrade reconciliation; an operator must not have to run it
+after a reboot, and a deployment that only works because the installer was
+re-run is not one that survives a reboot.
+
+Asserted across the restart: the PostgREST registry row count and the migration
+history are unchanged, PostgREST answers again (a response, not a container
+being "up" — it restarts in a loop without a valid credential and `ps` calls
+that running), and `.env` is byte-identical, so nothing regenerated a secret to
+make the stack work.
+
+The browser suite then runs against the restarted deployment rather than a
+freshly installed one, which makes every one of its assertions a post-restart
+assertion too.
 
 ## Surface integrity, verified 2026-09-19
 
