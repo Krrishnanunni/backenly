@@ -77,7 +77,19 @@ ENV DATABASE_URL=postgresql://build:build@127.0.0.1:1/unused \
     JWT_SECRET=build-time-placeholder-not-a-production-secret \
     OPENAI_API_KEY=build-not-a-real-openai-key
 
+# The ARG defaults above are LOCALHOST. A build that forgets --build-arg takes
+# them silently and produces an image whose every OAuth redirect and
+# password-reset link points at http://localhost:3000, with the signup CAPTCHA
+# and error reporting off — and it still boots, serves and passes its health
+# check, so nothing downstream catches it. That happened once; this is why it
+# cannot happen twice. Run BEFORE the build, so the failure costs seconds.
+RUN npx tsx scripts/verify-public-build-inputs.ts --inputs
+
 RUN npm run build
+
+# And again against what was actually emitted, because the check above proves
+# only what the build was TOLD. This proves the value reached the artifact.
+RUN npx tsx scripts/verify-public-build-inputs.ts --artifact
 
 # ── Runtime ─────────────────────────────────────────────────────────────────
 FROM node:20-slim AS runtime
