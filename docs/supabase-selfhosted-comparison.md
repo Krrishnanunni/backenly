@@ -217,10 +217,47 @@ The traversal test forges tar headers byte by byte, because `archiver`
 sanitises the names that make an archive dangerous — an archive it produced
 could never carry the attack, so a test built with it would assert nothing.
 
+### Shipped, and named apart
+
+Both products are un-gated and reachable.
+
+| | Project database snapshot | Deployment recovery |
+|---|---|---|
+| Covers | one project's tables, rows, indexes, constraints, RLS policies | the whole machine: platform database, every workspace schema, storage, functions, secrets, ownership |
+| Excludes | stored files, platform accounts, API keys, project config, function source | nothing needed to rebuild on clean hardware |
+| Lives in | Database → Snapshots | Settings → Recovery |
+| Restore | in the dashboard, behind a dialog naming the snapshot's timestamp | **`npm run recovery -- restore`** |
+
+There is no control anywhere labelled just "Backup". The word is the problem:
+an operator who sees it and concludes their server is safe has been misled by
+the product, not by their own carelessness.
+
+**Restore of a deployment is a command, not a button, and that is the design.**
+On the day you restore, this dashboard is part of what you lost — there is a new
+machine, a checkout, a bundle and a credential. A restore that can only be
+started from the thing you no longer have is not a recovery product. Export
+stays in the dashboard because export happens while the deployment is healthy,
+which is when somebody is looking at it.
+
+**Deployment recovery is refused in Cloud by edition, not by permission.** It
+reads every tenant's projects, users and secrets. Self-hosted that is right —
+the single account is the operator of the machine. In Cloud it would be one
+tenant exporting everybody, and no role makes that acceptable, so the check is
+one nobody can satisfy by being granted more. It runs *before* authentication
+and answers 404, since a 401 would tell an unauthenticated caller the capability
+exists.
+
+**Scheduled snapshots stay opt-in off Cloud** (`BACKENLY_SCHEDULED_SNAPSHOTS`).
+Not because they are a Cloud feature, but because enabling them would start
+writing a dump of every project to `BACKUP_DIR` daily, on every existing install,
+at upgrade.
+
 ### Still to build
 
-The UI, and un-gating. The workspace snapshot stays Cloud-gated until then, so
-nothing is exposed under a name that implies more than it does.
+Nothing in this tranche. Storage objects are carried and restored; the remaining
+gap is off-box copies, which the product states rather than solves — the panel
+prints the bundle path next to the fact that a backup living only on the machine
+it protects is not a backup.
 
 ## Surface integrity, verified 2026-09-19
 
