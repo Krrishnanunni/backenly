@@ -237,12 +237,23 @@ async function collectDeploymentMetadata(): Promise<DeploymentMetadata> {
   const extensions = await prisma.$queryRawUnsafe<{ extname: string }[]>(
     'SELECT extname FROM pg_extension ORDER BY extname',
   )
-  // The latest APPLIED migration, not the latest on disk: a bundle describes
-  // the database it was taken from, not the checkout that took it.
-  const migrations = await prisma.$queryRawUnsafe<{ migration_name: string }[]>(
-    `SELECT migration_name FROM _prisma_migrations
-     WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1`,
-  ).catch(() => [] as { migration_name: string }[])
+  // The latest APPLIED migration, not the latest on disk: a bundle describes the
+  // database it was taken from, not the checkout that took it.
+  //
+  // Asked for existence first rather than catching the failure. A deployment
+  // built with `db push` has no _prisma_migrations, which is a normal state -
+  // but querying it anyway makes Prisma log a red `prisma:error` line, and an
+  // operator watching their first backup scroll past that reasonably concludes
+  // it broke.
+  const [{ present }] = await prisma.$queryRawUnsafe<{ present: boolean }[]>(
+    `SELECT to_regclass('public._prisma_migrations') IS NOT NULL AS present`,
+  )
+  const migrations = present
+    ? await prisma.$queryRawUnsafe<{ migration_name: string }[]>(
+        `SELECT migration_name FROM _prisma_migrations
+         WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1`,
+      )
+    : []
 
   let backenlyVersion = 'unknown'
   try {
