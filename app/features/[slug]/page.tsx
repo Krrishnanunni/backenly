@@ -45,19 +45,19 @@ const FEATURES: Record<string, FeatureData> = {
     slug: 'ai-backend-generation',
     name: 'AI Backend Generation',
     icon: Sparkles,
-    metaTitle: 'AI Backend Generation — Build a Complete Backend from Plain English',
+    metaTitle: 'AI Backend Generation: Build a Complete Backend from Plain English',
     metaDescription:
-      'Backenly generates a production-ready backend automatically from a plain English description. Database schema, REST APIs, authentication, and storage — all created by AI in minutes.',
+      'Backenly generates a production-ready backend automatically from a plain English description. Database schema, REST APIs, authentication, and storage, all created by AI in minutes.',
     headline: 'Your entire backend, generated from a description',
-    subheadline: 'Tell Backenly what you need. The AI builds it — schema, APIs, auth, storage — instantly.',
+    subheadline: 'Tell Backenly what you need. The AI builds it: schema, APIs, auth, storage, instantly.',
     what: "AI backend generation is the core of Backenly. Instead of manually designing a database schema, writing API endpoints, configuring authentication, and setting up storage, you describe what you need in plain English. Backenly's two-brain AI system understands your intent and generates a complete, production-ready backend automatically.",
-    how: "You write a description like \"I need a database for an e-commerce app with products, orders, and customers. Each order should belong to a customer and contain multiple products.\" Backenly parses this description, extracts the data model, infers relationships, generates a normalized PostgreSQL schema, creates REST API endpoints for every table, applies row-level security, wires up authentication, and deploys everything — all in one step.",
+    how: "You write a description like \"I need a database for an e-commerce app with products, orders, and customers. Each order should belong to a customer and contain multiple products.\" Backenly parses this description, extracts the data model, infers relationships, generates a normalized PostgreSQL schema, creates REST API endpoints for every table, applies row-level security, wires up authentication, and deploys everything, all in one step.",
     why: "Building a backend manually requires weeks of engineering work: designing schemas, writing migrations, building API routes, implementing auth, configuring storage, and managing deployments. AI backend generation eliminates every step. You go from idea to working backend in minutes, not weeks.",
-    inPractice: "Take the description \"users can post recipes with photos, follow each other, and save favorites — users only edit their own recipes.\" Backenly shows you the full plan first: four tables (users, recipes, follows, favorites), the foreign keys between them, the API endpoints, and the access policies derived from that last clause. You confirm with one click, the platform applies the plan as governed steps, and then — the part that separates this from a code generator — it verifies the result behaviorally: a real test signup over live HTTP, real CRUD calls against the generated endpoints, and a second test user who is proven to receive zero rows of the first user's private data. Every check comes back with expandable evidence — in your coding agent's response and in the project History. If one fails, you see the failure, not a green checkmark.",
+    inPractice: "Take the description \"users can post recipes with photos, follow each other, and save favorites, users only edit their own recipes.\" Backenly shows you the full plan first: four tables (users, recipes, follows, favorites), the foreign keys between them, the API endpoints, and the access policies derived from that last clause. You confirm with one click, the platform applies the plan as governed steps, and then: the part that separates this from a code generator: it verifies the result behaviorally: a real test signup over live HTTP, real CRUD calls against the generated endpoints, and a second test user who is proven to receive zero rows of the first user's private data. Every check comes back with expandable evidence, in your coding agent's response and in the project History. If one fails, you see the failure, not a green checkmark.",
     details: [
       {
         title: 'Intent understanding',
-        body: "Backenly's first AI brain extracts an intent graph from your description — entities, relationships, access rules, and actions — without writing a single line of SQL.",
+        body: "Backenly's first AI brain extracts an intent graph from your description: entities, relationships, access rules, and actions, without writing a single line of SQL.",
       },
       {
         title: 'Automated schema generation',
@@ -65,21 +65,21 @@ const FEATURES: Record<string, FeatureData> = {
       },
       {
         title: 'API generation included',
-        body: 'Every table gets a complete REST API automatically — list, create, get, update, delete, filter, and sort endpoints, all properly authenticated.',
+        body: 'Every table gets a complete REST API automatically: list, create, get, update, delete, filter, and sort endpoints, all properly authenticated.',
       },
       {
         title: 'Iterative generation',
-        body: 'Change your mind? Describe the change to Backenly. The AI updates the schema and APIs incrementally — no manual migrations or refactoring required.',
+        body: 'Change your mind? Describe the change to Backenly. The AI updates the schema and APIs incrementally, no manual migrations or refactoring required.',
       },
     ],
     faq: [
       {
         q: 'What languages or frameworks does Backenly support?',
-        a: 'Backenly generates a standard REST API accessible from any language or framework — JavaScript, Python, Swift, Kotlin, or anything else that can make HTTP requests. A JavaScript SDK is also included.',
+        a: 'Backenly generates a standard REST API accessible from any language or framework: JavaScript, Python, Swift, Kotlin, or anything else that can make HTTP requests. A JavaScript SDK is also included.',
       },
       {
         q: 'Can I change my backend after it is generated?',
-        a: "Yes. You can describe changes to Backenly at any time — add a new table, rename a column, add a relationship — and the AI will update your backend incrementally. Backenly maintains a full change history with rollback support.",
+        a: "Yes. You can describe changes to Backenly at any time: add a new table, rename a column, add a relationship, and the AI will update your backend incrementally. Backenly maintains a full change history with rollback support.",
       },
       {
         q: 'How complex can my backend description be?',
@@ -92,23 +92,23 @@ const FEATURES: Record<string, FeatureData> = {
     slug: 'database-setup',
     name: 'Database Setup',
     icon: Database,
-    metaTitle: 'Automatic Database Setup — PostgreSQL Schema Generated from Plain English',
+    metaTitle: 'Automatic Database Setup: PostgreSQL Schema Generated from Plain English',
     metaDescription:
-      'Backenly automatically generates a production-ready PostgreSQL database schema from a plain English description. Tables, columns, relationships, indexes, and row-level security — zero configuration.',
+      'Backenly automatically generates a production-ready PostgreSQL database schema from a plain English description. Tables, columns, relationships, indexes, and row-level security, zero configuration.',
     headline: 'A production PostgreSQL database, generated automatically',
     subheadline: 'Describe your data model in plain English. Backenly creates the schema, tables, relationships, and security policies automatically.',
-    what: "Backenly's database setup feature automatically generates a complete PostgreSQL database schema from your natural language description. You describe what data your application needs and how it is related — Backenly generates the tables, columns, data types, foreign key relationships, indexes, and row-level security policies. No schema design sessions, no hand-written migration files. What you get is ordinary PostgreSQL: query it with standard SQL, or through the same PostgREST grammar Supabase serves, with embedded resources and the full filter vocabulary. The generation replaces the design work, not the API you already know.",
+    what: "Backenly's database setup feature automatically generates a complete PostgreSQL database schema from your natural language description. You describe what data your application needs and how it is related: Backenly generates the tables, columns, data types, foreign key relationships, indexes, and row-level security policies. No schema design sessions, no hand-written migration files. What you get is ordinary PostgreSQL: query it with standard SQL, or through the same PostgREST grammar Supabase serves, with embedded resources and the full filter vocabulary. The generation replaces the design work, not the API you already know.",
     how: "When you describe your backend, Backenly's AI identifies the entities in your description and the relationships between them. It selects appropriate PostgreSQL data types for each field, creates proper foreign key constraints to maintain referential integrity, adds indexes for common query patterns, and applies row-level security policies to protect your data at the database level.",
-    why: "Database design is time-consuming and error-prone. Getting the schema right requires experience — understanding normalization, choosing the right data types, designing for query performance, and implementing security correctly. Backenly handles all of this automatically, giving you a production-grade schema without the weeks of work.",
-    inPractice: "The test of a schema tool is not creating tables — it is changing them once they hold live data. Ask Backenly to \"add a comments table, each task can have multiple comments\" and it plans the change against your live backend: the new table, the foreign keys, the APIs, and policies consistent with your existing rules, applied as governed steps and verified afterward. Ask it to \"drop the projects table\" and it refuses to run silently: an approval card shows exactly how many live rows are affected and whether the data is recoverable, and nothing happens until you explicitly confirm. Every change — additive or destructive — gets a restore point, so the schema can be rolled back to any saved version. Each project's schema is also physically isolated in its own PostgreSQL namespace, so no bug or query can ever cross between projects.",
+    why: "Database design is time-consuming and error-prone. Getting the schema right requires experience: understanding normalization, choosing the right data types, designing for query performance, and implementing security correctly. Backenly handles all of this automatically, giving you a production-grade schema without the weeks of work.",
+    inPractice: "The test of a schema tool is not creating tables, it is changing them once they hold live data. Ask Backenly to \"add a comments table, each task can have multiple comments\" and it plans the change against your live backend: the new table, the foreign keys, the APIs, and policies consistent with your existing rules, applied as governed steps and verified afterward. Ask it to \"drop the projects table\" and it refuses to run silently: an approval card shows exactly how many live rows are affected and whether the data is recoverable, and nothing happens until you explicitly confirm. Every change: additive or destructive: gets a restore point, so the schema can be rolled back to any saved version. Each project's schema is also physically isolated in its own PostgreSQL namespace, so no bug or query can ever cross between projects.",
     details: [
       {
         title: 'Normalized schema design',
-        body: 'Backenly generates properly normalized tables — eliminating data duplication and ensuring referential integrity through correct use of foreign keys and join tables.',
+        body: 'Backenly generates properly normalized tables, eliminating data duplication and ensuring referential integrity through correct use of foreign keys and join tables.',
       },
       {
         title: 'Appropriate data types',
-        body: 'The AI selects correct PostgreSQL data types for each field — UUIDs for IDs, timestamps with timezone for dates, JSONB for flexible data, text vs. varchar as appropriate.',
+        body: 'The AI selects correct PostgreSQL data types for each field: UUIDs for IDs, timestamps with timezone for dates, JSONB for flexible data, text vs. varchar as appropriate.',
       },
       {
         title: 'Row-level security',
@@ -116,17 +116,17 @@ const FEATURES: Record<string, FeatureData> = {
       },
       {
         title: 'Schema evolution',
-        body: "Need to add a column or a new table? Describe the change and Backenly updates the schema safely — with migration tracking and the ability to roll back.",
+        body: "Need to add a column or a new table? Describe the change and Backenly updates the schema safely, with migration tracking and the ability to roll back.",
       },
     ],
     faq: [
       {
         q: 'Does Backenly use PostgreSQL?',
-        a: 'Yes. Backenly uses PostgreSQL — the industry-standard open-source relational database. Your data is stored in a properly isolated PostgreSQL schema per project.',
+        a: 'Yes. Backenly uses PostgreSQL, the industry-standard open-source relational database. Your data is stored in a properly isolated PostgreSQL schema per project.',
       },
       {
         q: 'Can I access the database directly?',
-        a: 'Yes. You can provision a read-only PostgreSQL connection string on demand, and arm a read-write one explicitly from the dashboard — both scoped to your project’s schema. Full pg_dump exports are available any time, and read-only SQL (joins, aggregates, window functions, CTEs, EXPLAIN) runs from the CLI and over MCP. What Backenly governs is structural change: schema mutations go through planned, verified, reversible actions rather than ad-hoc DDL — so your data is portable, while your schema stays accountable.',
+        a: 'Yes. You can provision a read-only PostgreSQL connection string on demand, and arm a read-write one explicitly from the dashboard, both scoped to your project’s schema. Full pg_dump exports are available any time, and read-only SQL (joins, aggregates, window functions, CTEs, EXPLAIN) runs from the CLI and over MCP. What Backenly governs is structural change: schema mutations go through planned, verified, reversible actions rather than ad-hoc DDL: so your data is portable, while your schema stays accountable.',
       },
       {
         q: 'What happens to my data if I upgrade or downgrade my plan?',
@@ -139,15 +139,15 @@ const FEATURES: Record<string, FeatureData> = {
     slug: 'authentication',
     name: 'Authentication',
     icon: Lock,
-    metaTitle: 'Built-in Authentication — User Auth for Your Backend, Instantly',
+    metaTitle: 'Built-in Authentication: User Auth for Your Backend, Instantly',
     metaDescription:
-      'Backenly includes complete user authentication out of the box — sign-up, sign-in, JWT tokens, session management, and access control. No auth library to configure or maintain.',
+      'Backenly includes complete user authentication out of the box: sign-up, sign-in, JWT tokens, session management, and access control. No auth library to configure or maintain.',
     headline: 'Complete user authentication, built in',
-    subheadline: 'Sign-up, sign-in, JWT sessions, and access control — all included. No auth library to configure.',
-    what: "Backenly includes a complete user authentication system for every project. End-users of your application can register, sign in, and authenticate API requests using JWT tokens. The authentication system is isolated per project — each project has its own user database and JWT secret, completely separate from all other projects.",
+    subheadline: 'Sign-up, sign-in, JWT sessions, and access control, all included. No auth library to configure.',
+    what: "Backenly includes a complete user authentication system for every project. End-users of your application can register, sign in, and authenticate API requests using JWT tokens. The authentication system is isolated per project: each project has its own user database and JWT secret, completely separate from all other projects.",
     how: "When your project is created, Backenly automatically provisions a users table in your project's workspace, sets up sign-up and sign-in API endpoints, configures JWT token generation and validation, and applies row-level security so each user can only access their own data. Your frontend can call the auth endpoints directly or use the Backenly SDK to handle authentication flows.",
-    why: "Authentication is one of the most complex and security-critical parts of any backend. Getting it wrong can expose user data or allow unauthorized access. Backenly implements authentication correctly by default — using industry-standard JWT tokens, bcrypt password hashing, and proper session management — so you never have to worry about auth security.",
-    inPractice: "From your frontend, auth is two SDK calls: backend.auth.signUp({ email, password }) creates a real row in your project's users table, and backend.auth.signIn(...) starts a session the SDK carries on every request automatically. Beyond email/password, projects can enable Google sign-in, email verification, and magic links — with hosted pages and branded emails handled by the platform. The part you never see is the part that matters most: because sessions integrate with row-level security in PostgreSQL, a signed-in user's queries are already scoped to their own data. After every build, Backenly proves this by signing in as a second test user and confirming they receive zero rows of another user's private data — with the evidence shown, not asserted.",
+    why: "Authentication is one of the most complex and security-critical parts of any backend. Getting it wrong can expose user data or allow unauthorized access. Backenly implements authentication correctly by default: using industry-standard JWT tokens, bcrypt password hashing, and proper session management, so you never have to worry about auth security.",
+    inPractice: "From your frontend, auth is two SDK calls: backend.auth.signUp({ email, password }) creates a real row in your project's users table, and backend.auth.signIn(...) starts a session the SDK carries on every request automatically. Beyond email/password, projects can enable Google sign-in, email verification, and magic links, with hosted pages and branded emails handled by the platform. The part you never see is the part that matters most: because sessions integrate with row-level security in PostgreSQL, a signed-in user's queries are already scoped to their own data. After every build, Backenly proves this by signing in as a second test user and confirming they receive zero rows of another user's private data: with the evidence shown, not asserted.",
     details: [
       {
         title: 'Sign-up and sign-in endpoints',
@@ -159,11 +159,11 @@ const FEATURES: Record<string, FeatureData> = {
       },
       {
         title: 'Row-level security integration',
-        body: 'Authentication integrates with database row-level security — authenticated users can only read and write their own data, enforced at the database level, not just the API layer.',
+        body: 'Authentication integrates with database row-level security: authenticated users can only read and write their own data, enforced at the database level, not just the API layer.',
       },
       {
         title: 'User management via SDK',
-        body: 'The Backenly JavaScript SDK includes auth helpers for sign-up, sign-in, sign-out, and token refresh — so your frontend can handle authentication with a few lines of code.',
+        body: 'The Backenly JavaScript SDK includes auth helpers for sign-up, sign-in, sign-out, and token refresh, so your frontend can handle authentication with a few lines of code.',
       },
     ],
     faq: [
@@ -186,27 +186,27 @@ const FEATURES: Record<string, FeatureData> = {
     slug: 'api-generation',
     name: 'API Generation',
     icon: Zap,
-    metaTitle: 'Instant REST API on PostgREST — The API Is Your Schema',
+    metaTitle: 'Instant REST API on PostgREST: The API Is Your Schema',
     metaDescription:
-      'Every table in Backenly is served by PostgREST — the same engine Supabase runs — reading straight from the PostgreSQL catalog. Filters, ordering, pagination, and embedded resources, with authorization enforced by Postgres grants and RLS.',
+      'Every table in Backenly is served by PostgREST, the same engine Supabase runs, reading straight from the PostgreSQL catalog. Filters, ordering, pagination, and embedded resources, with authorization enforced by Postgres grants and RLS.',
     headline: 'The API is your schema',
-    subheadline: 'Every table is served by PostgREST, reading directly from the PostgreSQL catalog. No registry to keep in sync — a table created a second ago is queryable now.',
-    what: "Every table in your project is served by PostgREST — the same engine Supabase runs — reading directly from the PostgreSQL catalog. There is no separate API registry to generate, deploy, or keep in sync: the API *is* the schema, so a table created a second ago is queryable immediately, and a column renamed a second ago is reflected without a rebuild. You get filtering, ordering, pagination, full-text search, and embedded resources across two surfaces that share one engine and one authorization path.",
-    how: "Backenly exposes two surfaces over the same engine. `/api/v1/{projectId}/db/{table}` is Backenly's stable REST contract — list, create, get, update, delete with typed responses. `/api/v2/{projectId}/{table}` passes PostgREST's native grammar through untouched: `?price=gte.100`, `?or=(a.eq.1,b.eq.2)`, `?order=created_at.desc`, and embedded resources — `?select=*,author(*)` returns a post and its author in one round trip. If you already know Supabase or PostgREST, you know this API.",
-    why: "Generated API layers drift. The moment the code that serves your data is separate from the schema that defines it, the two can disagree — and that gap is where stale endpoints, forgotten authorization checks, and 'the table exists but the API doesn't' bugs live. Reading from the catalog removes the gap by construction. Authorization is enforced by PostgreSQL grants and row-level security rather than by application code, so a request for another tenant's rows fails on a missing database privilege instead of on a check somebody remembered to write.",
-    inPractice: "Every endpoint is testable from the dashboard the moment it exists: the APIs view lists each route per table, and an inline tester sends real requests against your live backend — type a JSON body into POST /auth/signup, send it, and watch the actual HTTP response, then open the users table and see the row it created. From code, the SDK mirrors the API one-to-one: backend.tasks.list({ where: { status: 'todo' }, orderBy: 'due_date', limit: 25 }) for filtered queries, backend.projects.list({ include: ['tasks'] }) to resolve relations server-side in one request, and backend.tasks.count(...) when you need numbers without rows. Because row-level security lives in the database, all of these return only what the calling user is allowed to see — there is no way to forget an authorization check in your client code.",
+    subheadline: 'Every table is served by PostgREST, reading directly from the PostgreSQL catalog. No registry to keep in sync, a table created a second ago is queryable now.',
+    what: "Every table in your project is served by PostgREST, the same engine Supabase runs, reading directly from the PostgreSQL catalog. There is no separate API registry to generate, deploy, or keep in sync: the API *is* the schema, so a table created a second ago is queryable immediately, and a column renamed a second ago is reflected without a rebuild. You get filtering, ordering, pagination, full-text search, and embedded resources across two surfaces that share one engine and one authorization path.",
+    how: "Backenly exposes two surfaces over the same engine. `/api/v1/{projectId}/db/{table}` is Backenly's stable REST contract: list, create, get, update, delete with typed responses. `/api/v2/{projectId}/{table}` passes PostgREST's native grammar through untouched: `?price=gte.100`, `?or=(a.eq.1,b.eq.2)`, `?order=created_at.desc`, and embedded resources: `?select=*,author(*)` returns a post and its author in one round trip. If you already know Supabase or PostgREST, you know this API.",
+    why: "Generated API layers drift. The moment the code that serves your data is separate from the schema that defines it, the two can disagree: and that gap is where stale endpoints, forgotten authorization checks, and 'the table exists but the API doesn't' bugs live. Reading from the catalog removes the gap by construction. Authorization is enforced by PostgreSQL grants and row-level security rather than by application code, so a request for another tenant's rows fails on a missing database privilege instead of on a check somebody remembered to write.",
+    inPractice: "Every endpoint is testable from the dashboard the moment it exists: the APIs view lists each route per table, and an inline tester sends real requests against your live backend: type a JSON body into POST /auth/signup, send it, and watch the actual HTTP response, then open the users table and see the row it created. From code, the SDK mirrors the API one-to-one: backend.tasks.list({ where: { status: 'todo' }, orderBy: 'due_date', limit: 25 }) for filtered queries, backend.projects.list({ include: ['tasks'] }) to resolve relations server-side in one request, and backend.tasks.count(...) when you need numbers without rows. Because row-level security lives in the database, all of these return only what the calling user is allowed to see, there is no way to forget an authorization check in your client code.",
     details: [
       {
         title: 'Two surfaces, one engine',
-        body: '/api/v1 is Backenly’s stable REST contract — list, create, get, update, delete with typed responses. /api/v2 is PostgREST’s native grammar, passed through untouched. Both read the same catalog and share one authorization path.',
+        body: '/api/v1 is Backenly’s stable REST contract: list, create, get, update, delete with typed responses. /api/v2 is PostgREST’s native grammar, passed through untouched. Both read the same catalog and share one authorization path.',
       },
       {
         title: 'Embedded resources in one round trip',
-        body: '?select=*,author(*) returns a post and its author together — the relationship is resolved from the foreign key in the catalog, so there is nothing to configure and no N+1 to hand-optimize.',
+        body: '?select=*,author(*) returns a post and its author together: the relationship is resolved from the foreign key in the catalog, so there is nothing to configure and no N+1 to hand-optimize.',
       },
       {
         title: 'Authorization in the database, not the app',
-        body: 'Grants and row-level security decide what a request can reach. A read for another tenant’s rows — or for the auth table, or through an embedded resource — is refused by Postgres itself, not by a check in application code that someone has to remember to write.',
+        body: 'Grants and row-level security decide what a request can reach. A read for another tenant’s rows: or for the auth table, or through an embedded resource: is refused by Postgres itself, not by a check in application code that someone has to remember to write.',
       },
       {
         title: 'Typed clients and a drift gate',
@@ -216,15 +216,15 @@ const FEATURES: Record<string, FeatureData> = {
     faq: [
       {
         q: 'Is this a custom API layer or a real standard?',
-        a: 'It is PostgREST — the same open-source engine Supabase runs — reading directly from your PostgreSQL catalog. On query capability Backenly is at parity with Supabase: same engine, same grammar, embedded resources included. If you already know one, you know the other.',
+        a: 'It is PostgREST, the same open-source engine Supabase runs, reading directly from your PostgreSQL catalog. On query capability Backenly is at parity with Supabase: same engine, same grammar, embedded resources included. If you already know one, you know the other.',
       },
       {
         q: 'Do I have to regenerate the API when my schema changes?',
-        a: 'No. The API is the schema. PostgREST reads the catalog, so a table or column created a second ago is queryable immediately — there is no registry to regenerate, redeploy, or keep in sync.',
+        a: 'No. The API is the schema. PostgREST reads the catalog, so a table or column created a second ago is queryable immediately: there is no registry to regenerate, redeploy, or keep in sync.',
       },
       {
         q: 'Can I add custom API logic or custom endpoints?',
-        a: 'Yes — serverless TypeScript functions and event triggers add custom business logic that runs on API events, on a schedule, or at a public HTTPS endpoint.',
+        a: 'Yes: serverless TypeScript functions and event triggers add custom business logic that runs on API events, on a schedule, or at a public HTTPS endpoint.',
       },
       {
         q: 'Is there API documentation?',
@@ -237,15 +237,15 @@ const FEATURES: Record<string, FeatureData> = {
     slug: 'deployment-ready-backends',
     name: 'Deployment-Ready Backends',
     icon: Rocket,
-    metaTitle: 'Deployment-Ready Backends — Live in Minutes, No DevOps Required',
+    metaTitle: 'Deployment-Ready Backends: Live in Minutes, No DevOps Required',
     metaDescription:
-      'Backenly deploys your backend automatically. No Docker, no Kubernetes, no cloud consoles. Your backend goes live at a public URL in minutes — with monitoring, rollback snapshots, and continuous health management built in.',
+      'Backenly deploys your backend automatically. No Docker, no Kubernetes, no cloud consoles. Your backend goes live at a public URL in minutes: with monitoring, rollback snapshots, and continuous health management built in.',
     headline: 'Your backend is live before you finish your coffee',
     subheadline: 'No Docker, no Kubernetes, no cloud console. Backenly deploys and manages your backend automatically.',
-    what: "Backenly deploys your backend automatically as part of the generation process. When you describe your backend and Backenly generates the schema and APIs, the entire backend is deployed and live at a public URL — without any deployment steps on your part. No Docker containers to build, no cloud infrastructure to provision, no Kubernetes manifests to write.",
-    how: "Backenly runs your backend on managed infrastructure. When a new project is created or an update is applied, Backenly handles the deployment pipeline — provisioning the database, deploying the API server, configuring the network, and making the endpoints publicly accessible. The backend runs continuously and Backenly monitors it for health issues, applying automatic fixes when safe to do so.",
+    what: "Backenly deploys your backend automatically as part of the generation process. When you describe your backend and Backenly generates the schema and APIs, the entire backend is deployed and live at a public URL, without any deployment steps on your part. No Docker containers to build, no cloud infrastructure to provision, no Kubernetes manifests to write.",
+    how: "Backenly runs your backend on managed infrastructure. When a new project is created or an update is applied, Backenly handles the deployment pipeline: provisioning the database, deploying the API server, configuring the network, and making the endpoints publicly accessible. The backend runs continuously and Backenly monitors it for health issues, applying automatic fixes when safe to do so.",
     why: "Deployment and DevOps is a full-time job. Managing cloud infrastructure, container orchestration, database provisioning, and monitoring requires specialized expertise and significant ongoing effort. Backenly handles all of this automatically, so you and your team can focus entirely on building your product.",
-    inPractice: "Going live is a sentence — \"put it live\" — and before every deploy the platform captures a rollback snapshot, so shipping is never a one-way door. After launch, the autonomy loop takes over: it watches your real request traffic (requests, latency, error rates) every minute on every plan, detects anomalies, and reacts at the autonomy level you choose. In review-only mode, every proposed fix waits for your approval in a queue; in safe-fixes mode, low-risk repairs are applied automatically and written up afterward with what was detected, what changed, and how the fix was verified. The result is a backend with an operator on duty from day one — one that never sleeps and documents everything it touches.",
+    inPractice: "Going live is a sentence: \"put it live\": and before every deploy the platform captures a rollback snapshot, so shipping is never a one-way door. After launch, the autonomy loop takes over: it watches your real request traffic (requests, latency, error rates) every minute on every plan, detects anomalies, and reacts at the autonomy level you choose. In review-only mode, every proposed fix waits for your approval in a queue; in safe-fixes mode, low-risk repairs are applied automatically and written up afterward with what was detected, what changed, and how the fix was verified. The result is a backend with an operator on duty from day one, one that never sleeps and documents everything it touches.",
     details: [
       {
         title: 'Deployed in minutes',
@@ -257,7 +257,7 @@ const FEATURES: Record<string, FeatureData> = {
       },
       {
         title: 'Continuous health monitoring',
-        body: 'Backenly monitors your backend continuously — real request metrics, schema integrity, auth configuration, and security policies — detecting issues and fixing the ones that are safe to fix.',
+        body: 'Backenly monitors your backend continuously: real request metrics, schema integrity, auth configuration, and security policies, detecting issues and fixing the ones that are safe to fix.',
       },
       {
         title: 'Minimal maintenance overhead',
@@ -267,7 +267,7 @@ const FEATURES: Record<string, FeatureData> = {
     faq: [
       {
         q: 'Where is my backend hosted?',
-        a: "On Backenly Cloud, we host your backend on managed infrastructure — each project's data lives in a fully isolated PostgreSQL schema, with no data leakage between projects. Backenly is also open source (Apache-2.0), so you can self-host the whole platform on your own infrastructure instead.",
+        a: "On Backenly Cloud, we host your backend on managed infrastructure: each project's data lives in a fully isolated PostgreSQL schema, with no data leakage between projects. Backenly is also open source (Apache-2.0), so you can self-host the whole platform on your own infrastructure instead.",
       },
       {
         q: 'Can I use a custom domain?',
@@ -275,7 +275,7 @@ const FEATURES: Record<string, FeatureData> = {
       },
       {
         q: 'What is the uptime guarantee?',
-        a: "Backenly is designed for production use. Specific SLA terms are available on the Enterprise plan. The Free and Pro plans receive the same infrastructure reliability — there is no degraded tier.",
+        a: "Backenly is designed for production use. Specific SLA terms are available on the Enterprise plan. The Free and Pro plans receive the same infrastructure reliability, there is no degraded tier.",
       },
     ],
     relatedFeatures: ['ai-backend-generation', 'database-setup', 'api-generation'],

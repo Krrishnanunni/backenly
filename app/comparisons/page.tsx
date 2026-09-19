@@ -20,7 +20,7 @@ import { COMPARISON_LIST } from './data'
 const APP_URL = 'https://backenly.com'
 
 export const metadata: Metadata = {
-  title: 'Backenly comparisons — how it differs from other backend platforms',
+  title: 'Backenly comparisons: how it differs from other backend platforms',
   description:
     'Four comparisons against Supabase, Firebase, integrated app builders, and building a backend yourself. Each one says where the other option is the better choice.',
   keywords: [
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     'Postgres backend platform',
   ],
   openGraph: {
-    title: 'Backenly comparisons — how it differs from other backend platforms',
+    title: 'Backenly comparisons: how it differs from other backend platforms',
     description:
       'Comparisons against Supabase, Firebase, integrated app builders, and building it yourself. Each one says where the other option wins.',
     url: `${APP_URL}/comparisons`,
@@ -69,7 +69,6 @@ export default function ComparisonsPage() {
       />
       <main className="relative z-20">
         <PageHero
-          align="center"
           eyebrow="Comparisons"
           title="How Backenly differs from other backend platforms"
           subtitle="Four comparisons, each one written to be useful to someone who might not pick us. Every page says where the other option is stronger."
@@ -126,8 +125,8 @@ export default function ComparisonsPage() {
             Not sure which one you are comparing against?
           </SectionHeading>
           <Lead className="mb-6">
-            These pages assume you already have a shortlist. If you are earlier than that — working
-            out whether to move at all, or what to weigh — the alternatives page covers the criteria
+            These pages assume you already have a shortlist. If you are earlier than that, working
+            out whether to move at all, or what to weigh, the alternatives page covers the criteria
             that decide it, where Backenly does not fit, and when the right answer is to stay where
             you are.
           </Lead>

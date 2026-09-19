@@ -22,7 +22,7 @@ import { CRITERIA, DO_NOT_SWITCH, FAQ, NOT_FOR, REASONS_TEAMS_LOOK, SWITCHING_CO
 const APP_URL = 'https://backenly.com'
 
 export const metadata: Metadata = {
-  title: 'Backend platform alternatives — how to evaluate one, and when to stay',
+  title: 'Backend platform alternatives: how to evaluate one, and when to stay',
   description:
     'The criteria that actually decide a backend platform: data model, who applies schema changes, who operates it after launch, agent blast radius, exit path, and billing shape. Includes where Backenly does not fit.',
   keywords: [
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     'backend as a service evaluation',
   ],
   openGraph: {
-    title: 'Backend platform alternatives — how to evaluate one, and when to stay',
+    title: 'Backend platform alternatives: how to evaluate one, and when to stay',
     description:
       'The criteria that decide a backend platform, where Backenly fits, and when the right answer is to stay where you are.',
     url: `${APP_URL}/alternatives`,
@@ -63,7 +63,6 @@ export default function AlternativesPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(faqSchema) }} />
       <main className="relative z-20">
         <PageHero
-          align="center"
           eyebrow="Alternatives"
           title="Choosing a backend platform, including when not to"
           subtitle="What actually decides this, where Backenly fits against each criterion, and the cases where you should stay on what you have."

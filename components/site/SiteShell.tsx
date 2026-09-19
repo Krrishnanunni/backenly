@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useSettledReducedMotion } from '@/lib/hooks/useSettledReducedMotion'
 import { Icon } from '@iconify/react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { registerSiteIcons } from '@/lib/icons/registry'
 import { BrandMark } from '@/components/site/BrandMark'
@@ -36,7 +37,28 @@ export const ROUTES = {
   // resolve for anonymous visitors. The navbar links to it with a bare icon:
   // the star count used to be rendered beside it and was deliberately removed.
   github: 'https://github.com/backenly/backenly',
+  /**
+   * The Backenly community server.
+   *
+   * Verified against the Discord API on 2026-09-18: guild "Backenly", channel
+   * #general, `expires_at: null`. The null is the point. This replaced a
+   * default invite that would have died on 2026-10-18, and a dated invite sits
+   * in the navbar of EVERY marketing page, so it would have rotted silently
+   * with nothing in CI to catch it.
+   *
+   * If you ever swap this, check the replacement never expires first:
+   *   curl -s https://discord.com/api/v10/invites/<code> | grep expires_at
+   * Anything other than `"expires_at": null` will break the nav sitewide on a
+   * date nobody has written down.
+   */
+  discord: 'https://discord.gg/6cHeYXDAu3',
 } as const
+
+/**
+ * One switch for the Discord nav icon. Flip to false to pull it from the
+ * navbar and the mobile menu at once, without hunting through the JSX.
+ */
+const SHOW_DISCORD = true
 
 const NAV_LINKS = [
   { label: 'Product', href: '/#capabilities', activePath: '/' },
@@ -49,6 +71,28 @@ const NAV_LINKS = [
 /* ─────────────────────────────────────────────────────────────
    Page shell: wraps any marketing page with the same chrome.
 ───────────────────────────────────────────────────────────── */
+/**
+ * Moves focus to the page's own <main>, rather than relying on the href alone.
+ *
+ * A bare `href="#main-content"` only works if something on the page carries
+ * that id, and each marketing page renders its own <main>; wrapping children
+ * here to hold the id instead is not an option, because a `display: contents`
+ * wrapper cannot take focus (the hash updates and the caret stays in the nav)
+ * and a real wrapper would insert a box into the shell's flex column.
+ *
+ * So the anchor keeps the href for the no-JS case (the landing page carries
+ * the matching id) and this handler does the actual focus move everywhere.
+ * `preventScroll` because <main> starts at the top of the document already.
+ */
+function skipToContent(event: React.MouseEvent<HTMLAnchorElement>) {
+  const main = document.querySelector('main')
+  if (!main) return
+
+  event.preventDefault()
+  main.setAttribute('tabindex', '-1')
+  main.focus({ preventScroll: true })
+}
+
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <div>
@@ -58,6 +102,19 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
         style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
       >
         <div className="relative w-full min-h-screen flex flex-col z-20">
+          {/* First tab stop on every marketing page: lets a keyboard or screen
+              reader user jump the nav instead of walking it on each page.
+              Visually hidden until focused. */}
+          <a
+            href="#main-content"
+            onClick={skipToContent}
+            // The padding carries `focus:` too: `not-sr-only` resets padding
+            // to 0, so an unprefixed px-4/py-2 is wiped the moment the link
+            // becomes visible and it renders as bare text on black.
+            className="sr-only rounded-md bg-white text-sm font-semibold text-black focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:px-4 focus:py-2"
+          >
+            Skip to content
+          </a>
           <NavBar />
           {children}
           <SiteFooter />
@@ -73,7 +130,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
 export function NavBar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const pathname = usePathname()
-  const reduceMotion = useReducedMotion()
+  const reduceMotion = useSettledReducedMotion()
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -86,9 +143,9 @@ export function NavBar() {
 
   return (
     <motion.header
-      initial={reduceMotion ? false : { opacity: 0, y: -18 }}
+      initial={{ opacity: 0, y: -18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: reduceMotion ? 0 : 0.7, ease: [0.16, 1, 0.3, 1] }}
       className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-black/[0.88] backdrop-blur-xl"
     >
       {/* Container tracks the landing's 100rem sections so the logo sits on
@@ -111,10 +168,14 @@ export function NavBar() {
             auth cluster. justify-between + one right group = right-aligned. */}
         <div className="hidden items-center gap-6 lg:flex">
           <motion.nav
-            initial={reduceMotion ? false : { opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-center gap-1 text-[15px] font-medium text-zinc-400"
+            transition={{ duration: reduceMotion ? 0 : 0.7, delay: reduceMotion ? 0 : 0.08, ease: [0.16, 1, 0.3, 1] }}
+            // 16px, not 15px. Measured against the field on 2026-09-18:
+            // Linear, Stripe, Supabase and Neon all set their marketing nav at
+            // 16px. At 15px, next to an 18px wordmark, these read as secondary
+            // captions rather than as the site's primary navigation.
+            className="flex items-center gap-1 text-[16px] font-medium text-zinc-400"
           >
             {NAV_LINKS.map((link) => (
               <DesktopNavLink key={link.label} link={link} pathname={pathname} />
@@ -123,9 +184,9 @@ export function NavBar() {
 
           {/* Desktop auth buttons */}
           <motion.div
-            initial={reduceMotion ? false : { opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: reduceMotion ? 0 : 0.7, delay: reduceMotion ? 0 : 0.14, ease: [0.16, 1, 0.3, 1] }}
             className="flex items-center gap-4"
           >
           <a
@@ -137,6 +198,17 @@ export function NavBar() {
           >
             <Icon icon="ri:github-fill" width={17} />
           </a>
+          {SHOW_DISCORD && (
+            <a
+              href={ROUTES.discord}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Backenly on Discord"
+              className="group flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-zinc-400 transition-colors hover:border-white/[0.16] hover:text-white"
+            >
+              <Icon icon="ri:discord-fill" width={17} />
+            </a>
+          )}
           <span className="h-6 w-px bg-white/[0.12]" aria-hidden />
           <Link
             href={ROUTES.signup}
@@ -164,19 +236,19 @@ export function NavBar() {
       <AnimatePresence initial={false}>
         {mobileOpen && (
           <motion.div
-            initial={reduceMotion ? false : { opacity: 0, y: -10, scale: 0.98, filter: 'blur(8px)' }}
+            initial={{ opacity: 0, y: -10, scale: 0.98, filter: 'blur(8px)' }}
             animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -8, scale: 0.98, filter: 'blur(8px)' }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.16, 1, 0.3, 1] }}
             className="absolute left-0 right-0 top-[76px] z-50 mx-4 rounded-lg border border-white/[0.08] bg-[#050505] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl lg:hidden"
           >
             <div className="flex flex-col gap-1 px-5 py-5">
               {NAV_LINKS.map((link, index) => (
                 <motion.div
                   key={link.label}
-                  initial={reduceMotion ? false : { opacity: 0, x: -8 }}
+                  initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.24, delay: index * 0.035, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: reduceMotion ? 0 : 0.24, delay: reduceMotion ? 0 : index * 0.035, ease: [0.16, 1, 0.3, 1] }}
                 >
                   <MobileLink
                     href={link.href}
@@ -198,6 +270,19 @@ export function NavBar() {
                 <span className="flex items-center gap-2">GitHub</span>
                 <Icon icon="solar:arrow-right-up-linear" width={13} className="text-zinc-500" />
               </a>
+
+              {SHOW_DISCORD && (
+                <a
+                  href={ROUTES.discord}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center justify-between rounded-full px-4 py-3 text-sm text-zinc-300 transition-colors hover:bg-white/[0.05] hover:text-white"
+                >
+                  <span className="flex items-center gap-2">Discord</span>
+                  <Icon icon="solar:arrow-right-up-linear" width={13} className="text-zinc-500" />
+                </a>
+              )}
 
               <Link
                 href={ROUTES.signup}
@@ -229,22 +314,25 @@ function DesktopNavLink({
   pathname: string
 }) {
   const active = isLinkActive(link.activePath, pathname)
+  // The current item is marked by CONTRAST, not by a filled pill.
+  //
+  // This used to render a `bg-white/[0.11]` rounded-full slab behind the
+  // active label, sliding between items on a `layoutId` spring. It was nicely
+  // built and it was the wrong idiom: a filled segmented-control pill belongs
+  // to an app tab bar, not a marketing nav. Checked against the field on
+  // 2026-09-18 and none of Linear, Stripe, Supabase, Clerk or Neon put a
+  // filled active state in their marketing nav; every one of them separates
+  // current from the rest with text colour alone.
+  //
+  // It also mis-fired here: "Product" carries `activePath: '/'`, so the pill
+  // sat permanently on the home page, highlighting what is only an in-page
+  // anchor.
   const classes = [
-    'relative overflow-hidden rounded-full px-4 py-2 transition-colors',
-    active ? 'text-white' : 'hover:text-white',
+    'rounded-md px-3 py-2 transition-colors duration-200',
+    active ? 'text-white' : 'text-zinc-400 hover:text-white',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
   ].join(' ')
-  const content = (
-    <>
-      {active && (
-        <motion.span
-          layoutId="site-nav-active"
-          className="absolute inset-0 rounded-full bg-white/[0.11] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
-          transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.6 }}
-        />
-      )}
-      <span className="relative z-10">{link.label}</span>
-    </>
-  )
+  const content = <span>{link.label}</span>
 
   if (link.href.startsWith('mailto')) {
     return (
@@ -338,10 +426,15 @@ export function SiteFooter() {
               <BrandMark size={26} />
               <span className="text-base font-semibold">Backenly</span>
             </Link>
+            {/* Cut from three sentences to one on 2026-09-18. The old blurb
+                restated the hero ("Your coding agent builds it. Backenly keeps
+                it running, every change governed, verified, and reversible")
+                to a reader who had already scrolled the whole page to get
+                here, and the positioning line is already in the bar below.
+                What is left is the one fact a footer should carry: the one a
+                stranger can go and check. */}
             <p className="max-w-xs text-sm leading-6 text-zinc-400">
-              Your coding agent builds it. Backenly keeps it running, every change
-              governed, verified, and reversible. Open source under Apache-2.0:
-              self-host it, or let Backenly Cloud run it for you.
+              Open source under Apache-2.0.
             </p>
             <div className="mt-1 flex items-center gap-3 text-zinc-500">
               <a
@@ -353,6 +446,19 @@ export function SiteFooter() {
               >
                 <Icon icon="ri:github-fill" width={17} />
               </a>
+              {/* Same order as the navbar: GitHub, then Discord. Behind the
+                  same switch, so one flag governs all three placements. */}
+              {SHOW_DISCORD && (
+                <a
+                  href={ROUTES.discord}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Backenly on Discord"
+                  className="transition-colors hover:text-white"
+                >
+                  <Icon icon="ri:discord-fill" width={17} />
+                </a>
+              )}
               <a
                 href={ROUTES.x}
                 target="_blank"

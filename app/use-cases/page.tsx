@@ -18,7 +18,7 @@ import {
 const APP_URL = 'https://backenly.com'
 
 export const metadata: Metadata = {
-  title: 'Use Cases — Five workflows Backenly is built for',
+  title: 'Use Cases: Five workflows Backenly is built for',
   description:
     "Driving a backend from a coding agent over MCP, adopting a backend your AI tools generated, moving a supabase-js frontend, running an AI product's data layer, and multi-tenant SaaS isolation. Each with what Backenly does, what stays yours, and where it stops.",
   keywords: [
@@ -54,15 +54,15 @@ const FAQ = [
   },
   {
     q: 'How is this different from asking my agent to generate backend code?',
-    a: 'An agent can write backend code well. What it cannot do is persist: the session ends and its model of your schema ends with it, and it is not watching when error rates move at 2 a.m. It also has no structural limit — nothing stops a bad turn from dropping a table. Backenly keeps the schema, the change ledger, and the verification evidence, and destructive operations are absent from the agent-facing surface entirely.',
+    a: 'An agent can write backend code well. What it cannot do is persist: the session ends and its model of your schema ends with it, and it is not watching when error rates move at 2 a.m. It also has no structural limit, nothing stops a bad turn from dropping a table. Backenly keeps the schema, the change ledger, and the verification evidence, and destructive operations are absent from the agent-facing surface entirely.',
   },
   {
     q: 'When is Backenly the wrong choice?',
-    a: 'When the backend is the product — a database engine, a system with microsecond latency budgets, or one whose regulation requires owning every line. Also when your team wants to own infrastructure: structure mutates only through governed actions, there is no raw-SQL path for changing it, and Backenly exposes no SQL functions, so there is no rpc() surface.',
+    a: 'When the backend is the product: a database engine, a system with microsecond latency budgets, or one whose regulation requires owning every line. Also when your team wants to own infrastructure: structure mutates only through governed actions, there is no raw-SQL path for changing it, and Backenly exposes no SQL functions, so there is no rpc() surface.',
   },
   {
     q: 'Do I have to build through an agent?',
-    a: 'For creating backend resources, yes — MCP is the build door and there is no in-product chat builder. The dashboard is where you inspect, approve, and operate. Everything else is standard: the runtime is REST over PostgREST, and you can take a direct PostgreSQL connection string for psql, an ORM, or a BI tool.',
+    a: 'For creating backend resources, yes, MCP is the build door and there is no in-product chat builder. The dashboard is where you inspect, approve, and operate. Everything else is standard: the runtime is REST over PostgREST, and you can take a direct PostgreSQL connection string for psql, an ORM, or a BI tool.',
   },
 ]
 
@@ -80,7 +80,7 @@ const faqSchema = {
 const SHARED = [
   {
     title: 'One governed path for every change',
-    body: 'Whether a change comes from you, your agent, or an automated repair, it goes through the same typed kernel — validated, audited, and applied all-or-nothing. There is deliberately no raw-SQL route around it.',
+    body: 'Whether a change comes from you, your agent, or an automated repair, it goes through the same typed kernel: validated, audited, and applied all-or-nothing. There is deliberately no raw-SQL route around it.',
   },
   {
     title: 'Authorization the database enforces',
@@ -88,7 +88,7 @@ const SHARED = [
   },
   {
     title: 'Evidence instead of success messages',
-    body: 'After a build, checks run against the live runtime over real HTTP — including signing in as a second user to confirm isolation holds — and each returns its assertions. Checks that cannot run report as skipped, never as passed.',
+    body: 'After a build, checks run against the live runtime over real HTTP, including signing in as a second user to confirm isolation holds, and each returns its assertions. Checks that cannot run report as skipped, never as passed.',
   },
   {
     title: 'A loop that keeps going after you stop',
@@ -107,7 +107,7 @@ export default function UseCasesPage() {
         <PageHero
           eyebrow="Use Cases"
           title="Five workflows, and where each one stops"
-          subtitle="Each page below states the problem, what you would normally build, the sequence Backenly actually runs, what stays your responsibility, and the known limitations. If a page cannot name what it does not do, it is not a use case — it is a brochure."
+          subtitle="Each page below states the problem, what you would normally build, the sequence Backenly actually runs, what stays your responsibility, and the known limitations. If a page cannot name what it does not do, it is not a use case, it is a brochure."
           actions={
             <>
               <PrimaryButton href="/auth/signup">

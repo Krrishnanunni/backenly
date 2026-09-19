@@ -1,6 +1,15 @@
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import type { HTMLAttributes, ReactNode } from 'react'
+import {
+  BODY,
+  DISPLAY,
+  LEDE,
+  RULE,
+  SECTION_Y,
+  SITE_CONTAINER_2XL,
+  TITLE,
+} from '@/components/site/tokens'
 
 type Width = 'prose' | 'default' | 'wide' | 'wide-prose'
 
@@ -9,10 +18,13 @@ const WIDTHS: Record<Width, string> = {
   default: 'max-w-4xl',
   // Card grids, tables and two-column layouts. Below 2xl (1536px) this is
   // unchanged, so mobile, tablet and 13"/14" laptops render exactly as before.
-  // At 2xl and up it steps to the 1440px container token, because the site nav
-  // and the landing page already run at 100rem and a 1280px subpage under a
-  // 1600px navbar reads as a mis-set column on a 16" display.
-  wide: 'max-w-7xl 2xl:max-w-container',
+  // At 2xl and up it steps to THE SITE CONTAINER, so wide sections line up
+  // with the navbar and the landing page instead of overhanging them.
+  //
+  // This used to step to `max-w-container`, a literal 1440px, which is 140px
+  // WIDER than the 1300px navbar: on 15"/16" MacBooks the content stuck out
+  // 70px past the site chrome on both sides. See SITE_CONTAINER_2XL.
+  wide: `max-w-7xl ${SITE_CONTAINER_2XL}`,
   // Same layout width, deliberately pinned at 7xl: for `wide` sections whose
   // main column is long-form body copy, where extra width buys nothing and
   // costs line length.
@@ -30,6 +42,20 @@ export function Container({
   className?: string
   children: ReactNode
 }) {
+  // `prose` keeps its reading measure but stops CENTERING it. As a centered
+  // max-w-3xl it landed ~208px to the right of the left-aligned hero above it,
+  // so the page appeared to slide sideways on the first scroll. Now the outer
+  // box shares the hero's edge and the inner box holds the line length. No
+  // caller passes `containerClassName` to a prose Section, so nesting here
+  // cannot land a layout class on the wrong box.
+  if (width === 'prose') {
+    return (
+      <div className={`${WIDTHS['wide-prose']} mx-auto px-6 ${className}`}>
+        <div className={WIDTHS.prose}>{children}</div>
+      </div>
+    )
+  }
+
   return <div className={`${WIDTHS[width]} mx-auto px-6 ${className}`}>{children}</div>
 }
 
@@ -46,7 +72,7 @@ export function Section({
   children: ReactNode
 } & HTMLAttributes<HTMLElement>) {
   return (
-    <section className={`relative border-t border-white/[0.06] py-20 md:py-28 ${className}`} {...rest}>
+    <section className={`relative border-t ${RULE} ${SECTION_Y} ${className}`} {...rest}>
       <Container width={width} className={containerClassName}>
         {children}
       </Container>
@@ -54,10 +80,19 @@ export function Section({
   )
 }
 
+/**
+ * A quiet label above a page title.
+ *
+ * The emerald status dot that used to sit inside this pill was removed
+ * 2026-09-18. It put a green accent on every marketing page, which the
+ * neutral-first palette reserves for violet alone, and a decorative coloured
+ * dot that reports no state is a tell on its own. The pill itself stays: on a
+ * SUBPAGE an eyebrow is doing real work (it names the section of the site you
+ * have landed in). The landing page deliberately carries none.
+ */
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
-    <p className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs font-medium uppercase text-zinc-400">
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+    <p className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400">
       {children}
     </p>
   )
@@ -71,7 +106,7 @@ export function SectionHeading({
   className?: string
 }) {
   return (
-    <h2 className={`text-3xl font-semibold leading-tight text-white md:text-[40px] ${className}`}>
+    <h2 className={`text-3xl text-white md:text-[40px] md:leading-[1.08] ${TITLE} ${className}`}>
       {children}
     </h2>
   )
@@ -101,7 +136,7 @@ export function SectionIntro({
 }
 
 export function Lead({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <p className={`text-base leading-7 text-zinc-400 ${className}`}>{children}</p>
+  return <p className={`${BODY} text-zinc-400 ${className}`}>{children}</p>
 }
 
 export function PrimaryButton({
@@ -304,7 +339,7 @@ export function PageHero({
   actions,
   icon,
   align = 'left',
-  width = 'default',
+  width = 'wide-prose',
   proof,
 }: {
   eyebrow?: ReactNode
@@ -316,6 +351,15 @@ export function PageHero({
   width?: Width
   proof?: { label: string; value: string }[]
 }) {
+  // `wide-prose`, not `default`. No page was passing a width, so every subpage
+  // hero fell back to `default` (max-w-4xl) while its sections ran at
+  // max-w-7xl: the headline started ~156px to the right of the content below
+  // it, and both sat inboard of the navbar. Three left edges on one page is
+  // the thing that reads as unconsidered, however good the type is.
+  //
+  // Widening the CONTAINER does not widen the TEXT: the h1 and subtitle below
+  // carry their own `max-w-[20ch]` / `max-w-[62ch]` measures, so this moves the
+  // left edge into line and leaves line length alone.
   const centered = align === 'center'
 
   return (
@@ -327,11 +371,11 @@ export function PageHero({
       <Container width={width} className={centered ? 'flex flex-col items-center text-center' : ''}>
         {icon && <div className="mb-6">{icon}</div>}
         {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-        <h1 className="mt-6 max-w-5xl text-4xl font-semibold leading-[1.05] text-white md:text-5xl lg:text-[56px]">
+        <h1 className={`mt-6 max-w-[20ch] text-4xl text-white md:text-5xl md:leading-[1.03] lg:text-[56px] lg:leading-[1.02] ${DISPLAY}`}>
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-5 max-w-3xl text-base leading-7 text-zinc-400 md:text-[17px]">{subtitle}</p>
+          <p className={`mt-5 max-w-[62ch] text-[17px] text-zinc-400 md:text-[19px] ${LEDE}`}>{subtitle}</p>
         )}
         {actions && (
           <div className={`mt-8 flex flex-wrap gap-3 ${centered ? 'justify-center' : ''}`}>

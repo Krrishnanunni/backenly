@@ -110,7 +110,7 @@ export default async function UseCaseSlugPage(props: { params: Promise<{ slug: s
           ]}
         />
 
-        {/* The situation — problem first, then the honest cost of the default path. */}
+        {/* The situation: problem first, then the honest cost of the default path. */}
         <Section width="prose" className="!pt-0">
           <div className="flex flex-col gap-10">
             <div>
@@ -126,7 +126,7 @@ export default async function UseCaseSlugPage(props: { params: Promise<{ slug: s
           </div>
         </Section>
 
-        {/* The workflow — the substance of the page. A sequence, not a card grid. */}
+        {/* The workflow, the substance of the page. A sequence, not a card grid. */}
         <Section width="prose">
           <SectionHeading className="mb-8">What Backenly does</SectionHeading>
           <ol className="relative flex flex-col gap-7 border-l border-white/10 pl-6">
@@ -159,7 +159,7 @@ export default async function UseCaseSlugPage(props: { params: Promise<{ slug: s
           </div>
         </Section>
 
-        {/* Division of labour — the question every one of these pages exists to answer. */}
+        {/* Division of labour, the question every one of these pages exists to answer. */}
         <Section width="prose">
           <SectionHeading className="mb-8">Who owns what</SectionHeading>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -200,7 +200,7 @@ export default async function UseCaseSlugPage(props: { params: Promise<{ slug: s
         </Section>
 
         {/*
-          What this is built on — named, checkable capabilities rather than
+          What this is built on: named, checkable capabilities rather than
           adjectives. Deliberately at `prose`, matching every other section on
           the page: at `wide-prose` this two-column table ran ~400px wider than
           the prose above and below it, and the jump read as a broken column

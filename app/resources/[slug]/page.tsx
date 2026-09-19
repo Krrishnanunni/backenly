@@ -43,7 +43,7 @@ export async function generateMetadata(props: {
   const a = ARTICLES_BY_SLUG[params.slug]
   if (!a) return { title: 'Not Found' }
   return {
-    title: `${a.title} — Backenly docs`,
+    title: `${a.title}: Backenly docs`,
     description: a.metaDescription,
     openGraph: {
       title: a.title,
@@ -268,7 +268,7 @@ export default async function ResourceSlugPage(props: { params: Promise<{ slug: 
 
         {/*
           The proof row is a three-up grid of small tiles, so its values have to
-          stay short — a full sentence wraps to four lines and leaves the other
+          stay short, a full sentence wraps to four lines and leaves the other
           two tiles half empty. The question this guide answers is the index
           card's job; by the time someone is on the page they have chosen it,
           and the intro below does the orienting.
@@ -288,7 +288,7 @@ export default async function ResourceSlugPage(props: { params: Promise<{ slug: 
           The article shares the hero's container (max-w-4xl) at every width, so
           the title and the first heading always start at the same x. From 2xl
           up, the in-page nav hangs in the right margin that a 1536px+ viewport
-          leaves over — using empty space rather than reflowing the text. Below
+          leaves over, using empty space rather than reflowing the text. Below
           2xl nothing moves: phones, tablets and 13"/14" laptops render exactly
           the single column they always did.
         */}
