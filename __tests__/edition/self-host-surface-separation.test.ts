@@ -7,7 +7,8 @@
  * account Usage page was permanently broken because it called an endpoint that
  * only ships with the Cloud overlay, and the 404 page offered "Get started
  * free". Branching and backups were then moved to Cloud-only by founder
- * decision.
+ * decision; snapshots were later un-gated once lib/recovery/ made the pair
+ * coherent, and that reversal is asserted rather than left as a deletion.
  *
  * None of that is visible in a diff, and all of it regresses the moment
  * somebody adds a nav item, a CTA or a fetch without thinking about edition.
@@ -148,31 +149,10 @@ describeOss('self-host surface separation', () => {
       }
     })
 
-    it('backup service refuses off Cloud, before the try that records failures', () => {
-      const svc = code('lib/services/workspace-backup.ts')
-      const at = svc.indexOf('export async function backupWorkspace')
-      const tryAt = svc.indexOf('try {', at)
-      const guardAt = svc.indexOf('assertCloudEdition', at)
-      expect(guardAt).toBeGreaterThan(-1)
-      // A guard inside the try would be swallowed and persisted as a failed
-      // backup row, which is not what an edition refusal is.
-      expect(guardAt).toBeLessThan(tryAt)
-      expect(svc).toMatch(/export async function restoreWorkspace[\s\S]{0,300}assertCloudEdition/)
-    })
-
     it('read paths answer empty rather than throwing', () => {
       // "What exists here" has a correct answer off Cloud, and it is none.
       expect(code('lib/branches/engine.ts')).toMatch(
         /export async function listBranches[\s\S]{0,400}isCloudEdition\(\)[\s\S]{0,80}return \[\]/
-      )
-      expect(code('lib/services/workspace-backup.ts')).toMatch(
-        /export async function listBackups[\s\S]{0,400}isCloudEdition\(\)[\s\S]{0,80}return \[\]/
-      )
-    })
-
-    it('the daily backup scheduler returns rather than throws', () => {
-      expect(code('lib/services/workspace-backup.ts')).toMatch(
-        /export async function runDailyBackups[\s\S]{0,500}isCloudEdition\(\)[\s\S]{0,120}return \{ ran: 0/
       )
     })
 
@@ -182,13 +162,82 @@ describeOss('self-host surface separation', () => {
       for (const rel of [
         'app/api/projects/[id]/branches/route.ts',
         'app/api/projects/[id]/branches/[branchId]/route.ts',
-        'app/api/projects/[id]/backup/route.ts',
       ]) {
         const src = code(rel)
         expect(src).toMatch(/isCloudEdition/)
         expect(src).toMatch(/status: 404/)
         expect(src).not.toMatch(/CLOUD_ONLY_FEATURE[\s\S]{0,120}status: 403/)
       }
+    })
+  })
+
+  describe('data protection is available to self-hosters, and named honestly', () => {
+    /**
+     * Snapshots WERE Cloud-only, by founder decision, until lib/recovery made
+     * the pair coherent. These assert the un-gating rather than leaving the
+     * old Cloud-only assertions to be deleted quietly, because "a test was
+     * removed" and "a decision was reversed" should not look the same in a
+     * diff.
+     */
+    it('the snapshot service no longer refuses off Cloud', () => {
+      const svc = code('lib/services/workspace-backup.ts')
+      expect(svc).not.toMatch(/assertCloudEdition/)
+    })
+
+    it('listing snapshots is not stubbed to empty off Cloud', () => {
+      expect(code('lib/services/workspace-backup.ts')).not.toMatch(
+        /export async function listBackups[\s\S]{0,400}isCloudEdition\(\)[\s\S]{0,80}return \[\]/
+      )
+    })
+
+    it('the snapshot route does not 404 by edition', () => {
+      const src = code('app/api/projects/[id]/backup/route.ts')
+      expect(src).not.toMatch(/CLOUD_ONLY_FEATURE/)
+    })
+
+    it('SCHEDULED snapshots still need an explicit opt-in off Cloud', () => {
+      // Un-gating the feature must not start a daily pg_dump of every project
+      // on every existing install at upgrade. The flag is the difference
+      // between offering a capability and enabling a cron job on somebody's
+      // behalf.
+      const svc = code('lib/services/workspace-backup.ts')
+      expect(svc).toMatch(/BACKENLY_SCHEDULED_SNAPSHOTS/)
+      expect(svc).toMatch(
+        /export async function runDailyBackups[\s\S]{0,400}scheduledSnapshotsEnabled\(\)[\s\S]{0,120}return \{ ran: 0/
+      )
+    })
+
+    it('deployment recovery is refused in CLOUD, the other direction', () => {
+      // The inverse gate. It reads every tenant's projects, users and secrets,
+      // which is right when the single account is the operator of the machine
+      // and is one tenant exporting everybody in Cloud.
+      const route = code('app/api/deployment/recovery/export/route.ts')
+      expect(route).toMatch(/assertSingleTenantEdition/)
+      expect(route).toMatch(/status: 404/)
+
+      // Before authentication: a 401 in Cloud would tell an unauthenticated
+      // caller the capability exists and is merely gated.
+      //
+      // Measured inside the handler, not across the file. Comparing positions
+      // in the whole source compares the IMPORT lines, which are ordered by
+      // module path and say nothing about what runs first.
+      const body = route.slice(route.indexOf('export async function POST'))
+      expect(body.indexOf('assertSingleTenantEdition')).toBeGreaterThan(-1)
+      expect(body.indexOf('requireUser')).toBeGreaterThan(-1)
+      expect(body.indexOf('assertSingleTenantEdition'))
+        .toBeLessThan(body.indexOf('requireUser'))
+    })
+
+    it('the two products are never called just "Backup" in the UI', () => {
+      // The word is the problem: an operator who reads it and concludes their
+      // server is safe has been misled by the product.
+      const snapshots = code('components/database/DatabaseSnapshots.tsx')
+      const recovery = code('components/app/DeploymentRecoverySection.tsx')
+      expect(snapshots).toMatch(/snapshot/i)
+      expect(recovery).toMatch(/recovery/i)
+      // Each names its sibling, so neither can be mistaken for the other.
+      expect(snapshots).toMatch(/Recovery/)
+      expect(recovery).toMatch(/snapshot/i)
     })
   })
 

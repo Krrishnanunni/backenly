@@ -30,12 +30,12 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `49c408da` on 2026-09-18 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `8c70ee81` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
 
-BACKEND_ONLY 1 · CLOUD_ONLY 1 · DONE 13 · INTENTIONAL 3 · PARTIAL 3 · REAL_GAP 2
+BACKEND_ONLY 1 · DONE 15 · INTENTIONAL 2 · PARTIAL 3 · REAL_GAP 2
 
 | Area | Capability | Verdict | Evidence |
 |---|---|---|---|
@@ -50,8 +50,8 @@ BACKEND_ONLY 1 · CLOUD_ONLY 1 · DONE 13 · INTENTIONAL 3 · PARTIAL 3 · REAL_
 | Database | Dashboard SQL writes / DDL | **INTENTIONAL** | AGENTS.md: mutations go through typed governed actions so they can be planned, approved, verified and reversed. A SQL parser must never be the tenant boundary. |
 | Observability | Logs explorer | **DONE** | app/api/logs/route.ts, components/monitoring/LogsExplorer.tsx |
 | Observability | Monitoring workbench | **DONE** | app/api/monitoring/request-logs/route.ts, components/monitoring/MonitoringWorkbench.tsx |
-| Data protection | Workspace logical backup | **CLOUD_ONLY** | Gated to Cloud in lib/edition/cloud-only.ts. UNDER REVIEW: the implementation is proven safe on a non-superuser role, and withholding it from operators who run their own database is a product decision worth re-taking on its own merits rather than by copying Supabase. Backend present. |
-| Data protection | Deployment disaster recovery | **INTENTIONAL** | NOT YET DESIGNED. A workspace pg_dump is not DR: platform database, workspace schemas, storage objects, function definitions, project secrets and operator metadata are separate concerns. Must be designed or documented, never implied by the backup feature. |
+| Data protection | Project database snapshot | **DONE** | lib/services/workspace-backup.ts, app/api/projects/[id]/backup/route.ts, components/database/DatabaseSnapshots.tsx |
+| Data protection | Deployment recovery | **DONE** | lib/recovery/export.ts, lib/recovery/restore.ts, scripts/recovery.ts, components/app/DeploymentRecoverySection.tsx |
 | Integrations | Webhooks | **BACKEND_ONLY** | backend: app/api/projects/[id]/webhooks/route.ts, lib/webhooks/index.ts. absent: ui components/integrations/WebhooksPanel.tsx |
 | Auth | End-user auth runtime | **DONE** | app/api/v1/[projectId]/auth/signin/route.ts, app/app/projects/[id]/auth/page.tsx |
 | Auth | SMTP configuration | **PARTIAL** | A transport exists but reads SMTP_HOST/USER/PASS from deployment-wide env. There is no per-project configuration and no UI, so an operator cannot change mail settings without editing .env and restarting. Present: lib/email/smtp-transport.ts. |
@@ -68,6 +68,197 @@ backend nothing calls. Both cross-tenant defects found so far lived
 in routes with no UI, because nothing ever exercised them.
 
 <!-- END DERIVED REGISTER -->
+## Recovery: two products, and what each does not cover
+
+**Contract frozen 2026-09-19, before implementation.** `lib/recovery/contract.ts`
+is the source; `tests/unit/recovery-contract.spec.ts` pins it.
+
+This is where a platform accidentally promises more than it restores. An
+operator who clicks something called "Backup" and concludes their server is safe
+has been misled by the product, not by their own carelessness. So there are
+exactly two things, they are never conflated, and the UI never says a bare
+"Backup".
+
+| | **Database snapshot** | **Deployment recovery** |
+|---|---|---|
+| Scope | one workspace schema | the whole self-hosted installation |
+| Contains | tables, rows, indexes, constraints, RLS, in-schema triggers/functions | platform DB, every workspace schema, storage objects, function definitions, project secrets, operator ownership, deployment metadata |
+| Does NOT contain | storage files, platform accounts, API keys, project config/env, function source, deployment config | — |
+| Honest description | schema/data rollback and portability | **disaster recovery** |
+
+### Three decisions worth recording
+
+**The component list is machine-readable, and absence is meaningful.** A bundle
+written before storage support existed would otherwise be indistinguishable from
+one whose storage was empty, and a restore would silently produce a deployment
+missing files nobody knew were gone. A present-but-empty component records zero
+items; an unsupported one is absent. Only the second is ambiguous, and the
+manifest removes the ambiguity.
+
+**The recovery credential never enters the bundle.** A bundle holding both the
+encrypted secrets and the key that opens them is not encrypted; it is a tarball
+with a lock painted on it. Sensitive sections use a per-bundle data key, wrapped
+by an operator-held credential kept outside the archive. Losing the bundle alone
+discloses nothing.
+
+**Validation completes before anything is touched.** The restore order is
+dependency-ordered and every validation step precedes every mutating one — a
+property the tests assert rather than describe. The workspace backup path
+learned this the expensive way: it dropped a schema and then discovered the dump
+was unreadable, which is terminal however loudly it fails afterwards.
+
+`verify-health-and-integrity` is deliberately last, so "recovery succeeded" is a
+claim about the restored system rather than about a command exiting 0.
+
+### Two semantics locked with the format
+
+**Durable credentials survive; ephemeral ones must not.** The line is not
+"secret vs not secret" — it is whether something outside the deployment depends
+on the value continuing to exist.
+
+Project signing secrets, anon keys, API keys, OAuth configuration and project
+env are embedded in client bundles, CI pipelines and other people's code. A
+recovery that issued fresh ones would be technically "restored" and would break
+every caller, which is not recovery in any sense the operator meant.
+
+Sessions, password-reset tokens, magic links, email verifications, the token
+blacklist and the setup token are the opposite: one-time or time-bounded proofs
+of a moment. Restoring a week-old bundle must not resurrect a session somebody
+revoked or a reset link already used. **Identity is durable; having been logged
+in is not** — a user's account and password hash come back, and they sign in
+again.
+
+The setup token is worth naming: its whole purpose is to claim an *unclaimed*
+deployment, so restoring it into a claimed one would reintroduce exactly the
+credential the claim consumed.
+
+**Restore runs quiesced.** A half-restored deployment describes a state that was
+true in the past, and anything acting on state autonomously will act on that
+description — where the actions reach the outside world and cannot be taken
+back. Webhook delivery would re-send events recipients already processed; email
+would re-send verifications; cron and background jobs would re-run completed
+work; function invocation would bill and mutate; and autonomy would observe a
+deliberately partial schema, diagnose it as broken, and *repair* it — fighting
+the restore step by step.
+
+All six stay off until `verify-health-and-integrity` has **completed**, not
+until the last write finishes. The tests assert that a subsystem may not start
+after some earlier step merely completed, because that is the shape that lets
+autonomy loose on a partial deployment.
+
+### Built and proven, 2026-09-19
+
+Export and restore both run against a real database. 118 assertions across six
+suites, four of which need Postgres.
+
+| Property | How it is proven |
+|---|---|
+| The bundle discloses nothing without the credential | A canary is planted in the database and must appear nowhere in the bundle's bytes as utf8, base64 or hex, across every file including the manifest — **and must appear once opened**, so the search is known to work |
+| Ephemeral credentials do not come back | A live session and a magic link are planted, then their tables come back present and empty. Each has a paired assertion that the source really held the row |
+| Durable credentials come back intact | The project signing secret is compared byte-for-byte on the restored machine |
+| Revocation survives | A revoked JTI is still in the denylist after recovery |
+| A bad archive cannot damage a live deployment | A marker row is written into a running target; a corrupted bundle and a wrong credential are both refused, both report the target untouched, and the marker is still there |
+| A good archive replaces rather than merges | Rows written after the bundle are gone from both the platform and workspace schemas; restoring twice lands in the same place |
+| The data plane still works afterwards | PostgREST roles exist and the workspace grants survived, with a paired assertion that the source had them to lose |
+
+**Recovery is onto a database created empty seconds earlier.** A restore test
+run against the source machine can silently borrow roles, extensions and schema
+from the environment, and proves nothing.
+
+Three corrections came out of building it, each recorded in the commit that made
+them:
+
+1. **The denylist was on the drop list.** End-user JWTs are stateless and signed
+   with the project secret, which recovery carries, so a token revoked before
+   the bundle was written still verifies afterwards. `_token_blacklist` is the
+   only thing that refuses it, and the middleware reads a missing table as "not
+   blacklisted" — it fails **open**. Now carried.
+2. **Encrypting only `project-secrets` was theatre.** The platform dump beside
+   it holds `Project.jwtSecret`, every password hash and every provider
+   credential in the clear. Everything is sealed now except
+   `deployment-metadata`, which stays readable so a bundle can be identified
+   before anyone fetches the credential.
+3. **The privileges asymmetry.** Platform dumps drop privileges; workspace dumps
+   keep them. `--no-privileges` on a workspace would give a restore that looks
+   complete and whose data plane returns nothing — and whose DEFAULT PRIVILEGES
+   are gone, so tables created later are invisible to PostgREST too. That
+   surfaces days later, attached to nothing.
+
+### Bad paths, all seven covered
+
+| Path | Behaviour |
+|---|---|
+| Corrupt manifest | Refused; target untouched |
+| Missing component file | Refused, naming the component; target untouched |
+| Failed checksum or truncation | Refused before the credential is used at all |
+| Wrong recovery credential | Refused; message names both possible causes, since GCM cannot distinguish them |
+| Unsupported (newer) format version | Refused rather than partially restored |
+| Interrupted restore | Idempotent — restoring the same bundle twice lands in the same place |
+| Insufficient privileges | Fails, names the step, and honestly reports the target as possibly touched |
+
+A component **re-encrypted under a different key** is also refused. Checksums
+alone would accept it — the file is intact, it is simply not the file that
+belongs there — so the GCM tag is what catches substitution.
+
+Corruption is reported ahead of a wrong credential deliberately: an operator
+should learn a bundle is damaged without first having to go and find their
+credential.
+
+### Extraction is the one step the archive controls
+
+Everywhere else in a restore this code decides what happens. In a tar, the entry
+names the destination, and an extractor that trusts the name writes wherever it
+is told. So the reader is written in-repo rather than taken from a library,
+absolute names are **refused rather than stripped** (this exporter only writes
+relative names, so an absolute one means the archive did not come from it), and
+an archive with one bad entry is refused whole rather than partially trusted.
+
+The traversal test forges tar headers byte by byte, because `archiver`
+sanitises the names that make an archive dangerous — an archive it produced
+could never carry the attack, so a test built with it would assert nothing.
+
+### Shipped, and named apart
+
+Both products are un-gated and reachable.
+
+| | Project database snapshot | Deployment recovery |
+|---|---|---|
+| Covers | one project's tables, rows, indexes, constraints, RLS policies | the whole machine: platform database, every workspace schema, storage, functions, secrets, ownership |
+| Excludes | stored files, platform accounts, API keys, project config, function source | nothing needed to rebuild on clean hardware |
+| Lives in | Database → Snapshots | Settings → Recovery |
+| Restore | in the dashboard, behind a dialog naming the snapshot's timestamp | **`npm run recovery -- restore`** |
+
+There is no control anywhere labelled just "Backup". The word is the problem:
+an operator who sees it and concludes their server is safe has been misled by
+the product, not by their own carelessness.
+
+**Restore of a deployment is a command, not a button, and that is the design.**
+On the day you restore, this dashboard is part of what you lost — there is a new
+machine, a checkout, a bundle and a credential. A restore that can only be
+started from the thing you no longer have is not a recovery product. Export
+stays in the dashboard because export happens while the deployment is healthy,
+which is when somebody is looking at it.
+
+**Deployment recovery is refused in Cloud by edition, not by permission.** It
+reads every tenant's projects, users and secrets. Self-hosted that is right —
+the single account is the operator of the machine. In Cloud it would be one
+tenant exporting everybody, and no role makes that acceptable, so the check is
+one nobody can satisfy by being granted more. It runs *before* authentication
+and answers 404, since a 401 would tell an unauthenticated caller the capability
+exists.
+
+**Scheduled snapshots stay opt-in off Cloud** (`BACKENLY_SCHEDULED_SNAPSHOTS`).
+Not because they are a Cloud feature, but because enabling them would start
+writing a dump of every project to `BACKUP_DIR` daily, on every existing install,
+at upgrade.
+
+### Still to build
+
+Nothing in this tranche. Storage objects are carried and restored; the remaining
+gap is off-box copies, which the product states rather than solves — the panel
+prints the bundle path next to the fact that a backup living only on the machine
+it protects is not a backup.
+
 ## Surface integrity, verified 2026-09-19
 
 Every surface self-host shows was walked in a browser against the deployment

@@ -119,8 +119,14 @@ async function asideSchemas(projectId: string): Promise<string[]> {
 
 beforeAll(() => {
   assertSafeTestDatabase()
-  // backupWorkspace / restoreWorkspace are Cloud-only since the edition split.
-  process.env.BACKENLY_EDITION = 'cloud'
+  // Deliberately NOT forcing an edition any more.
+  //
+  // These used to set BACKENLY_EDITION = 'cloud' because backupWorkspace
+  // refused off Cloud. Snapshots are un-gated now, so leaving that line in
+  // would mean this suite only ever exercised the Cloud path - and the
+  // self-host path, which is the entire point of un-gating, would be the one
+  // thing untested. The default edition is single-tenant, so this now runs as
+  // a self-hosted install does.
 })
 
 afterAll(async () => {

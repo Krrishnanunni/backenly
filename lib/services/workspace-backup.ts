@@ -1,7 +1,19 @@
 /**
- * WORKSPACE BACKUP SERVICE
- * ========================
- * Automated pg_dump backups for each project's workspace_{projectId} schema.
+ * PROJECT DATABASE SNAPSHOT SERVICE
+ * =================================
+ * pg_dump of one project's workspace_{projectId} schema: its tables, rows,
+ * indexes, constraints, RLS policies, and the triggers and functions inside it.
+ *
+ * WHAT A SNAPSHOT IS NOT
+ * ----------------------
+ * Not storage files. Not platform accounts. Not API keys. Not project
+ * configuration or env. Not function source. Not deployment configuration.
+ *
+ * It is for schema and data rollback and for moving a project. It is NOT
+ * disaster recovery, and it must never be presented as though it were - that
+ * is what lib/recovery/ is for, and the two are deliberately named apart so
+ * an operator cannot mistake one for the other. A generic "Backup" button that
+ * could mean either is the thing this naming exists to prevent.
  *
  * Every path here is BACKUP_DIR/<projectId>/<timestamp>.sql.gz: created, read
  * and pruned at runtime, and absent when Next builds. The filesystem calls
@@ -27,7 +39,7 @@ import * as path from 'path'
 import * as zlib from 'zlib'
 import { pipeline } from 'stream/promises'
 import { prisma } from '@/lib/db/prisma'
-import { assertCloudEdition, isCloudEdition } from '@/lib/edition/cloud-only'
+import { isCloudEdition } from '@/lib/edition/cloud-only'
 
 const execFileAsync = promisify(execFile)
 
@@ -217,9 +229,6 @@ export interface BackupResult {
  * data is captured. Returns the file path of the created backup.
  */
 export async function backupWorkspace(projectId: string): Promise<BackupResult> {
-  // Before the try: the catch below persists a `failed` WorkspaceBackup row,
-  // and an edition refusal is not a backup failure to record.
-  assertCloudEdition('Workspace backups')
   const schemaName = `workspace_${projectId}`
   const backupDir = getBackupDir(projectId)
   const filename = getBackupFilename()
@@ -332,7 +341,6 @@ export async function restoreWorkspace(
   projectId: string,
   backupId?: string
 ): Promise<RestoreResult> {
-  assertCloudEdition('Workspace backups')
   const schemaName = `workspace_${projectId}`
 
   // Find the backup to restore from
@@ -455,8 +463,6 @@ export async function restoreWorkspace(
 // ─── List Backups ─────────────────────────────────────────────────────────────
 
 export async function listBackups(projectId: string) {
-  // Reading "which backups exist" has a correct answer off Cloud: none.
-  if (!isCloudEdition()) return []
   return prisma.workspaceBackup.findMany({
     where: { projectId },
     orderBy: { createdAt: 'desc' },
@@ -549,11 +555,29 @@ export async function pruneOldBackups(
  * Called by cron-runner.ts once per day (02:00 UTC).
  * Skips projects that already have a backup today.
  */
+export function scheduledSnapshotsEnabled(): boolean {
+  // Cloud runs them as part of the service. Self-host does NOT, unless the
+  // operator asks.
+  //
+  // Not because scheduled snapshots are a Cloud feature - the whole product is
+  // un-gated now - but because turning them on would start writing a dump of
+  // every project to BACKUP_DIR every day, on every existing install, on
+  // upgrade. Seven days of retention against an unknown disk is not a change to
+  // make on somebody's behalf while they are not looking.
+  //
+  // The panel states whether they are on rather than leaving it to be
+  // discovered, because a backup schedule nobody knows about is the same
+  // problem in the other direction.
+  if (isCloudEdition()) return true
+  const raw = process.env.BACKENLY_SCHEDULED_SNAPSHOTS?.trim().toLowerCase()
+  return raw === 'true' || raw === '1'
+}
+
 export async function runDailyBackups(): Promise<{ ran: number; succeeded: number; failed: number }> {
-  // The scheduler ticks on every deployment. Return rather than throw: a
-  // self-hosted install has nothing to back up here, and an exception once a
-  // day would read as a broken scheduler.
-  if (!isCloudEdition()) return { ran: 0, succeeded: 0, failed: 0 }
+  // The scheduler ticks on every deployment. Return rather than throw: an
+  // install that has not opted in has nothing to do here, and an exception once
+  // a day would read as a broken scheduler.
+  if (!scheduledSnapshotsEnabled()) return { ran: 0, succeeded: 0, failed: 0 }
 
   const today = new Date()
   today.setUTCHours(0, 0, 0, 0)

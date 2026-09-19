@@ -161,7 +161,9 @@ const asideCount = (s: string) =>
 
 beforeAll(async () => {
   assertSafeTestDatabase()
-  process.env.BACKENLY_EDITION = 'cloud'
+  // No forced edition: snapshots are un-gated, so this runs in the default
+  // single-tenant edition, the way a self-hosted install does. See the note in
+  // backup-restore-integrity.test.ts.
 
   // The application role production actually runs as. NOBYPASSRLS is the whole
   // point: with it, pg_dump reads FORCE RLS tables and the defect is invisible.

@@ -40,7 +40,8 @@
     "migrate:api-keys": "tsx scripts/migrate-api-keys-to-hash.ts",
     "cleanup:tokens": "tsx scripts/cleanup-expired-tokens.ts",
     "build:runtime": "node scripts/build-runtime-bundle.mjs",
-    "selfhost": "tsx scripts/selfhost.ts"
+    "selfhost": "tsx scripts/selfhost.ts",
+    "recovery": "tsx scripts/recovery.ts"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.44.5",

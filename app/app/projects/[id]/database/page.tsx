@@ -37,7 +37,7 @@ import {
   FileCode, Save, Edit2, Trash2, Copy, Download, Upload,
   Table2, Columns, Settings, Eye, EyeOff, Key,
   Info, MoreVertical, Play, Building2, Folder, Activity, Network, CheckCircle2, Loader2,
-  Maximize2, Minimize2, HelpCircle, AlertCircle, Terminal, History
+  Maximize2, Minimize2, HelpCircle, AlertCircle, Terminal, History, Camera
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { KIT, KitNote } from '@/components/inspector/kit'
@@ -63,6 +63,7 @@ import {
 import { isForeignKeyShaped, suggestForeignKeyColumn } from '@/lib/db/fk-shape'
 import { SqlWorkspace } from '@/components/database/SqlWorkspace'
 import { SchemaHistory } from '@/components/database/SchemaHistory'
+import { DatabaseSnapshots } from '@/components/database/DatabaseSnapshots'
 import { useParams, useRouter } from 'next/navigation'
 import { getCurrentProjectId } from '@/lib/api/client'
 import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisualizer'
@@ -70,7 +71,7 @@ import EnhancedSchemaVisualizer from '@/components/database/EnhancedSchemaVisual
 
 type ViewMode = 'data' | 'structure'
 type TableView = 'data' | 'structure'
-type DatabaseView = 'tables' | 'visualization' | 'sql' | 'history'
+type DatabaseView = 'tables' | 'visualization' | 'sql' | 'history' | 'snapshots'
 
 // Rows fetched per page in the data browser. Kept in one place so the
 // pagination footer, the "step back a page after delete" math, and the query
@@ -1290,6 +1291,17 @@ export default function ProjectDatabasePage() {
               <History className="w-3 h-3" />
               History
             </button>
+            <button
+              onClick={() => setShowVisualization('snapshots')}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+                showVisualization === 'snapshots'
+                  ? 'bg-white/[0.06] text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Camera className="w-3 h-3" />
+              Snapshots
+            </button>
           </div>
         )}
       </div>
@@ -1469,6 +1481,11 @@ export default function ProjectDatabasePage() {
           <div className="flex min-w-0 flex-1 flex-col">
               {showVisualization === 'history' && resolvedProjectId ? (
                 <SchemaHistory projectId={resolvedProjectId} />
+              ) : showVisualization === 'snapshots' && resolvedProjectId ? (
+                // Project-scoped like the schema graph: it needs no selected
+                // table, and a project whose tables have not loaded can still
+                // be snapshotted.
+                <DatabaseSnapshots projectId={resolvedProjectId} />
               ) : showVisualization === 'sql' && resolvedProjectId ? (
                 // Project-scoped, like the schema graph: it needs no selected
                 // table, and a deployment whose tables have not loaded yet can

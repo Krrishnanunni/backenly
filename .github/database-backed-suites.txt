@@ -268,3 +268,34 @@ __tests__/auth/destructive-route-authorization.test.ts
 # $executeRawUnsafe: cross-tenant fix poisoning, not SQL injection. Asserts the
 # victim's fix is byte-for-byte unchanged after a denied write.
 __tests__/auth/tenant-scoped-service-queries.test.ts
+
+# The deployment recovery bundle, written from a real database. The two things
+# most likely to be wrong cannot be seen from the pg_dump arguments alone: that
+# the encryption protects anything, and that the dropped tables are actually
+# empty in the dump. A known secret is planted and must appear nowhere in the
+# bundle bytes AND must appear once opened with the credential - the second half
+# is what proves the first half's search would have noticed. A live session is
+# planted for the same reason, so "no session rows" cannot pass against a
+# database that simply had none.
+__tests__/recovery/export-bundle.test.ts
+
+# Recovery onto a machine that has never seen the deployment. The target is a
+# database created empty seconds earlier, so nothing can be silently borrowed
+# from the environment - which is what makes a restore test run on the source
+# machine worthless. Asserts both locked semantics: the project signing secret
+# comes back byte-for-byte, the revoked JTI is still revoked, and the planted
+# session and magic link are gone while their tables exist and are empty. Each
+# has a paired assertion that the source really held the row, so none can pass
+# vacuously.
+__tests__/recovery/clean-machine-restore.test.ts
+
+# Restoring over a deployment that is already running. The clean-machine case is
+# what the product is for; this is the one that can do damage. A marker row is
+# written into a live target, a deliberately corrupted bundle and then a wrong
+# credential are offered, and the marker must still be there afterwards -
+# workspace-backup restored by dropping the schema first and reading the dump
+# second, so an unreadable dump destroyed a working schema. Then the good bundle
+# must REPLACE rather than merge, because a restore that leaves newer rows
+# produces a deployment matching no point in time at all. Run twice, since an
+# interrupted restore gets re-run.
+__tests__/recovery/destructive-restore.test.ts

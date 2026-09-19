@@ -46,3 +46,38 @@ export function isCloudEdition(): boolean {
 export function assertCloudEdition(feature: string): void {
   if (!isCloudEdition()) throw new CloudOnlyFeatureError(feature)
 }
+
+export class SelfHostOnlyFeatureError extends Error {
+  readonly code = 'SELF_HOST_ONLY_FEATURE'
+  readonly feature: string
+
+  constructor(feature: string) {
+    super(
+      `${feature} belongs to the operator of a self-hosted deployment and is not ` +
+      `available in Backenly Cloud.`
+    )
+    this.name = 'SelfHostOnlyFeatureError'
+    this.feature = feature
+  }
+}
+
+/**
+ * Refuse a capability that belongs to a self-host OPERATOR, in Cloud.
+ *
+ * The mirror of `assertCloudEdition`, and it exists for a sharper reason than
+ * symmetry. Deployment recovery reads the whole platform database: every
+ * tenant's projects, users, keys and secrets. In a self-hosted install that is
+ * exactly right, because the single account IS the operator of the machine and
+ * the data is already theirs.
+ *
+ * In Cloud it would be one tenant exporting everyone. There is no role that
+ * makes that acceptable, so it is refused by edition rather than by permission
+ * - a check that cannot be satisfied by granting somebody more.
+ *
+ * Callers that answer HTTP should map this to 404, for the same reason as the
+ * Cloud-only case: in Cloud the capability does not exist, and 403 would
+ * suggest it is there and merely withheld.
+ */
+export function assertSingleTenantEdition(feature: string): void {
+  if (isCloudEdition()) throw new SelfHostOnlyFeatureError(feature)
+}
