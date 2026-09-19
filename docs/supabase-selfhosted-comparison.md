@@ -184,12 +184,43 @@ them:
    are gone, so tables created later are invisible to PostgREST too. That
    surfaces days later, attached to nothing.
 
+### Bad paths, all seven covered
+
+| Path | Behaviour |
+|---|---|
+| Corrupt manifest | Refused; target untouched |
+| Missing component file | Refused, naming the component; target untouched |
+| Failed checksum or truncation | Refused before the credential is used at all |
+| Wrong recovery credential | Refused; message names both possible causes, since GCM cannot distinguish them |
+| Unsupported (newer) format version | Refused rather than partially restored |
+| Interrupted restore | Idempotent — restoring the same bundle twice lands in the same place |
+| Insufficient privileges | Fails, names the step, and honestly reports the target as possibly touched |
+
+A component **re-encrypted under a different key** is also refused. Checksums
+alone would accept it — the file is intact, it is simply not the file that
+belongs there — so the GCM tag is what catches substitution.
+
+Corruption is reported ahead of a wrong credential deliberately: an operator
+should learn a bundle is damaged without first having to go and find their
+credential.
+
+### Extraction is the one step the archive controls
+
+Everywhere else in a restore this code decides what happens. In a tar, the entry
+names the destination, and an extractor that trusts the name writes wherever it
+is told. So the reader is written in-repo rather than taken from a library,
+absolute names are **refused rather than stripped** (this exporter only writes
+relative names, so an absolute one means the archive did not come from it), and
+an archive with one bad entry is refused whole rather than partially trusted.
+
+The traversal test forges tar headers byte by byte, because `archiver`
+sanitises the names that make an archive dangerous — an archive it produced
+could never carry the attack, so a test built with it would assert nothing.
+
 ### Still to build
 
 The UI, and un-gating. The workspace snapshot stays Cloud-gated until then, so
-nothing is exposed under a name that implies more than it does. Storage objects
-are collected into the bundle but their restore is not implemented in format
-version 1, and the manifest says so rather than implying otherwise.
+nothing is exposed under a name that implies more than it does.
 
 ## Surface integrity, verified 2026-09-19
 
