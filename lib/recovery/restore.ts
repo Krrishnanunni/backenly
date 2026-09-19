@@ -56,6 +56,7 @@ import {
   unwrapDataKey,
 } from './crypto'
 import { BUNDLE_FILES, MANIFEST_FILE } from './export'
+import { extractTar } from './tar'
 
 const execFileAsync = promisify(execFile)
 
@@ -251,6 +252,8 @@ export interface RestoreOptions {
    * the owner, so restoring as anything else silently rebinds every policy.
    */
   targetUrl: string
+  /** Where storage objects are written. Defaults to STORAGE_DIR. */
+  storageDir?: string
   /** Stop after validation. Nothing is touched. */
   validateOnly?: boolean
   onStep?: (result: StepResult) => void
@@ -319,7 +322,7 @@ async function runStep(
     case 'restore-workspace-schemas':
       return replaySql(await readComponent(bundle, 'workspace-schemas'), options, 'workspaces')
     case 'restore-storage-objects':
-      return 'storage restore is not implemented in format version 1'
+      return restoreStorageObjects(bundle, options)
     case 'restore-function-definitions':
       return 'function definitions are carried inside the platform database'
     case 'rewrap-secrets-for-target':
@@ -440,6 +443,45 @@ function replaySql(
     child.stdin.on('error', () => {})
     child.stdin.end(sql)
   })
+}
+
+/**
+ * Put storage objects back on disk.
+ *
+ * This step used to return a cheerful string and do nothing, which is the exact
+ * failure this tranche exists to rule out: a bundle carrying files would report
+ * a successful restore and the operator would find them missing later, with no
+ * record of when. A step that cannot do its job says so and fails.
+ */
+async function restoreStorageObjects(
+  bundle: ValidatedBundle,
+  options: RestoreOptions,
+): Promise<string> {
+  const entry = bundle.manifest.components.find(c => c.component === 'storage-objects')
+  if (!entry) return 'this bundle predates storage support'
+  if (entry.items === 0) return 'no storage objects in this bundle'
+
+  const destination = options.storageDir
+    ?? process.env.STORAGE_DIR
+    ?? path.join(process.cwd(), 'storage')
+
+  const archive = await readComponent(bundle, 'storage-objects')
+  if (!archive || archive.length === 0) {
+    throw new Error(
+      `The manifest records ${entry.items} storage objects but the archive is empty. ` +
+      `Refusing to report a successful restore with the files missing.`,
+    )
+  }
+
+  const written = await extractTar(archive, destination)
+  if (written !== entry.items) {
+    // The manifest is the claim; the filesystem is the fact. Disagreement means
+    // one of them is wrong, and neither is safe to prefer silently.
+    throw new Error(
+      `Restored ${written} storage objects but the manifest records ${entry.items}.`,
+    )
+  }
+  return `${written} objects into ${destination}`
 }
 
 async function verifyHealth(bundle: ValidatedBundle, options: RestoreOptions): Promise<string> {

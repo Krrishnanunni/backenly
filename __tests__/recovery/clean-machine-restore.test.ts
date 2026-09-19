@@ -41,6 +41,8 @@ const PLANTED_JTI = `planted-revoked-jti-${SUFFIX}`
 const PLANTED_SESSION_TOKEN = `planted-session-${SUFFIX}`
 const PLANTED_MAGIC_TOKEN = `planted-magic-${SUFFIX}`
 const TARGET_DB = `backenly_recovery_target_${SUFFIX}`
+const STORAGE_TEXT = `stored-before-the-bundle-${SUFFIX}`
+const STORAGE_BYTES = Buffer.from([0, 1, 2, 253, 254, 255])
 
 let sourceUrl = ''
 let targetUrl = ''
@@ -51,6 +53,8 @@ let projectId = ''
 let userId = ''
 let schemaName = ''
 let sourceUserCount = 0
+let sourceStorage = ''
+let targetStorage = ''
 
 function urlForDatabase(base: string, name: string): string {
   const u = new URL(base)
@@ -153,9 +157,17 @@ beforeAll(async () => {
   sourceUserCount = await prisma.user.count()
 
   bundleDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'backenly-restore-'))
+
+  // Real files, so storage is proven rather than reported. An empty storage
+  // directory would let the restore claim success while doing nothing.
+  sourceStorage = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'backenly-storage-src-'))
+  await fs.promises.mkdir(path.join(sourceStorage, 'avatars'), { recursive: true })
+  await fs.promises.writeFile(path.join(sourceStorage, 'readme.txt'), STORAGE_TEXT)
+  await fs.promises.writeFile(path.join(sourceStorage, 'avatars', 'one.bin'), STORAGE_BYTES)
+
   const exported = await exportDeploymentBundle({
     outDir: bundleDir,
-    storageDir: path.join(bundleDir, 'no-such-storage'),
+    storageDir: sourceStorage,
   })
   credential = exported.credential
 
@@ -163,7 +175,10 @@ beforeAll(async () => {
   await onAdmin(`CREATE DATABASE "${TARGET_DB}"`)
   targetUrl = urlForDatabase(sourceUrl, TARGET_DB)
 
-  progress = await restoreDeployment({ bundleDir, credential, targetUrl })
+  // A separate destination, so files cannot appear to restore by having been
+  // there all along.
+  targetStorage = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'backenly-storage-dst-'))
+  progress = await restoreDeployment({ bundleDir, credential, targetUrl, storageDir: targetStorage })
 })
 
 afterAll(async () => {
@@ -178,7 +193,9 @@ afterAll(async () => {
     ).catch(() => {})
     await onAdmin(`DROP DATABASE IF EXISTS "${TARGET_DB}"`).catch(() => {})
   }
-  if (bundleDir) await fs.promises.rm(bundleDir, { recursive: true, force: true }).catch(() => {})
+  for (const dir of [bundleDir, sourceStorage, targetStorage]) {
+    if (dir) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
   await prisma.$disconnect().catch(() => {})
 })
 
@@ -342,5 +359,31 @@ describe('the data plane can work on the recovered machine', () => {
       schemaName,
     )
     expect(rows.map(r => r.grantee).sort()).toEqual(['anon', 'authenticated', 'service_role'])
+  })
+})
+
+describe('storage objects made the trip', () => {
+  test('the bundle recorded the files it carried', () => {
+    const storage = progress.results.find(r => r.step === 'restore-storage-objects')
+    expect(storage?.status).toBe('ok')
+    expect(storage?.detail).toMatch(/2 objects/)
+  })
+
+  test('the files are on the recovered machine, byte for byte', async () => {
+    // Into a destination created empty, so they cannot appear to have restored
+    // by having been there all along.
+    const text = await fs.promises.readFile(path.join(targetStorage, 'readme.txt'), 'utf8')
+    expect(text).toBe(STORAGE_TEXT)
+
+    const binary = await fs.promises.readFile(path.join(targetStorage, 'avatars', 'one.bin'))
+    expect(binary.equals(STORAGE_BYTES)).toBe(true)
+  })
+
+  test('the restore would have refused to claim success without them', async () => {
+    // The step used to return a cheerful string and do nothing, which is the
+    // exact failure this tranche exists to rule out: a bundle carrying files
+    // reporting a successful restore, with the files found missing much later.
+    const entry = progress.results.find(r => r.step === 'restore-storage-objects')
+    expect(entry?.detail).not.toMatch(/not implemented/i)
   })
 })
