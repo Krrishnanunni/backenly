@@ -139,11 +139,11 @@ const CAPABILITIES: Capability[] = [
     backend: ['app/api/v1/[projectId]/auth/signin/route.ts'],
     ui: ['app/app/projects/[id]/auth/page.tsx'], uiMentions: 'auth' },
   { area: 'Auth', name: 'SMTP configuration',
-    backend: ['lib/email/smtp-transport.ts'],
-    partial: 'A transport exists but reads SMTP_HOST/USER/PASS from deployment-wide env. There is no per-project configuration and no UI, so an operator cannot change mail settings without editing .env and restarting.' },
+    backend: ['lib/email/project-smtp.ts', 'app/api/projects/[id]/email/smtp/route.ts'],
+    ui: ['components/auth/EmailSettingsPanel.tsx'], uiMentions: 'email/smtp' },
   { area: 'Auth', name: 'Email template editing',
-    backend: ['lib/services/end-user-auth-email.ts'],
-    partial: 'Subjects and HTML are built in TypeScript in end-user-auth-email.ts. They are real and they send, but nothing can edit them without a code change.' },
+    backend: ['lib/email/template-kinds.ts', 'app/api/projects/[id]/email/templates/[kind]/route.ts'],
+    ui: ['components/auth/EmailSettingsPanel.tsx'], uiMentions: 'email/templates' },
 
   // ── Storage ────────────────────────────────────────────────────────────
   { area: 'Storage', name: 'Buckets and objects',

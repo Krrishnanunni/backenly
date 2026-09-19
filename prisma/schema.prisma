@@ -209,6 +209,8 @@ model Project {
   changeReceipts         ChangeReceipt[]
   mauRecords             ProjectActiveUser[]
   authConfig             ProjectAuthConfig?
+  emailConfig            ProjectEmailConfig?
+  emailTemplates         ProjectEmailTemplate[]
   // Owning organization (Phase 6). Nullable + backfilled lazily; when null the
   // access check falls back to owner-only, so this is fully additive.
   organizationId         String?
@@ -3008,6 +3010,86 @@ model ProjectAuthConfig {
   project                  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("project_auth_configs")
+}
+
+/// Per-project SMTP, so mail settings stop being a deployment-wide env var.
+///
+/// The transport already existed and read SMTP_HOST/SMTP_USER/SMTP_PASS from the
+/// environment, which meant an operator could not change where auth mail comes
+/// from without editing .env and restarting, and a Cloud tenant could not send
+/// from their own domain at all. The register called that PARTIAL, correctly: a
+/// real transport with no way to configure it.
+///
+/// Deployment env remains the FALLBACK rather than being replaced. A self-host
+/// install that already works keeps working on upgrade, and an operator who
+/// prefers .env is not forced into the dashboard.
+///
+/// The password is AES-256-GCM, following DatabaseCredential rather than
+/// inventing a second scheme (lib/security/projectEnvCrypto). It is never
+/// returned by any route: the surface reports configured / not configured, and
+/// replacing it means sending a new one.
+model ProjectEmailConfig {
+  id        String  @id @default(uuid())
+  projectId String  @unique
+  /// False keeps the row but sends through the deployment fallback, so an
+  /// operator can stop using project SMTP without losing the settings.
+  enabled   Boolean @default(false)
+
+  host     String
+  port     Int
+  username String
+
+  passwordCipher String
+  passwordIv     String
+  passwordTag    String
+
+  /// Envelope sender. Separate from username because they routinely differ:
+  /// SES and SendGrid authenticate as an API identity and send as your domain.
+  fromAddress String
+  fromName    String?
+
+  /// Evidence, not intent. "Configured" and "works" are different claims, and
+  /// the dashboard must not imply the second from the first: these record the
+  /// last real send attempt so the operator sees which one they have.
+  lastTestAt    DateTime?
+  lastTestError String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_email_configs")
+}
+
+/// An operator-authored subject and body for one auth email.
+///
+/// The built-in templates are real and they send; they were simply hardcoded in
+/// TypeScript, so changing a word needed a code change and a deploy. A row here
+/// OVERRIDES the built-in for one kind; absence means the built-in is used, so
+/// this is additive and an install that customises nothing behaves exactly as
+/// before.
+///
+/// Placeholders are validated against an allowlist when the row is written, not
+/// when the email is sent. A template that cannot render is refused at the
+/// dashboard, because discovering it at send time means discovering it during
+/// somebody's password reset.
+model ProjectEmailTemplate {
+  id        String @id @default(uuid())
+  projectId String
+  /// 'verification' | 'password_reset' | 'magic_link'. Checked against
+  /// lib/email/template-kinds.ts rather than a database enum, so adding a kind
+  /// is a code change reviewed with the code that sends it.
+  kind      String
+
+  subject  String
+  bodyHtml String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, kind])
+  @@map("project_email_templates")
 }
 
 // ─── Direct Database Access (open-loop) ───────────────────────────────────────
