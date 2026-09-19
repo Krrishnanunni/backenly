@@ -224,15 +224,17 @@ async function main(): Promise<void> {
        owner_id text NOT NULL,
        body text NOT NULL
      )`,
+    // SEEDED BEFORE IT IS PROTECTED. Under FORCE RLS the owner is subject to
+    // its own policy, so inserting afterwards is refused by the very rule this
+    // fixture exists to demonstrate - 42501, "new row violates row-level
+    // security policy". The row has to exist before the lock goes on.
+    `INSERT INTO "${schema}".final_secrets (owner_id, body) VALUES ('someone', '${MARKER}')`,
     `ALTER TABLE "${schema}".final_secrets ENABLE ROW LEVEL SECURITY`,
     `ALTER TABLE "${schema}".final_secrets FORCE ROW LEVEL SECURITY`,
     `DROP POLICY IF EXISTS final_secrets_owner ON "${schema}".final_secrets`,
     `CREATE POLICY final_secrets_owner ON "${schema}".final_secrets
        USING (owner_id = current_setting('request.jwt.claim.sub', true))`,
   ])
-  await appSql(
-    `INSERT INTO "${schema}".final_secrets (owner_id, body) VALUES ('someone', '${MARKER}')`,
-  )
   // `::text` on a boolean renders `true`, not `t` - the shorthand is psql's
   // display format, not the cast's output. The first run compared against 't/t'
   // and reported a correctly-protected table as a failure.
