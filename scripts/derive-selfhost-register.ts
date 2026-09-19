@@ -159,9 +159,11 @@ const CAPABILITIES: Capability[] = [
     backend: ['app/api/database/indexes/route.ts'],
     ui: ['app/app/projects/[id]/database/page.tsx'], uiMentions: 'getIndexes' },
   { area: 'Postgres admin', name: 'Extension allowlist provisioning',
-    backend: ['lib/services/extensions.ts'], ui: ['components/database/ExtensionsPanel.tsx'], uiMentions: 'extension' },
+    backend: ['lib/services/extensions.ts', 'app/api/projects/[id]/database/extensions/route.ts'],
+    ui: ['components/database/ExtensionsPanel.tsx'], uiMentions: 'database/extensions' },
   { area: 'Postgres admin', name: 'Enums and domains',
-    backend: ['lib/services/enums.ts'], ui: ['components/database/EnumsPanel.tsx'], uiMentions: 'enum' },
+    backend: ['lib/services/enums.ts', 'app/api/projects/[id]/database/types/route.ts'],
+    ui: ['components/database/EnumsPanel.tsx'], uiMentions: 'database/types' },
   { area: 'Postgres admin', name: 'Arbitrary roles and grants',
     intentional: 'Deliberate. Roles are cluster-global and the platform issues scoped credentials through governed actions; hand-editing grants would let a dashboard user dismantle the tenant boundary the platform relies on.' },
 ]

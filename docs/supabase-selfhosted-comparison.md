@@ -30,12 +30,12 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `d99e6bda` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `cc9ea8ec` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
 
-DONE 19 · INTENTIONAL 2 · REAL_GAP 2
+DONE 21 · INTENTIONAL 2
 
 | Area | Capability | Verdict | Evidence |
 |---|---|---|---|
@@ -59,8 +59,8 @@ DONE 19 · INTENTIONAL 2 · REAL_GAP 2
 | Storage | Buckets and objects | **DONE** | app/api/v1/[projectId]/storage/upload/route.ts, lib/services/storage.ts, components/storage/StorageWorkbench.tsx |
 | Storage | Per-bucket access policies | **DONE** | lib/storage/access-policy.ts, app/api/storage/files/[fileId]/download/route.ts, components/storage/BucketPolicyDialog.tsx, components/storage/StorageWorkbench.tsx |
 | Postgres admin | Index management | **DONE** | app/api/database/indexes/route.ts, app/app/projects/[id]/database/page.tsx |
-| Postgres admin | Extension allowlist provisioning | **REAL_GAP** | absent: backend lib/services/extensions.ts, ui components/database/ExtensionsPanel.tsx |
-| Postgres admin | Enums and domains | **REAL_GAP** | absent: backend lib/services/enums.ts, ui components/database/EnumsPanel.tsx |
+| Postgres admin | Extension allowlist provisioning | **DONE** | lib/services/extensions.ts, app/api/projects/[id]/database/extensions/route.ts, components/database/ExtensionsPanel.tsx |
+| Postgres admin | Enums and domains | **DONE** | lib/services/enums.ts, app/api/projects/[id]/database/types/route.ts, components/database/EnumsPanel.tsx |
 | Postgres admin | Arbitrary roles and grants | **INTENTIONAL** | Deliberate. Roles are cluster-global and the platform issues scoped credentials through governed actions; hand-editing grants would let a dashboard user dismantle the tenant boundary the platform relies on. |
 
 `BACKEND_ONLY` is the class this program exists to find: a working
@@ -623,6 +623,90 @@ a Cloud claim and is tested where the logic lives.
 
 Storage moves to DONE, and PARTIAL reaches zero:
 `DONE 19 · REAL_GAP 2 · INTENTIONAL 2`.
+
+## Postgres admin: the last two gaps
+
+### Extensions
+
+The platform already knew about extensions. `lib/autonomy/platform-capabilities.ts`
+reads `pg_extension` to decide whether `pg_stat_statements` and `pgstattuple` are
+present, and when they are not it prints the `CREATE EXTENSION` an operator
+should run by hand. Detection existed; the operator surface did not.
+
+**The allowlist is the boundary, not a parser.** `CREATE EXTENSION` runs the
+extension's own install script with the privileges of whoever runs it, so a name
+taken from a request is remote code execution with extra steps — and quoting the
+identifier does not help, because the danger is the script the name selects, not
+the syntax. The name is a key into a table declared in code, and anything else is
+refused before any SQL is composed. Same reasoning AGENTS.md gives for refusing a
+SQL editor: here there is nothing to parse.
+
+**An Install button only where installing can work.** PostgreSQL 13+ lets a
+non-superuser install TRUSTED extensions; everything else needs superuser, and
+the application role is deliberately NOSUPERUSER. Non-trusted entries get the
+exact command and the reason instead of a button whose only outcome is a
+permissions error. `trusted` is read from the live catalog rather than believed,
+because the allowlist records what we expect and the catalog records what
+`CREATE EXTENSION` will obey.
+
+**No uninstall.** `DROP EXTENSION` cascades into the columns and indexes that
+depend on it and the surface cannot show what that would take with it.
+
+### Enums and domains
+
+Types are created in `workspace_<projectId>`, never `public` — a type in `public`
+is visible to every schema in the database, which on Cloud is every tenant.
+
+Every type lists the columns using it, which is what turns "drop this" from a
+button into a decision. Dropping is refused while anything uses it and the
+dependents are returned. No CASCADE, because CASCADE drops those columns.
+
+What PostgreSQL will and will not do, said plainly rather than emulated:
+
+| | |
+|---|---|
+| ADD VALUE | supported, safe, appends |
+| RENAME VALUE | supported; rows follow, because a row stores the OID not the label |
+| **DROP VALUE** | **not supported by PostgreSQL, at any version** |
+| DROP TYPE | only when nothing depends on it |
+
+Removing an enum value means creating a replacement type, converting every
+dependent column and dropping the old one — a data-rewriting migration, not a
+settings change. The surface explains that instead of doing it behind a button.
+
+Domain base types are an allowlist for the same reason the extension list is one:
+`CREATE DOMAIN x AS <anything>` takes a type expression, and a type expression
+from a request is an injection point no quoting fixes. A CHECK is accepted as
+text — a constraint IS an expression — but must mention `VALUE`, is
+length-capped, and is parenthesised so a `;` cannot start a second statement.
+
+### What is proven
+
+`tests/integration/postgres-admin.spec.ts`, 20 assertions against a real
+catalog. The privilege test uses a **real non-superuser role**: this developer
+database connects as `backenly_user`, which IS superuser, so the suite creates a
+throwaway `NOSUPERUSER` role, grants it only `CREATE ON DATABASE`, and works
+under `SET ROLE` — asserting first that superuser really was dropped, because
+otherwise "trusted installs, untrusted does not" would be two coincidences.
+
+One assertion is worth naming: the surface's `installable` flag is compared
+against what the database ACTUALLY does for every allowlisted extension, so a
+dashboard offering a button PostgreSQL would refuse fails the build.
+
+Also covered: allowlist refusal including `pgcrypto; DROP TABLE users`; enum
+create, list, append, idempotent re-append and rename with a real row following;
+a label containing a quote; dependents reported; identifier and duplicate-value
+refusals with a control; domain CHECK enforced by real inserts; base-type and
+missing-`VALUE` refusals; drop refused while in use and allowed when not.
+
+Two defects found while writing it, both mine: `array_agg(enumlabel)` yields
+`name[]`, which node-pg has no array parser for, so the driver returned the raw
+literal as a string and every caller would have silently had the wrong shape;
+and jest's `expect` takes no message argument, which is Playwright's.
+
+### Register
+
+`DONE 21 · INTENTIONAL 2`. No PARTIAL, no REAL_GAP, no BACKEND_ONLY.
 
 ## Surface integrity, verified 2026-09-19
 
