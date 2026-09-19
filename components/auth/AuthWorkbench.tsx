@@ -20,8 +20,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Shield, SlidersHorizontal, Users, Search, Loader2, RefreshCw, X, Copy, Check } from 'lucide-react'
+import { Shield, SlidersHorizontal, Users, Search, Loader2, RefreshCw, X, Copy, Check, Mail } from 'lucide-react'
 import { AuthConfiguration } from '@/components/auth/AuthConfiguration'
+import { EmailSettingsPanel } from '@/components/auth/EmailSettingsPanel'
 import { KitButton, EmptyState, KIT } from '@/components/inspector/kit'
 
 interface EndUser {
@@ -32,13 +33,16 @@ interface EndUser {
   lastLogin?: string
 }
 
-type Tab = 'config' | 'users'
+type Tab = 'config' | 'users' | 'email'
 
 export function AuthWorkbench({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams()
   // Deep link: /auth?tab=users lands on the Users tab (the old standalone
   // /users route redirects here).
-  const [tab, setTab] = useState<Tab>(searchParams.get('tab') === 'users' ? 'users' : 'config')
+  const [tab, setTab] = useState<Tab>(() => {
+    const requested = searchParams.get('tab')
+    return requested === 'users' || requested === 'email' ? requested : 'config'
+  })
   const [users, setUsers] = useState<EndUser[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -91,6 +95,10 @@ export function AuthWorkbench({ projectId }: { projectId: string }) {
         {([
           ['config', 'Configuration', SlidersHorizontal, undefined],
           ['users', 'Users', Users, users.length],
+          // Outgoing mail lives beside the rest of auth because that is what it
+          // is for: verification, reset and magic links. Putting it in project
+          // settings would separate the templates from the flows that send them.
+          ['email', 'Email', Mail, undefined],
         ] as const).map(([key, label, Icon, count]) => (
           <button
             key={key}
@@ -117,7 +125,12 @@ export function AuthWorkbench({ projectId }: { projectId: string }) {
       {/* ── Body ──────────────────────────────────────────── */}
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0 flex">
-          {tab === 'config' ? (
+          {tab === 'email' ? (
+            // Mail settings are a document too, and scroll in their own pane.
+            <div className="min-w-0 flex-1 overflow-y-auto">
+              <EmailSettingsPanel projectId={projectId} />
+            </div>
+          ) : tab === 'config' ? (
             // Configuration is a document: it scrolls inside its own pane.
             <div className="min-w-0 flex-1 overflow-y-auto">
               <AuthConfiguration />

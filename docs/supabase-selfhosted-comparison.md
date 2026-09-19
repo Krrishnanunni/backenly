@@ -30,12 +30,12 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `645679e2` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `496f2faf` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
 
-DONE 16 · INTENTIONAL 2 · PARTIAL 3 · REAL_GAP 2
+DONE 18 · INTENTIONAL 2 · PARTIAL 1 · REAL_GAP 2
 
 | Area | Capability | Verdict | Evidence |
 |---|---|---|---|
@@ -54,8 +54,8 @@ DONE 16 · INTENTIONAL 2 · PARTIAL 3 · REAL_GAP 2
 | Data protection | Deployment recovery | **DONE** | lib/recovery/export.ts, lib/recovery/restore.ts, scripts/recovery.ts, components/app/DeploymentRecoverySection.tsx |
 | Integrations | Webhooks | **DONE** | app/api/projects/[id]/webhooks/route.ts, lib/webhooks/index.ts, components/integrations/WebhooksPanel.tsx |
 | Auth | End-user auth runtime | **DONE** | app/api/v1/[projectId]/auth/signin/route.ts, app/app/projects/[id]/auth/page.tsx |
-| Auth | SMTP configuration | **PARTIAL** | A transport exists but reads SMTP_HOST/USER/PASS from deployment-wide env. There is no per-project configuration and no UI, so an operator cannot change mail settings without editing .env and restarting. Present: lib/email/smtp-transport.ts. |
-| Auth | Email template editing | **PARTIAL** | Subjects and HTML are built in TypeScript in end-user-auth-email.ts. They are real and they send, but nothing can edit them without a code change. Present: lib/services/end-user-auth-email.ts. |
+| Auth | SMTP configuration | **DONE** | lib/email/project-smtp.ts, app/api/projects/[id]/email/smtp/route.ts, components/auth/EmailSettingsPanel.tsx |
+| Auth | Email template editing | **DONE** | lib/email/template-kinds.ts, app/api/projects/[id]/email/templates/[kind]/route.ts, components/auth/EmailSettingsPanel.tsx |
 | Storage | Buckets and objects | **DONE** | app/api/v1/[projectId]/storage/upload/route.ts, lib/services/storage.ts, components/storage/StorageWorkbench.tsx |
 | Storage | Per-bucket access policies | **PARTIAL** | Buckets carry a public/private flag and nothing finer. There is no per-bucket policy model, so access cannot be expressed per role, per path or per operation the way RLS expresses it for tables. Present: lib/services/storage.ts. |
 | Postgres admin | Index management | **DONE** | app/api/database/indexes/route.ts, app/app/projects/[id]/database/page.tsx |
@@ -378,6 +378,149 @@ that the signing secret is shown once and is then absent from the page, that a
 refused destination surfaces the guard's real reason and stores nothing, and
 that an endpoint which has never fired says so instead of rendering an invented
 history.
+
+## Auth: the limiter's store, and mail nobody could configure
+
+Three rows, one area. Each was real and unreachable in a different way.
+
+### The limiter's counters were per-process
+
+`assertRateLimitStoreSupportsTopology` already refused to boot a deployment that
+declared more than one instance on the in-memory store. That closed the gap and
+offered no way across it. A shared Redis store now exists, so horizontal scaling
+is possible without the effective limit silently becoming (limit x instances).
+
+**Self-host is unchanged and needs no Redis.** It is single-tenant and runs one
+web process, where per-process counters are not a degraded substitute but the
+correct shared state, because there is only one process. The default is still
+`memory`, Redis stays out of the golden compose, and the invariant is enforced
+rather than documented:
+
+    memory store        =>  exactly one application instance
+    more than one       =>  shared Redis store required
+
+**An unreachable store DENIES.** Never a fallback to per-process counters. Code
+only reaches that path having declared several instances, so the fallback would
+hand out (limit x instances) at exactly the moment the store is most likely to
+be struggling because an attack is underway.
+
+**429 and 503 are different answers**, because they are facts about different
+systems. "You have made too many attempts" and "we cannot currently tell how
+many attempts you have made" collapsed into one 429 accuses an innocent caller,
+hands a well-behaved client a `Retry-After` describing a window nobody counted,
+and hides an outage inside a metric operators read as users hitting limits. A
+store outage answers 503 `RATE_LIMITER_UNAVAILABLE` with a short retry, and does
+not name the backing service to an unauthenticated caller.
+
+**Readiness is explicit** and **recovery is automatic**: the limiter waits for
+`ready` within the same bounded budget as the round trip, and latches no failed
+state, so it resumes when Redis does with no restart. `/api/health` reports the
+store, its readiness and the last error message — deliberately *alongside*
+`checks` rather than inside it, because a limiter outage is not a reason to pull
+every instance out of the load balancer and turn an auth outage into a total one.
+
+Startup proves the store rather than trusting the setting: it connects, pings and
+**writes** a probe key, because a read-only replica answers PING and silently
+drops every INCR, leaving a limiter that never denies.
+
+A defect found while wiring it: `enableOfflineQueue: false` rejects every command
+issued before the connection is ready, including ioredis's own HELLO. Combined
+with failing closed that is an auth outage on every deploy and every reconnect,
+reported as a rate-limit denial.
+
+### Two enumeration oracles in end-user sign-in
+
+Both exploitable with no credentials.
+
+`is_blocked` was checked BEFORE the password was verified, so anyone could submit
+any address with a junk password and learn from the 403 both that the account
+exists and that it is suspended. And an unknown address returned immediately
+while a real one first paid for a bcrypt comparison: the messages matched, the
+timing did not, and bcrypt is slow enough that the gap is measurable in a handful
+of samples.
+
+The decoy hash is derived from `BCRYPT_ROUNDS` rather than pasted in, because a
+hard-coded cost-10 digest beside a cost-12 product is four times cheaper and
+leaves the oracle open behind a mitigation that looks present.
+
+Pinned by tests verified to catch the regression: reintroducing the defect turns
+the blocked-account case from 401 to 403 and the suite red.
+
+### SMTP and templates: real, and unconfigurable
+
+A transport read `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` from deployment-wide env, so
+an operator could not change mail settings without editing `.env` and restarting,
+and a Cloud tenant could not send from their own domain at all. Subjects and
+bodies were string literals in TypeScript.
+
+Both are now **overrides, not replacements**. An enabled project SMTP config
+wins; anything else falls through to the environment. A template row replaces one
+built-in; absence means the built-in. An install that upgrades and configures
+nothing behaves exactly as it did.
+
+`enabled` exists so settings survive being switched off, rather than forcing an
+operator to retype a password they cannot read in order to switch back.
+
+**The password is write-only.** AES-256-GCM through the scheme
+`database_credentials` already uses. No route returns it, and the view type has no
+field that *could* carry one — not a field that is usually empty. A row that
+cannot be decrypted, which is what a rotated `MASTER_ENCRYPTION_KEY` looks like,
+**refuses to fall back** to the deployment environment: sending a project's mail
+from an identity the operator did not choose is worse than not sending it, and
+falling through would hide the rotation.
+
+**"Configured" is never reported as "works".** Every field can be right and the
+credentials still wrong, the port blocked, the sender unverified. So the row
+records the last REAL send attempt, saving clears it, and the panel shows
+"never tested" rather than a tick.
+
+**A malformed template cannot break an auth flow.** Placeholders are an
+allowlist checked at save, `{{ctaUrl}}` is required, and a `<script>` tag is
+refused outright — no mail client would run it, so its only possible audience is
+the dashboard preview. At send time a template that renders empty, or produces no
+action link, falls back to the built-in and **says so in the log**, because a
+quiet fallback is how a project sends default wording for months while the
+dashboard shows a template nobody is using.
+
+The preview is the dangerous surface, not the email: it is returned as data and
+rendered in an iframe with an empty `sandbox` attribute, so operator HTML cannot
+run against an authenticated session even if the `<script>` refusal were later
+relaxed. Substituted values are escaped in the body and newline-stripped in the
+subject, where a newline is header injection.
+
+### What is proven, and by which suite
+
+`tests/integration/rate-limit-shared-store.spec.ts` (17, real Redis 7): two
+independently constructed limiters spend ONE budget; 20 concurrent attempts
+across both admit exactly 8 of 8; per-key isolation; the window expires; an
+unreachable store reports `store_unavailable` and a limit of 1 denies the FIRST
+call, which a fresh local bucket would have allowed; recovery through a real TCP
+proxy closed and reopened, resuming on the same counter; 503 for an outage and
+429 for a limit. It FAILS without `REDIS_URL` rather than skipping.
+
+`tests/integration/signin-enumeration.spec.ts` (8, real database, real bcrypt,
+the actual route handler): matched status and body across unknown, wrong-password
+and suspended accounts; suspension disclosed only after the password is proven;
+a floor on the work the route spends for an address that does not exist.
+
+`tests/integration/project-smtp-and-templates.spec.ts` (28, real database and a
+real SMTP server over a real STARTTLS handshake): mail that actually left, with
+the project's own AUTH credentials and envelope sender read off the wire;
+precedence and fallback; the ciphertext is not the plaintext in any encoding;
+the decryption refusal; a rejecting server reported as a failure; template
+override delivered; broken templates falling back with a reason; value escaping
+and subject header injection.
+
+The SMTP sink generates a throwaway certificate with `openssl` per run rather
+than committing a PEM key, which the OSS preflight would rightly fail the build
+over, and the suite TRUSTS that one certificate rather than setting
+`NODE_TLS_REJECT_UNAUTHORIZED=0` — which would disable verification for every
+suite sharing the process and could hide a genuine TLS fault elsewhere in the
+same job.
+
+### Still PARTIAL in Auth
+
+Nothing. The remaining PARTIAL row is Storage's per-bucket policies.
 
 ## Surface integrity, verified 2026-09-19
 
