@@ -151,6 +151,31 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       { expiresIn: '7d' },
     )
 
+    // Notify webhook subscribers that an end user signed up.
+    //
+    // This event is emitted HERE rather than by a database trigger, because the
+    // `users` table deliberately carries none: it holds the bcrypt hash, and a
+    // row-level capture would put that hash in an outbox and then in an HTTP
+    // body aimed at whatever URL the operator configured. Realtime shipped
+    // exactly that leak for months by broadcasting row_to_json(NEW) from this
+    // table.
+    //
+    // So the payload is built field by field from a fixed list. `user` is
+    // whatever columns the schema-tolerant INSERT returned, and spreading it
+    // would silently start including any credential column a future migration
+    // adds.
+    import('@/lib/webhooks').then(({ triggerWebhooks }) => {
+      triggerWebhooks(projectId, 'auth.user.created', {
+        id: user.id,
+        email: user.email,
+        name: user.name ?? null,
+        role: user.role ?? 'user',
+        createdAt: user.created_at ?? user.createdAt ?? new Date().toISOString(),
+      }).catch((err: any) =>
+        console.warn('[Webhooks] auth.user.created failed (non-fatal):', err?.message)
+      )
+    }).catch(() => {})
+
     // Fire on_signup AI functions (non-blocking — never fails the signup)
     import('@/lib/services/ai-functions/executor').then(({ fireAiFunctionsOnSignup }) => {
       fireAiFunctionsOnSignup(projectId, { id: user.id, email: user.email, name: user.name }).catch(

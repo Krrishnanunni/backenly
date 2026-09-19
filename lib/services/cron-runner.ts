@@ -26,6 +26,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { executeAiFunction, FunctionEvent } from '@/lib/services/ai-functions/executor'
 import { retryFailedWebhooks } from '@/lib/webhooks/index'
+import { drainWebhookOutbox } from '@/lib/webhooks/capture'
 import { detectAndTimeoutStuckJobs, enqueue } from '@/lib/queue/index'
 import { processBackgroundJobs, processPurgeJobs } from '@/lib/queue/worker'
 
@@ -143,7 +144,17 @@ async function ensureSystemCleanupJobs(): Promise<void> {
  * Each task is isolated — a failure in one never blocks the others.
  */
 export async function runSystemTasks(): Promise<void> {
-  // 1. Retry outbound webhooks whose nextRetryAt has passed
+  // 1a. Turn captured row changes into webhook deliveries.
+  //
+  //    BEFORE the retry pass, not after: draining first means an event
+  //    captured this minute gets its first attempt this minute. Reversed, every
+  //    delivery that failed on attempt one would wait an extra tick for a retry
+  //    pass that had already run before the log existed.
+  await drainWebhookOutbox().catch(err =>
+    console.error('[SystemTasks] webhook outbox drain failed:', err?.message)
+  )
+
+  // 1b. Retry outbound webhooks whose nextRetryAt has passed
   await retryFailedWebhooks().catch(err =>
     console.error('[SystemTasks] webhook retry failed:', err?.message)
   )
