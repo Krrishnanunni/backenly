@@ -33,6 +33,7 @@ import { Client } from 'pg'
 import { prisma } from '@/lib/db/prisma'
 import { exportDeploymentBundle } from '@/lib/recovery/export'
 import { restoreDeployment, RestoreAbortedError } from '@/lib/recovery/restore'
+import { RESTORE_ORDER } from '@/lib/recovery/contract'
 import { MANIFEST_FILE } from '@/lib/recovery/export'
 
 jest.setTimeout(900_000)
@@ -41,6 +42,8 @@ const SUFFIX = randomBytes(6).toString('hex')
 const PLANTED_JWT_SECRET = `planted-durable-${randomBytes(16).toString('hex')}`
 const DIVERGENT_PROJECT = `divergence-marker-${SUFFIX}`
 const TARGET_DB = `backenly_destructive_${SUFFIX}`
+const WEAK_ROLE = `recovery_weak_${SUFFIX}`
+const WEAK_PASSWORD = randomBytes(12).toString('hex')
 
 let sourceUrl = ''
 let targetUrl = ''
@@ -139,6 +142,11 @@ beforeAll(async () => {
     [randomBytes(12).toString('hex'), DIVERGENT_PROJECT, userId],
   )
   await onTarget(`INSERT INTO "${schemaName}"."notes" (body) VALUES ('written after the bundle')`)
+
+  // A role that can reach the database and do nothing else. Stands in for the
+  // operator who ran the restore as the read-only backup credential.
+  await onAdmin(`CREATE ROLE "${WEAK_ROLE}" LOGIN PASSWORD '${WEAK_PASSWORD}'`)
+  await onAdmin(`GRANT CONNECT ON DATABASE "${TARGET_DB}" TO "${WEAK_ROLE}"`)
 })
 
 afterAll(async () => {
@@ -153,6 +161,7 @@ afterAll(async () => {
     ).catch(() => {})
     await onAdmin(`DROP DATABASE IF EXISTS "${TARGET_DB}"`).catch(() => {})
   }
+  await onAdmin(`DROP ROLE IF EXISTS "${WEAK_ROLE}"`).catch(() => {})
   for (const dir of [bundleDir, corruptDir]) {
     if (dir) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {})
   }
@@ -208,6 +217,43 @@ describe('a wrong credential does not get to touch it either', () => {
     // A credential is checked during validation rather than when the first
     // encrypted component is needed, precisely so this holds.
     expect(await divergenceSurvives()).toBe(true)
+  })
+})
+
+describe('a credential without the privileges to restore', () => {
+  test('the restore fails rather than half-finishing', async () => {
+    // The operator ran it as the wrong role - the backup role, say, which is
+    // deliberately read-only. That has to fail, and it has to fail in a way
+    // that names the problem rather than surfacing a bare psql exit code.
+    const weakUrl = urlForDatabase(sourceUrl, TARGET_DB).replace(
+      /\/\/[^@]+@/,
+      `//${WEAK_ROLE}:${WEAK_PASSWORD}@`,
+    )
+    await expect(restoreDeployment({ bundleDir, credential, targetUrl: weakUrl }))
+      .rejects.toThrow(RestoreAbortedError)
+  })
+
+  test('and the live deployment is still there', async () => {
+    // The important half. A restore that lacked permission to finish must not
+    // have had permission to start breaking things either.
+    expect(await divergenceSurvives()).toBe(true)
+  })
+
+  test('the failure names a step, so an operator knows where it stopped', async () => {
+    const weakUrl = urlForDatabase(sourceUrl, TARGET_DB).replace(
+      /\/\/[^@]+@/,
+      `//${WEAK_ROLE}:${WEAK_PASSWORD}@`,
+    )
+    try {
+      await restoreDeployment({ bundleDir, credential, targetUrl: weakUrl })
+      throw new Error('expected a refusal')
+    } catch (err) {
+      expect(err).toBeInstanceOf(RestoreAbortedError)
+      expect(RESTORE_ORDER).toContain((err as RestoreAbortedError).step)
+      // Past validation, so it cannot promise the target is untouched - and
+      // saying so honestly is the point.
+      expect((err as RestoreAbortedError).targetUntouched).toBe(false)
+    }
   })
 })
 
