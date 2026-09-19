@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   try {
     // IP rate limit — unauthenticated surface.
     const ip = clientIp(request)
-    const rl = consume(`oauth-cb:platform-github:${ip}`, AUTH_LIMITS.oauthCallback.ip.limit, AUTH_LIMITS.oauthCallback.ip.windowMs)
+    const rl = await consume(`oauth-cb:platform-github:${ip}`, AUTH_LIMITS.oauthCallback.ip.limit, AUTH_LIMITS.oauthCallback.ip.windowMs)
     if (!rl.allowed) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/login?error=rate_limited`)
     }

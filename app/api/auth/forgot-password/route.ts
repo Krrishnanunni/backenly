@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   // Limits chosen to be tight enough to slow scraping but loose enough that a
   // user fat-fingering their email a couple times still works.
   const ip = clientIp(request)
-  const ipRl = consume(`forgot:ip:${ip}`, AUTH_LIMITS.forgotPassword.ip.limit, AUTH_LIMITS.forgotPassword.ip.windowMs)
+  const ipRl = await consume(`forgot:ip:${ip}`, AUTH_LIMITS.forgotPassword.ip.limit, AUTH_LIMITS.forgotPassword.ip.windowMs)
   if (!ipRl.allowed) {
     return NextResponse.json(
       { error: 'Too many password reset requests. Please try again later.' },
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const { email } = schema.parse(body)
 
     // Per-email throttle on top of IP throttle.
-    const emailRl = consume(`forgot:email:${email.toLowerCase()}`, AUTH_LIMITS.forgotPassword.email.limit, AUTH_LIMITS.forgotPassword.email.windowMs)
+    const emailRl = await consume(`forgot:email:${email.toLowerCase()}`, AUTH_LIMITS.forgotPassword.email.limit, AUTH_LIMITS.forgotPassword.email.windowMs)
     if (!emailRl.allowed) {
       // Return the same generic message to avoid email enumeration via
       // distinguishable 429s. Still set Retry-After for honest clients.
