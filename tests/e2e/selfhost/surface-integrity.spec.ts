@@ -55,6 +55,7 @@ const NAV = [
   { id: 'monitoring', path: '/monitoring' },
   { id: 'deploy', path: '/deploy' },
   { id: 'connect', path: '/connect' },
+  { id: 'webhooks', path: '/webhooks' },
   { id: 'settings', path: '/settings' },
 ] as const satisfies ReadonlyArray<{ id: string; path: string; streams?: string }>
 

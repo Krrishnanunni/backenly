@@ -30,12 +30,12 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `8c70ee81` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `645679e2` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
 
-BACKEND_ONLY 1 · DONE 15 · INTENTIONAL 2 · PARTIAL 3 · REAL_GAP 2
+DONE 16 · INTENTIONAL 2 · PARTIAL 3 · REAL_GAP 2
 
 | Area | Capability | Verdict | Evidence |
 |---|---|---|---|
@@ -52,7 +52,7 @@ BACKEND_ONLY 1 · DONE 15 · INTENTIONAL 2 · PARTIAL 3 · REAL_GAP 2
 | Observability | Monitoring workbench | **DONE** | app/api/monitoring/request-logs/route.ts, components/monitoring/MonitoringWorkbench.tsx |
 | Data protection | Project database snapshot | **DONE** | lib/services/workspace-backup.ts, app/api/projects/[id]/backup/route.ts, components/database/DatabaseSnapshots.tsx |
 | Data protection | Deployment recovery | **DONE** | lib/recovery/export.ts, lib/recovery/restore.ts, scripts/recovery.ts, components/app/DeploymentRecoverySection.tsx |
-| Integrations | Webhooks | **BACKEND_ONLY** | backend: app/api/projects/[id]/webhooks/route.ts, lib/webhooks/index.ts. absent: ui components/integrations/WebhooksPanel.tsx |
+| Integrations | Webhooks | **DONE** | app/api/projects/[id]/webhooks/route.ts, lib/webhooks/index.ts, components/integrations/WebhooksPanel.tsx |
 | Auth | End-user auth runtime | **DONE** | app/api/v1/[projectId]/auth/signin/route.ts, app/app/projects/[id]/auth/page.tsx |
 | Auth | SMTP configuration | **PARTIAL** | A transport exists but reads SMTP_HOST/USER/PASS from deployment-wide env. There is no per-project configuration and no UI, so an operator cannot change mail settings without editing .env and restarting. Present: lib/email/smtp-transport.ts. |
 | Auth | Email template editing | **PARTIAL** | Subjects and HTML are built in TypeScript in end-user-auth-email.ts. They are real and they send, but nothing can edit them without a code change. Present: lib/services/end-user-auth-email.ts. |
@@ -258,6 +258,126 @@ Nothing in this tranche. Storage objects are carried and restored; the remaining
 gap is off-box copies, which the product states rather than solves — the panel
 prints the bundle path next to the fact that a backup living only on the machine
 it protects is not a backup.
+
+## Webhooks: the backend that nothing called
+
+The register said BACKENLY_ONLY. The truth was worse, and only visible by
+looking for the caller: `triggerWebhooks()` had **no call site anywhere in the
+tree**. HMAC signing, a five-attempt retry ladder, dead-lettering, notification
+on exhaustion and a cron pass that processed retries were all real, all correct,
+and unreachable. The event strings `row.inserted`, `row.updated`, `row.deleted`
+and `auth.user.created` appeared in exactly two places: the type union that
+declared them and the route validator that rejected one of them.
+
+So this tranche is not a UI over a working feature. Most of it is the event.
+
+### Capture belongs in the database
+
+PostgREST is the only data plane. An end user's INSERT reaches Postgres over
+:3002 and the Next process never sees it, so an inline `triggerWebhooks()` call
+in a route handler would fire for the dashboard's own table editor and stay
+silent for every write the product exists to serve — working in a demo and not
+in production. The only component that observes every writer is Postgres.
+
+### An outbox, not the realtime NOTIFY
+
+Reusing realtime's `pg_notify` capture was the first instinct and is wrong here,
+for the reason realtime's own header states: *events during the outage are lost
+— clients needing gapless data must re-fetch via REST.* That is the right trade
+for a live view a human is watching and the wrong one for a webhook, because a
+receiver cannot re-fetch, it can only never be told. pg_notify also truncates
+past ~8000 bytes.
+
+The trigger therefore writes a row into `_backenly_webhook_outbox` in the
+workspace schema. It commits with the transaction that caused it — a rolled-back
+INSERT produces no event, which NOTIFY cannot promise — and survives restarts. A
+drain in `runSystemTasks` turns outbox rows into `WebhookLog` rows and hands them
+to the delivery ladder that already existed.
+
+Triggers are installed only while the project has an active row webhook, and
+come off when the last one is disabled or deleted. A feature nobody enabled
+costs nothing. The outbox **table** is deliberately left behind on delete,
+because it may still hold undelivered events.
+
+Delivery is **at-least-once** and says so: every request carries
+`X-Webhook-Delivery` and an `outboxId`, because a crash between claiming and
+logging is put back by the reclaim window. Claiming uses `FOR UPDATE SKIP
+LOCKED`, so two web processes draining one project take disjoint work.
+
+### `auth.user.created` is emitted by the signup route, on purpose
+
+The `users` table carries no capture trigger. It holds the bcrypt hash, and
+realtime shipped exactly that leak for months by broadcasting `row_to_json(NEW)`
+from it. The same `isAuthManagedTable` predicate excludes it here, imported
+rather than restated. The signup route builds the payload field by field from a
+fixed list, so a future migration that adds a credential column cannot widen it.
+
+### A HIGH: webhook delivery was an SSRF with a persistence layer
+
+`deliverSingleAttempt` called bare `fetch(targetUrl)` from the unsandboxed web
+process on a URL the caller supplies, and stored up to 1 KB of the reply in
+`WebhookLog.responseBody`. The reachable set was the PostgREST data plane on
+loopback:3002, the runtime on :3001, the whole VPC, and 169.254.169.254.
+
+`lib/security/outbound-guard.ts` already covered every part of this for the
+function runtime — scheme, literal address, connect-time DNS so a rebind cannot
+win the race, each redirect hop re-validated, response size cap — and webhooks
+simply did not use it. They do now.
+
+Webhooks get their own opt-in, `BACKENLY_WEBHOOK_EGRESS_ALLOW_PRIVATE`, rather
+than sharing the function one. "My webhook may post to the container beside me"
+is the operator's decision about a destination they typed; "generated function
+code may reach my LAN" is a different decision about untrusted code, and a
+self-hoster who wants the first should not have to grant the second. Link-local
+stays blocked under both, because no deployment has a reason to let either read
+the instance credentials.
+
+Validation runs at write time *and* at delivery. Neither is redundant: the first
+tells an operator their URL is unusable while they are looking at the form, and
+the second is the boundary, because a hostname that is public today can point
+somewhere else tomorrow and nothing re-validates a stored row. A destination the
+guard refuses fails **terminally** rather than burning five retries on an answer
+that cannot change.
+
+### Smaller defects fixed in passing
+
+- `row.updated` was in the type and rejected by the only route that could create
+  one. Both now read `lib/webhooks/events.ts`, so the surfaces cannot drift.
+- `getWebhookLogs(webhookId)` took a child id with no tenant context. Every
+  service function now takes `(projectId, webhookId)` and there is no overload
+  that does not.
+- `/api/webhooks/[id]/logs` had no project in its path and hand-wrote its own
+  ownership predicate, which in Cloud answered differently from
+  `canAccessProject`: an organization ADMIN could administer the project and not
+  read its webhook logs. Replaced by `/api/projects/[id]/webhooks/[webhookId]/logs`.
+- `parseInt(searchParams.get('limit'))` reached Prisma as `take: NaN` for
+  `?limit=abc` and as an unbounded read for `?limit=9999999`. Clamped.
+- Per-webhook operations moved from `?webhookId=` to the path, so the id being
+  authorized and the id being acted on are the same string.
+
+### What is proven, and by which suite
+
+`tests/integration/webhook-delivery.spec.ts` (17 assertions, real Postgres, real
+HTTP receiver on loopback): capture installed and removed with subscription
+state; `users` never captured while a sibling table is; INSERT/UPDATE/DELETE each
+recorded with the operation that fired and the previous values; a write made on
+a **separate connection that never touches application code** captured, which is
+the PostgREST case; end-to-end delivery whose HMAC is verified **over the bytes
+that arrived** and which fails under a different key; a 503 receiver recorded as
+RETRYING with its status code; a disabled endpoint silent while an enabled one
+beside it receives; a real test delivery reporting the receiver's real answer for
+both 200 and 500; `auth.user.created` carrying no credential material; and every
+egress refusal stated beside a delivery that succeeds under the same setup.
+
+The suite fails on all 17 without a database and passes on all 17 with one,
+which is the entry requirement for `.github/database-backed-suites.txt`.
+
+`tests/e2e/selfhost/webhooks.spec.ts` proves the surface rather than delivery:
+that the form writes through the real API, that the write survives a reload,
+that the signing secret is shown once and is then absent from the page, that a
+refused destination surfaces the guard's real reason and stores nothing, and
+that an endpoint which has never fired says so instead of rendering an invented
+history.
 
 ## Surface integrity, verified 2026-09-19
 

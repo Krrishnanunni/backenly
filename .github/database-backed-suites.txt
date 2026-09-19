@@ -36,6 +36,7 @@ tests/bench/prisma-uuid-binding.spec.ts
 tests/build-runs/build-run-service.test.ts
 tests/build-runs/hydration.test.ts
 tests/integration/mcp-oauth-flow.spec.ts
+tests/integration/webhook-delivery.spec.ts
 
 __tests__/projects/deletion-transaction.test.ts
 __tests__/projects/purge-outbox.test.ts
