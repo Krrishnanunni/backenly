@@ -74,17 +74,24 @@ test('an endpoint created in the form survives a reload, and its secret does not
   expect(res.status(), 'create did not return 201').toBe(201)
 
   // Shown exactly once, at creation.
-  const secretDialog = page.getByText('Signing secret')
-  await expect(secretDialog).toBeVisible({ timeout: 30_000 })
-  const secret = (await page.locator('code').first().innerText()).trim()
-  expect(secret, 'the creation response carried no secret').toMatch(/^[0-9a-f]{64}$/)
-  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  //
+  // Located by ROLE, not by text. `getByText('Signing secret')` also matched
+  // the prose below the list that explains how to verify a delivery, and
+  // Playwright's strict mode correctly refused an ambiguous locator. A test
+  // that says "the dialog appeared" must not be satisfiable by a paragraph
+  // that merely mentions it.
+  const dialog = page.getByRole('dialog')
+  await expect(page.getByRole('heading', { name: 'Signing secret' })).toBeVisible({ timeout: 30_000 })
 
-  await expect(page.getByText(PUBLIC_TARGET)).toBeVisible({ timeout: 30_000 })
+  const secret = (await dialog.locator('code').first().innerText()).trim()
+  expect(secret, 'the creation response carried no secret').toMatch(/^[0-9a-f]{64}$/)
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click()
+
+  await expect(page.getByText(PUBLIC_TARGET).first()).toBeVisible({ timeout: 30_000 })
 
   // The write reached the database rather than only the component's state.
   await page.reload()
-  await expect(page.getByText(PUBLIC_TARGET)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(PUBLIC_TARGET).first()).toBeVisible({ timeout: 60_000 })
 
   // And the secret is now genuinely unreadable — not merely hidden behind a
   // toggle. Asserting on the page text is the weak half; the strong half is
@@ -106,9 +113,11 @@ test('a refused destination reports the guard’s real reason, and writes nothin
   const res = await refused
   expect(res.status(), 'a link-local destination was not refused').toBe(400)
 
-  // The operator is told WHY. "Invalid URL" over a metadata address would send
-  // them to check their typing.
-  await expect(page.getByText(/link-local|metadata|refus/i)).toBeVisible({ timeout: 15_000 })
+  // The operator is told WHY, in the dialog they are looking at. "Invalid URL"
+  // over a metadata address would send them to check their typing.
+  await expect(
+    page.getByRole('dialog').getByText(/link-local|metadata|refus/i).first(),
+  ).toBeVisible({ timeout: 15_000 })
 
   // The dialog stays open on failure rather than closing over a silent no-op,
   // and nothing was added to the list.
@@ -174,12 +183,17 @@ test('deleting an endpoint asks first, and then actually removes it', async ({ p
 
   // Named, not a bare "are you sure?" — the dialog says what stops and what is
   // lost with it.
-  await expect(page.getByText(/stops receiving events immediately/i)).toBeVisible({ timeout: 15_000 })
+  const confirm = page.getByRole('dialog')
+  await expect(confirm.getByText(/stops receiving events immediately/i)).toBeVisible({
+    timeout: 15_000,
+  })
 
   const removed = page.waitForResponse(
     r => r.url().includes('/webhooks/') && r.request().method() === 'DELETE',
   )
-  await page.getByRole('button', { name: 'Delete', exact: true }).last().click()
+  // Scoped to the dialog rather than picking the last matching button on the
+  // page, so a future row added below cannot silently retarget the click.
+  await confirm.getByRole('button', { name: 'Delete', exact: true }).click()
   const res = await removed
   expect(res.status(), 'delete did not succeed').toBe(200)
 
