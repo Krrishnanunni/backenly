@@ -391,3 +391,28 @@ tests/integration/dependency-failure-webhook-receiver.spec.ts
 # does, from both SQL files in the installer's order. Without them case D is
 # vacuous: "nothing was lost" is trivially true when there was nothing to lose.
 tests/integration/selfhost-failed-migration.spec.ts
+
+# ── Credential rotation ─────────────────────────────────────────────────────
+#
+# A rotation proven only by "the new password works" is not proven: the point of
+# rotating is that the OLD credential STOPS working. Every case is control ->
+# rotate -> old refused (28P01, not a timeout) -> new works -> security
+# properties survived. The last step is the expensive one to skip: a rotation
+# that recreated backenly_app as a superuser would pass the first four while
+# turning every FORCE RLS policy into a suggestion.
+#
+# Roles are CLUSTER-WIDE, so this uses throwaway role names throughout - a
+# separate database does not isolate them.
+#
+# It measures whether the cluster authenticates at all, with a password that is
+# certainly wrong, and REFUSES to assert revocation on a `trust` cluster rather
+# than reporting a false verdict. A developer's local PostgreSQL is usually
+# trust; CI's postgres:16 is initialised with a password and scram-sha-256.
+tests/integration/credential-rotation-database.spec.ts
+
+# Rotating the secrets an operator types into the dashboard rather than into a
+# connection string. It found that GET /api/workspace-oauth decrypted every
+# provider's client secret and returned it to the browser, while the POST on the
+# same endpoint redacted its own response - so the intent was never in doubt and
+# the GET simply contradicted it.
+tests/integration/credential-rotation-provider-secrets.spec.ts
