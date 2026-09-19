@@ -68,8 +68,13 @@ describe('the dashboard reads workspace rows as the owner, not as nobody (P1)', 
 describe('bootstrap answers the verb callers actually use (P1)', () => {
   it('the Express route serves GET and POST from one handler', () => {
     const s = read('server/routes/bootstrap.ts')
-    expect(s).toContain("router.get('/:projectId/bootstrap', handleBootstrap)")
-    expect(s).toContain("router.post('/:projectId/bootstrap', handleBootstrap)")
+    // Both verbs, one handler. Matched on the registration rather than on its
+    // exact spelling: the handler is now wrapped in `asyncRoute`, because
+    // Express 4 drops a rejected promise and an unwrapped async handler took
+    // the whole runtime down when PostgreSQL restarted. What this test is
+    // about - that GET and POST reach the SAME handler - is unchanged.
+    expect(s).toMatch(/router\.get\('\/:projectId\/bootstrap',\s*(asyncRoute\()?handleBootstrap/)
+    expect(s).toMatch(/router\.post\('\/:projectId\/bootstrap',\s*(asyncRoute\()?handleBootstrap/)
   })
 
   it('the Next twin exposes POST too', () => {

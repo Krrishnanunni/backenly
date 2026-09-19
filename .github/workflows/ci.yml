@@ -103,6 +103,17 @@ jobs:
       - name: No new unauthorized-by-shape routes
         run: npx tsx scripts/audit-route-authorization.ts --check
 
+      # Express 4 does not await its handlers, so an async one that rejects
+      # never reaches the global error middleware: it becomes an unhandled
+      # rejection and the runtime process EXITS. A PostgreSQL restart did
+      # exactly that, and every /api/v1/* surface stayed down afterwards.
+      #
+      # Thirty-nine call sites were fixed mechanically. This is here so the
+      # fortieth cannot be added by someone who has never heard of the problem,
+      # which is the only way a mechanical fix survives a codebase.
+      - name: Every runtime route goes through asyncRoute
+        run: npx tsx scripts/audit-async-routes.ts
+
       # The repository had accumulated ~70 independent answers to "may this
       # caller reach this project", and the owner-only one won on volume, so an
       # invited organization member was denied storage, logs, monitoring,

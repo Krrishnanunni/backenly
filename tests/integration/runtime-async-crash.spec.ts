@@ -40,6 +40,9 @@
  */
 
 import { spawnSync } from 'child_process'
+import { randomBytes } from 'crypto'
+import { rmSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import express from 'express'
 import http from 'http'
 import type { AddressInfo } from 'net'
@@ -48,7 +51,11 @@ import { asyncRoute } from '@/server/lib/async-route'
 
 /** The same global error handler server/app.ts installs. */
 function errorHandler(): express.ErrorRequestHandler {
-  return (err, _req, res, _next) => {
+  return (err, _req, res, next) => {
+    // The same guard server/app.ts has: once headers are out there is no status
+    // left to set, and writing a JSON body into a half-sent response corrupts
+    // it. SSE commits its headers and then streams for minutes.
+    if (res.headersSent) return next(err)
     res.status(500).json({ error: 'Internal server error', code: 'INTERNAL_ERROR' })
   }
 }
@@ -225,5 +232,134 @@ describe('the same route in a real process', () => {
     expect(result.out).not.toContain('STATUS=')
     expect(result.code).not.toBe(0)
     expect(result.out).toContain('P1017')
+  }, 120_000)
+})
+
+describe('the process backstop is FATAL, not a shrug', () => {
+  /**
+   * Driven through tsx in a child process, for the same reason the crash
+   * demonstration is: jest installs its own `unhandledRejection` handler, so
+   * the product's never runs and the thing under test - this process exiting -
+   * cannot happen inside the runner.
+   *
+   * The child imports the REAL module. Nothing here is a copy of it.
+   */
+  function runChild(body: string): { code: number | null; out: string } {
+    const file = join(process.cwd(), `.backstop-under-test-${randomBytes(4).toString('hex')}.ts`)
+    writeFileSync(file, body, 'utf8')
+    try {
+      const r = spawnSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', file], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        timeout: 60_000,
+      })
+      return { code: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` }
+    } finally {
+      rmSync(file, { force: true })
+    }
+  }
+
+  it('logs, drains and exits non-zero when a rejection escapes every route', () => {
+    // The policy, stated as a test:
+    //
+    //   expected failure   -> asyncRoute -> error middleware -> 500, alive
+    //   escaped rejection  -> log -> drain -> exit(1) -> PM2 restarts
+    //
+    // A handler that logs and keeps going would leave a process that looks
+    // healthy to every health check while holding whatever the bug abandoned.
+    // Production supervises this process, so exiting IS the recovery.
+    const result = runChild(`
+      import { installProcessSafetyNet } from './server/lib/async-route'
+
+      let closed = false
+      installProcessSafetyNet({
+        server: { close: (cb?: () => void) => { closed = true; cb?.() } },
+        drainMs: 200,
+      })
+
+      process.on('exit', () => console.log('DRAINED=' + closed))
+
+      // A rejection nobody catches, exactly as an escaped bug produces one.
+      void Promise.reject(Object.assign(new Error('Server has closed the connection.'), {
+        name: 'PrismaClientKnownRequestError',
+        code: 'P1017',
+      }))
+
+      // Would keep the process alive for a minute if the backstop did nothing.
+      setTimeout(() => { console.log('STILL_ALIVE'); process.exit(0) }, 60_000)
+    `)
+
+    expect(result.out).toContain('FATAL')
+    expect(result.out).toContain('P1017')
+    // It drained before going, rather than dying mid-request.
+    expect(result.out).toContain('DRAINED=true')
+    // And it did NOT soldier on.
+    expect(result.out).not.toContain('STILL_ALIVE')
+    // Non-zero, so a supervisor treats it as a crash and restarts it.
+    expect(result.code).toBe(1)
+  }, 180_000)
+
+  it('still exits when the drain never finishes', () => {
+    // A `close` that never calls back, because one connection is still open,
+    // must not leave a wedged process behind - that is the same failure in a
+    // quieter form.
+    const result = runChild(`
+      import { installProcessSafetyNet } from './server/lib/async-route'
+
+      installProcessSafetyNet({ server: { close: () => undefined }, drainMs: 200 })
+
+      void Promise.reject(new Error('drain never finishes'))
+
+      setTimeout(() => { console.log('STILL_ALIVE'); process.exit(0) }, 60_000)
+    `)
+
+    expect(result.out).not.toContain('STILL_ALIVE')
+    expect(result.code).toBe(1)
+  }, 180_000)
+})
+
+describe('the error middleware after headers are committed', () => {
+  it('does not try to answer a response that has already started', async () => {
+    // The SSE shape: headers flushed, bytes on the wire, then a failure. There
+    // is no status left to set, and writing a JSON body into a half-sent
+    // response corrupts the stream the client is reading.
+    let reachedDefaultHandler = false
+
+    const harness = await serve(app => {
+      app.get(
+        '/stream-then-fail',
+        asyncRoute(async (_req, res) => {
+          res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+          res.write('data: {"type":"connected"}' + '\n\n')
+          throw serverClosedTheConnection()
+        }),
+      )
+      app.use(((err: any, _req: any, res: any, next: any) => {
+        if (res.headersSent) {
+          reachedDefaultHandler = true
+          return next(err)
+        }
+        res.status(500).json({ error: 'Internal server error' })
+      }) as express.ErrorRequestHandler)
+    })
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${harness.port}/stream-then-fail`)
+      // Already 200, and it cannot be rewritten to 500. Without the guard the
+      // middleware would call res.status(500).json() on a committed response,
+      // which throws ERR_HTTP_HEADERS_SENT and corrupts the stream.
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toContain('text/event-stream')
+
+      // The body may or may not arrive: Express's default handler destroys the
+      // socket, so the client can legitimately see a reset instead. What must
+      // be true either way is that no JSON error was appended to the stream.
+      const body = await res.text().catch(() => '')
+      expect(body).not.toContain('Internal server error')
+
+      expect(reachedDefaultHandler).toBe(true)
+    } finally {
+      await harness.close()
+    }
   }, 120_000)
 })

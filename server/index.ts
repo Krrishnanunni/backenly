@@ -27,18 +27,20 @@ import app from './app'
 // unless BACKENLY_EDITION is explicitly cloud.
 assertEditionCompositionOrExit('Runtime Server')
 
-// Before the socket. Every route is wrapped so nothing should reach this, but
-// the cost of one missed call site is the whole API going down - which is
-// exactly what happened when a PostgreSQL restart made the next request's
-// Prisma call reject with P1017 and Node terminated the process.
-installProcessSafetyNet()
-
 const PORT = parseInt(process.env.RUNTIME_PORT || '3001', 10)
 
 const server = app.listen(PORT, () => {
   console.log(`[Runtime Server] Listening on http://localhost:${PORT}`)
   console.log(`[Runtime Server] Health: http://localhost:${PORT}/health`)
 })
+
+// The boundary of last resort, installed WITH the server so a drain is possible.
+//
+// Ordinary failures never reach it: every route is wrapped, so a dependency
+// error becomes a 500 and this process keeps serving. A rejection that gets
+// here escaped the request model altogether, and PM2 restarts this process, so
+// exiting is the recovery rather than a second outage. See async-route.ts.
+installProcessSafetyNet({ server })
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
