@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest } from 'next/server'
+import { clampIsPublic } from '@/lib/storage/access-policy'
 import { v1ApiMiddleware, requirePermission, requireCapability } from '@/lib/api/v1/middleware'
 import { createErrorResponse, createSuccessResponse, ErrorCodes } from '@/lib/api/v1/errors'
 import { storageService } from '@/lib/services/storage'
@@ -192,7 +193,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       url: fileRecord.url,
       size: Number(fileRecord.size),
       contentType: finalMimeType,
-      isPublic: isPublic || bucketRecord.isPublic,
+      // Clamped to the bucket, never OR'd with it. `isPublic || bucket.isPublic`
+      // let a request body mark an object world-readable inside a private
+      // bucket, which the serving path then honoured.
+      isPublic: clampIsPublic(isPublic, (bucketRecord as any).accessPolicy),
     })
   } catch (error: any) {
     if (error instanceof QuotaExceededError) {

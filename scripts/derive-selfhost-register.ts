@@ -150,8 +150,9 @@ const CAPABILITIES: Capability[] = [
     backend: ['app/api/v1/[projectId]/storage/upload/route.ts', 'lib/services/storage.ts'],
     ui: ['components/storage/StorageWorkbench.tsx'], uiMentions: 'createBucket' },
   { area: 'Storage', name: 'Per-bucket access policies',
-    backend: ['lib/services/storage.ts'],
-    partial: 'Buckets carry a public/private flag and nothing finer. There is no per-bucket policy model, so access cannot be expressed per role, per path or per operation the way RLS expresses it for tables.' },
+    backend: ['lib/storage/access-policy.ts', 'app/api/storage/files/[fileId]/download/route.ts'],
+    ui: ['components/storage/BucketPolicyDialog.tsx', 'components/storage/StorageWorkbench.tsx'],
+    uiMentions: 'updateBucketPolicy' },
 
   // ── PostgreSQL administration ──────────────────────────────────────────
   { area: 'Postgres admin', name: 'Index management',

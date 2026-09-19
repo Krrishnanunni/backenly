@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import { S3StorageService } from './s3Storage'
+import { clampIsPublic } from '@/lib/storage/access-policy'
 import { requireStorageSecret } from '@/lib/auth/jwt-secret'
 
 export interface StorageService {
@@ -467,11 +468,17 @@ class LocalStorageService implements StorageService {
         })
       }
 
-      // Derive isPublic from bucket access policy (#74)
+      // Derive isPublic from the bucket's access policy, CLAMPED to it.
+      //
+      // This used to be `options?.isPublic ?? (policy is public-ish)`, which let
+      // a caller-supplied `true` override a `private` bucket. Combined with the
+      // serving path reading this column, that was a write-time policy bypass:
+      // an API-key holder could put a world-readable object into a private
+      // bucket. `clampIsPublic` makes the bucket the ceiling here as well as at
+      // read time, so the two layers agree rather than one quietly cleaning up
+      // after the other.
       const accessPolicy = (bucket as any).accessPolicy as string | undefined
-      const isPublicFile =
-        options?.isPublic ??
-        (accessPolicy === 'public_read' || accessPolicy === 'cdn_cacheable' || bucket.isPublic)
+      const isPublicFile = clampIsPublic(options?.isPublic, accessPolicy ?? (bucket.isPublic ? 'public_read' : 'private'))
 
       // Create file record
       const storageFile = await tx.storageFile.create({
