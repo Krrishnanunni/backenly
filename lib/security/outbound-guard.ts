@@ -208,15 +208,35 @@ export function blockedAddressReason(address: string): string | null {
 }
 
 /**
- * Escape hatch for self-hosted installs where the function runtime and the
- * service it calls genuinely share a host.
+ * Who is making the request, which decides WHICH escape hatch applies.
  *
- * Off by default and deliberately awkward to turn on. On Backenly Cloud this
- * must never be set: the private ranges it unblocks are other tenants' traffic
- * and the platform's own control plane.
+ * Two different people decide these. "Customer function code may call my LAN"
+ * is a decision about untrusted generated code; "my webhook may post to the
+ * service next to me in this compose file" is a decision about a destination
+ * the operator typed themselves. A self-hoster who wants the second should not
+ * have to grant the first, so they are separate variables rather than one
+ * shared `ALLOW_PRIVATE`.
+ *
+ * The classification table, the connect-time lookup and the always-blocked
+ * link-local rule are shared by both. Only the private-range hatch differs.
  */
-function privateEgressAllowed(): boolean {
-  return process.env.BACKENLY_FUNCTION_EGRESS_ALLOW_PRIVATE === 'true'
+export type EgressScope = 'function' | 'webhook'
+
+const PRIVATE_EGRESS_ENV: Record<EgressScope, string> = {
+  function: 'BACKENLY_FUNCTION_EGRESS_ALLOW_PRIVATE',
+  webhook: 'BACKENLY_WEBHOOK_EGRESS_ALLOW_PRIVATE',
+}
+
+/**
+ * Escape hatch for self-hosted installs where the caller and the service it
+ * contacts genuinely share a host or a LAN.
+ *
+ * Off by default and deliberately awkward to turn on. On Backenly Cloud
+ * neither variable may be set: the private ranges they unblock are other
+ * tenants' traffic and the platform's own control plane.
+ */
+function privateEgressAllowed(scope: EgressScope): boolean {
+  return process.env[PRIVATE_EGRESS_ENV[scope]] === 'true'
 }
 
 /**
@@ -268,7 +288,7 @@ function alwaysBlocked(address: string): string | null {
  * resolves to a private address passes here and is caught at connect time by
  * `guardedLookup`. Both layers are required and neither is redundant.
  */
-export function assertAllowedUrl(raw: string): URL {
+export function assertAllowedUrl(raw: string, scope: EgressScope = 'function'): URL {
   let url: URL
   try {
     url = new URL(raw)
@@ -292,7 +312,7 @@ export function assertAllowedUrl(raw: string): URL {
 
   const host = url.hostname.replace(/^\[|\]$/g, '')
   if (net.isIP(host)) {
-    const reason = addressRefusal(host)
+    const reason = addressRefusal(host, scope)
     if (reason) throw new BlockedOutboundError(`Refusing to contact ${reason}.`)
   }
 
@@ -305,10 +325,10 @@ export function assertAllowedUrl(raw: string): URL {
  * Both the URL-literal path and the connect-time lookup route through here so
  * the two layers cannot drift into disagreeing about what is reachable.
  */
-function addressRefusal(address: string): string | null {
+function addressRefusal(address: string, scope: EgressScope): string | null {
   const hard = alwaysBlocked(address)
   if (hard) return hard
-  if (privateEgressAllowed()) return null
+  if (privateEgressAllowed(scope)) return null
   return blockedAddressReason(address)
 }
 
@@ -322,37 +342,39 @@ function addressRefusal(address: string): string | null {
  * the address validated here, so there is no interval during which DNS can
  * change the answer.
  */
-function guardedLookup(
-  hostname: string,
-  options: dns.LookupOneOptions | dns.LookupAllOptions | number,
-  callback: (err: NodeJS.ErrnoException | null, address: any, family?: number) => void,
-): void {
-  dns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
-    if (err) return callback(err, '', 0)
+function makeGuardedLookup(scope: EgressScope) {
+  return function guardedLookup(
+    hostname: string,
+    options: dns.LookupOneOptions | dns.LookupAllOptions | number,
+    callback: (err: NodeJS.ErrnoException | null, address: any, family?: number) => void,
+  ): void {
+    dns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
+      if (err) return callback(err, '', 0)
 
-    const list = (Array.isArray(addresses) ? addresses : [addresses]) as dns.LookupAddress[]
-    if (list.length === 0) {
-      return callback(new BlockedOutboundError(`${hostname} did not resolve.`) as any, '', 0)
-    }
-
-    // EVERY resolved address must be acceptable, not merely the first. A name
-    // that answers with one public and one link-local address would otherwise
-    // be reachable on a retry, an IPv6 preference flip, or a second connection.
-    for (const a of list) {
-      const reason = addressRefusal(a.address)
-      if (reason) {
-        return callback(
-          new BlockedOutboundError(`${hostname} resolves to a ${reason}.`) as any,
-          '',
-          0,
-        )
+      const list = (Array.isArray(addresses) ? addresses : [addresses]) as dns.LookupAddress[]
+      if (list.length === 0) {
+        return callback(new BlockedOutboundError(`${hostname} did not resolve.`) as any, '', 0)
       }
-    }
 
-    const wantsAll = typeof options === 'object' && options !== null && (options as dns.LookupAllOptions).all
-    if (wantsAll) return callback(null, list as any)
-    callback(null, list[0].address, list[0].family)
-  })
+      // EVERY resolved address must be acceptable, not merely the first. A name
+      // that answers with one public and one link-local address would otherwise
+      // be reachable on a retry, an IPv6 preference flip, or a second connection.
+      for (const a of list) {
+        const reason = addressRefusal(a.address, scope)
+        if (reason) {
+          return callback(
+            new BlockedOutboundError(`${hostname} resolves to a ${reason}.`) as any,
+            '',
+            0,
+          )
+        }
+      }
+
+      const wantsAll = typeof options === 'object' && options !== null && (options as dns.LookupAllOptions).all
+      if (wantsAll) return callback(null, list as any)
+      callback(null, list[0].address, list[0].family)
+    })
+  }
 }
 
 // ── The guarded request ───────────────────────────────────────────────────────
@@ -366,6 +388,11 @@ export interface SafeFetchOptions {
   /** Bytes after which the response is abandoned. */
   maxBytes?: number
   maxRedirects?: number
+  /**
+   * Which private-egress hatch applies. Defaults to `function` so every
+   * existing call site keeps the exact behaviour it had.
+   */
+  egressScope?: EgressScope
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000
@@ -380,6 +407,7 @@ function oneRequest(
   opts: Required<Pick<SafeFetchOptions, 'method' | 'headers' | 'maxBytes'>> & {
     body?: string
     deadline: number
+    scope: EgressScope
   },
 ): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer }> {
   return new Promise((resolve, reject) => {
@@ -395,7 +423,7 @@ function oneRequest(
         path: `${url.pathname}${url.search}`,
         method: opts.method,
         headers: opts.headers,
-        lookup: guardedLookup as any,
+        lookup: makeGuardedLookup(opts.scope) as any,
         timeout: remaining,
       },
       res => {
@@ -490,9 +518,10 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS
+  const scope = options.egressScope ?? 'function'
   const deadline = Date.now() + timeoutMs
 
-  let url = assertAllowedUrl(rawUrl)
+  let url = assertAllowedUrl(rawUrl, scope)
   let method = (options.method ?? 'GET').toUpperCase()
   let body = options.body
   let headers: Record<string, string> = { ...(options.headers ?? {}) }
@@ -501,7 +530,7 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
   }
 
   for (let hop = 0; ; hop++) {
-    const res = await oneRequest(url, { method, headers, body, maxBytes, deadline })
+    const res = await oneRequest(url, { method, headers, body, maxBytes, deadline, scope })
 
     const location = res.headers.location
     const isRedirect = res.status >= 300 && res.status < 400 && typeof location === 'string'
@@ -511,7 +540,7 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
       throw new BlockedOutboundError(`Too many redirects (limit ${maxRedirects}).`)
     }
 
-    const next = assertAllowedUrl(new URL(location, url).toString())
+    const next = assertAllowedUrl(new URL(location, url).toString(), scope)
 
     // Cross-origin: drop anything that authenticates the caller. Without this
     // the guard would turn one redirect into a credential disclosure, which is
