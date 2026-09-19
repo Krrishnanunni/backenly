@@ -1025,15 +1025,25 @@ jobs:
           # fresh install must come out of the box with a COMPLETE
           # `_prisma_migrations`, not merely with the right tables.
           expected=$(ls -1d prisma/migrations-canonical/*/ | wc -l | tr -d ' ')
-          # The route the installer itself uses. The compose Postgres does not
+
+          # The same defaults scripts/selfhost.ts uses. `|| true` because the
+          # installer does NOT write POSTGRES_USER into .env, and under
+          # `set -e` a grep that matches nothing would fail this step for a
+          # reason unrelated to what it is testing - which is what it did.
+          PGUSER=$(grep -E '^POSTGRES_USER=' .env | head -1 | cut -d= -f2- || true)
+          PGDB=$(grep -E '^POSTGRES_DB=' .env | head -1 | cut -d= -f2- || true)
+          PGUSER=${PGUSER:-backenly_user}
+          PGDB=${PGDB:-backenly}
+          echo "  querying as ${PGUSER} on ${PGDB}"
+
+          # The route the installer itself uses: the compose Postgres does not
           # publish its port, so psql on the runner cannot reach it directly.
-          PGUSER=$(grep -E '^POSTGRES_USER=' .env | head -1 | cut -d= -f2-)
-          PGDB=$(grep -E '^POSTGRES_DB=' .env | head -1 | cut -d= -f2-)
           actual=$(docker compose -f docker-compose.dev.yml exec -T postgres \
-            psql -h 127.0.0.1 -U "${PGUSER:-backenly_user}" -d "${PGDB:-backenly}" -tAc \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
             "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL" \
-            2>/dev/null | tr -d ' \r')
-          echo "  canonical migrations: $expected, recorded as applied: ${actual:-none}"
+            | tr -d ' \r' || true)
+
+          echo "  canonical migrations: $expected, recorded as applied: ${actual:-<query failed>}"
           [ "$actual" = "$expected" ] || {
             echo "the install did not record every canonical migration;"
             echo "a deployment in this state cannot be upgraded by a later release."
