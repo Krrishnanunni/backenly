@@ -330,3 +330,136 @@ __tests__/recovery/clean-machine-restore.test.ts
 # produces a deployment matching no point in time at all. Run twice, since an
 # interrupted restore gets re-run.
 __tests__/recovery/destructive-restore.test.ts
+
+# ── Dependency failure ──────────────────────────────────────────────────────
+#
+# Restart qualification asks whether a deployment comes back. These ask what it
+# SAYS while a dependency is actually gone, which is a different question and is
+# where the dishonest answers live. Each one found a real defect:
+#
+#   postgres  every authorization wrapper reported a database outage as 401,
+#             so a signed-in operator was told their credentials were rejected -
+#             and the obvious response, signing out and back in, destroys the
+#             session and cannot succeed while the same database is down
+#   storage   both drivers collapsed "cannot read the bytes" into null, which
+#             both callers render as 404, so an unmounted volume told every
+#             caller their objects had ceased to exist
+#
+# The postgres suite cuts the transport with a proxy rather than stopping the
+# server, for the reason tests/helpers/severable-proxy.ts states, and repoints
+# DATABASE_URL BEFORE importing the routes so the product's own singleton is
+# what loses its database.
+tests/integration/dependency-failure-postgres.spec.ts
+tests/integration/dependency-failure-storage.spec.ts
+
+# Needs REDIS, not Postgres — same rule as rate-limit-shared-store.spec.ts, so
+# verify it with and without REDIS_URL rather than with and without a database.
+#
+# It does not repeat what that suite already proves about the limiter. It asks
+# how far a Redis outage spreads: a feature that has nothing to do with rate
+# limiting must stay completely available, or a defence-in-depth component has
+# become a single point of failure. It stops and starts redis-server for real,
+# so the shared-counter claim after recovery is made against a store that
+# genuinely restarted.
+tests/integration/dependency-failure-redis.spec.ts
+
+# The dependency that fails here is somebody ELSE'S server: the customer's HTTP
+# endpoint, which can be down for a week without this deployment being able to
+# do anything about it. The contract is therefore the opposite of the others -
+# keep the event, retry on a schedule, deliver exactly once on return - and the
+# three ways that goes wrong (lost, duplicated, never) are each asserted.
+#
+# It also pins the distinction that makes the ladder work: the egress guard's
+# refusal is TERMINAL, a connection refusal is not. Collapsing the two would
+# either spam a forbidden URL or drop every event from a restarting receiver.
+tests/integration/dependency-failure-webhook-receiver.spec.ts
+
+# What happens when a migration FAILS halfway - the case an operator meets at
+# 3am and the one where a wrong answer is unrecoverable.
+#
+# The rehearsal migration exists only in the assembled workspace, never in the
+# repository, so a deliberately broken migration can never ship. It does real
+# work and then fails inside one transaction, which is the RECOVERABLE shape
+# and therefore the one worth proving first.
+#
+# It found that the failure was honest but ILLEGIBLE: execFileSync puts the
+# reason on stderr and none of it in `message`, so an operator got
+# "Command failed: <node> <cli> migrate deploy" while Prisma's P3018, the
+# migration name, the SQL error and the recovery link were all discarded.
+#
+# The fixture installs the PostgREST support objects the way the installer
+# does, from both SQL files in the installer's order. Without them case D is
+# vacuous: "nothing was lost" is trivially true when there was nothing to lose.
+tests/integration/selfhost-failed-migration.spec.ts
+
+# ── Credential rotation ─────────────────────────────────────────────────────
+#
+# A rotation proven only by "the new password works" is not proven: the point of
+# rotating is that the OLD credential STOPS working. Every case is control ->
+# rotate -> old refused (28P01, not a timeout) -> new works -> security
+# properties survived. The last step is the expensive one to skip: a rotation
+# that recreated backenly_app as a superuser would pass the first four while
+# turning every FORCE RLS policy into a suggestion.
+#
+# Roles are CLUSTER-WIDE, so this uses throwaway role names throughout - a
+# separate database does not isolate them.
+#
+# It measures whether the cluster authenticates at all, with a password that is
+# certainly wrong, and REFUSES to assert revocation on a `trust` cluster rather
+# than reporting a false verdict. A developer's local PostgreSQL is usually
+# trust; CI's postgres:16 is initialised with a password and scram-sha-256.
+tests/integration/credential-rotation-database.spec.ts
+
+# Rotating the secrets an operator types into the dashboard rather than into a
+# connection string. It found that GET /api/workspace-oauth decrypted every
+# provider's client secret and returned it to the browser, while the POST on the
+# same endpoint redacted its own response - so the intent was never in doubt and
+# the GET simply contradicted it.
+tests/integration/credential-rotation-provider-secrets.spec.ts
+
+# ── Scheduled snapshots ─────────────────────────────────────────────────────
+#
+# Default OFF, and it stays off: an upgrade must not start writing a dump of
+# every project to disk nightly on somebody's behalf while they are not looking.
+#
+# Nothing here calls backupWorkspace directly - that is the point. The
+# SCHEDULER'S own entry point is driven, including its auth gate, and the
+# artifact it produces is opened and read for the marker row. Calling the backup
+# function by hand proves the function works and says nothing about whether
+# anything ever calls it.
+#
+# The failure case encodes a real production incident: nightly backups failed
+# for four days while the pruner deleted the last good ones, ending at zero
+# backups on disk with one info-level line as the only trace. So a failed run
+# must leave a FAILED record and no artifact, never a completed record pointing
+# at a file that is not there, and retention must protect a project whose latest
+# run failed.
+tests/integration/scheduled-snapshots.spec.ts
+
+# HIGH, found by the final qualification on a real deployment: a PostgreSQL
+# restart made the next /api/v1/* request reject with P1017 and the RUNTIME
+# PROCESS EXITED. Express 4 does not await its handlers, so an async rejection
+# never reaches the global error middleware - it becomes an unhandled rejection
+# and Node 15+ terminates on those. Every v1 surface stayed down afterwards.
+#
+# The demonstration runs in a SUBPROCESS, because jest installs its own
+# unhandledRejection handler and the thing under test - Node terminating - can
+# never happen inside it. Wrapped: 500 and exit 0. Unwrapped: no response and a
+# non-zero exit, which is the CI log exactly.
+tests/integration/runtime-async-crash.spec.ts
+
+# The fourth role. setup-app-role.ts and README.md have documented a four-role
+# architecture since the credential split; three were created by code, and
+# `backenly_backup` existed in prose plus a README section telling operators to
+# run the CREATE ROLE by hand - with a grant list covering the workspace schema
+# and NOT public, so even following it left recovery broken.
+#
+# Deployment Recovery therefore failed on every correctly split install with
+# "permission denied for table backenly_pgrst_schema_registry". Every existing
+# recovery test passed because they run where the role is a superuser.
+#
+# Granting the registry to the app role would have cleared that error and
+# stopped at the next: workspace tables are FORCE RLS and backenly_app is
+# NOBYPASSRLS. That is asserted here rather than argued - the app role is made
+# to try both dumps, and fails both.
+tests/integration/backup-role-contract.spec.ts

@@ -18,6 +18,7 @@
 
 import 'dotenv/config'
 import { assertEditionCompositionOrExit } from '../lib/edition/cloud-extension'
+import { installProcessSafetyNet } from './lib/async-route'
 import app from './app'
 
 // Before the socket, not after. This process serves every /api/v1/* request in
@@ -32,6 +33,14 @@ const server = app.listen(PORT, () => {
   console.log(`[Runtime Server] Listening on http://localhost:${PORT}`)
   console.log(`[Runtime Server] Health: http://localhost:${PORT}/health`)
 })
+
+// The boundary of last resort, installed WITH the server so a drain is possible.
+//
+// Ordinary failures never reach it: every route is wrapped, so a dependency
+// error becomes a 500 and this process keeps serving. A rejection that gets
+// here escaped the request model altogether, and PM2 restarts this process, so
+// exiting is the recovery rather than a second outage. See async-route.ts.
+installProcessSafetyNet({ server })
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

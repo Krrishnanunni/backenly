@@ -158,6 +158,48 @@ describe('mail actually leaves, using the project’s own credentials', () => {
     expect(mail.raw).toMatch(/From:.*Example Auth/)
   }, 120_000)
 
+  it('ROTATES: after a new password is saved, the wire carries the new one', async () => {
+    // Credential-rotation qualification for SMTP.
+    //
+    // The resolver-level test below already proves a supplied password replaces
+    // the stored one. This proves the half that matters operationally: the next
+    // real send AUTHENTICATES with the new credential. A rotation that updated
+    // the row but left a cached transport dialling the old password would pass
+    // every stored-value assertion and still fail on the first email a user
+    // actually needs.
+    //
+    // Observed on the wire rather than read back from the database, because the
+    // database is the thing being changed and cannot witness its own effect.
+    const ROTATED = 'rotated-smtp-password-9f2c'
+    await configureProjectSmtp()
+
+    await sendThroughProject(projectId, 'Before rotation', '<p>x</p>')
+    expect(sink.received).toHaveLength(1)
+    // CONTROL: the old credential is genuinely what was in use.
+    expect(sink.received[0].password).toBe(SMTP_PASS)
+
+    await saveSmtpConfig(projectId, {
+      host: '127.0.0.1',
+      port: sink.port,
+      username: SMTP_USER,
+      password: ROTATED,
+      fromAddress: FROM,
+      enabled: true,
+    })
+
+    sink.received.length = 0
+    await sendThroughProject(projectId, 'After rotation', '<p>x</p>')
+    expect(sink.received).toHaveLength(1)
+    expect(sink.received[0].password).toBe(ROTATED)
+    expect(sink.received[0].password).not.toBe(SMTP_PASS)
+
+    // And the rotated secret is no more readable than the first one was.
+    const view = await getSmtpConfigView(projectId)
+    expect(view.passwordConfigured).toBe(true)
+    expect(JSON.stringify(view)).not.toContain(ROTATED)
+    expect(JSON.stringify(view)).not.toContain(SMTP_PASS)
+  }, 120_000)
+
   it('reports a rejecting server as a failure rather than a send', async () => {
     await configureProjectSmtp()
     sink.rejectWith = '550'

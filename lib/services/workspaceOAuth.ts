@@ -53,6 +53,38 @@ export interface WorkspaceOAuthConfigData {
   generatedAt?: Date
 }
 
+/**
+ * A config as the DASHBOARD may see it: everything except the secret.
+ *
+ * `listConfigs` used to decrypt `clientSecret` for every provider and the
+ * browser route returned the result verbatim, so opening the Auth page shipped
+ * every configured provider's plaintext client secret to the browser - where it
+ * sits in memory, in devtools, and in any HAR capture or session replay.
+ *
+ * The POST on the same endpoint already redacted its own response
+ * ("Don't send secret back"), so the intent was never in doubt; the GET simply
+ * contradicted it. Encrypting a value at rest and then serving it decrypted to
+ * a browser leaves only the database-theft half of the threat model covered.
+ *
+ * The OAuth flow itself is unaffected: it uses `getConfig`, which decrypts
+ * server-side in the runtime and never crosses the network.
+ */
+export interface WorkspaceOAuthConfigListing {
+  id: string
+  projectId: string
+  provider: string
+  clientId: string
+  /** Whether a secret is stored. NEVER the secret itself. */
+  clientSecretConfigured: boolean
+  redirectUri: string | null
+  scopes: string[]
+  enabled: boolean
+  generatedAt: Date | null
+  configuredAt: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface WorkspaceOAuthConfigResponse {
   id: string
   projectId: string
@@ -139,15 +171,18 @@ export class WorkspaceOAuthService {
   /**
    * List all OAuth configurations for a workspace
    */
-  static async listConfigs(projectId: string): Promise<WorkspaceOAuthConfigResponse[]> {
+  static async listConfigs(projectId: string): Promise<WorkspaceOAuthConfigListing[]> {
     const configs = await prisma.workspaceOAuthConfig.findMany({
       where: { projectId },
       orderBy: { createdAt: 'desc' },
     })
 
-    return configs.map(config => ({
+    // Deliberately NOT decrypted. The only caller is the browser-facing GET,
+    // and the dashboard needs to know THAT a provider is configured, never what
+    // with. See WorkspaceOAuthConfigListing.
+    return configs.map(({ clientSecret, ...config }) => ({
       ...config,
-      clientSecret: decrypt(config.clientSecret),
+      clientSecretConfigured: Boolean(clientSecret),
     }))
   }
 

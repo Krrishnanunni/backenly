@@ -31,6 +31,7 @@ import type { StorageService } from './storage'
 import { generateUniqueStoragePath, enforceStorageQuota as enforceStorageLifecycleQuota, generatePresignedUrlExpiry } from '@/lib/storage/storage-lifecycle'
 import { enforceStorageQuota as enforceStorageBillingQuota } from './quota-enforcement'
 import { getS3Client, getS3Config, s3ConfigurationProblem, checkS3Configuration } from './s3-config'
+import { StorageUnavailableError } from '@/lib/storage/errors'
 
 export class S3StorageService implements StorageService {
   private s3Client: S3Client
@@ -601,8 +602,14 @@ export class S3StorageService implements StorageService {
         name: file.name,
       }
     } catch (error) {
+      // NOT `return null`. See the local driver and lib/storage/errors.ts: the
+      // metadata row exists, so an unreachable endpoint, a wrong credential or
+      // a missing key is a storage fault, not evidence the object was deleted.
       console.error(`[S3Storage] Failed to get file ${file.path}:`, error)
-      return null
+      throw new StorageUnavailableError(
+        `the bytes for file ${fileId} could not be read from object storage`,
+        error,
+      )
     }
   }
 

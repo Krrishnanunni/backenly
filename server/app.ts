@@ -153,8 +153,21 @@ app.use('/api/v2', v2Routes)
 app.use(BASE, dynamicRoutes)
 
 // ── Global error handler ───────────────────────────────────────────────────────
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+//
+// Reachable at last. Express 4 does not await its handlers, so until every
+// route was wrapped in `asyncRoute` an async rejection never arrived here - it
+// became an unhandled rejection and Node terminated the process. This is where
+// a dependency failure now becomes a 500 instead.
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('[Runtime Server] Unhandled error:', err?.message ?? 'unknown')
+
+  // Once the headers are out there is no status left to set, and writing a JSON
+  // body into a half-sent response corrupts it. The realtime SSE route commits
+  // its headers with flushHeaders() and then streams for minutes, so a failure
+  // after that point lands here with nothing sendable. Express's default
+  // handler destroys the socket, which is the only correct answer.
+  if (res.headersSent) return next(err)
+
   res.status(500).json({ error: 'Internal server error', code: 'INTERNAL_ERROR' })
 })
 

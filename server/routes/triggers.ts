@@ -13,6 +13,7 @@ import { prisma } from '@/lib/db'
 import { listTriggers, createTrigger, deleteTrigger } from '@/lib/services/trigger-service'
 import { enforceTriggerCreation } from '@/lib/entitlements/policy'
 import { canAccessProject, canAdministerProject, canWriteProject } from '@/lib/edition/guard'
+import { asyncRoute } from '../lib/async-route'
 
 const router = Router()
 
@@ -41,7 +42,7 @@ async function authenticate(req: Request) {
   return { userId: decoded.userId }
 }
 
-router.get('/:projectId/triggers', async (req: Request, res: Response) => {
+router.get('/:projectId/triggers', asyncRoute(async (req: Request, res: Response) => {
   const auth = await authenticate(req)
   if (!auth.userId) {
     res.status(401).json({ error: 'Unauthorized' })
@@ -53,9 +54,9 @@ router.get('/:projectId/triggers', async (req: Request, res: Response) => {
   }
   const triggers = await listTriggers(req.params.projectId)
   res.json({ triggers })
-})
+}))
 
-router.post('/:projectId/triggers', async (req: Request, res: Response) => {
+router.post('/:projectId/triggers', asyncRoute(async (req: Request, res: Response) => {
   const { projectId } = req.params
   const auth = await authenticate(req)
   if (!auth.userId) {
@@ -96,9 +97,9 @@ router.post('/:projectId/triggers', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
-})
+}))
 
-router.delete('/:projectId/triggers', async (req: Request, res: Response) => {
+router.delete('/:projectId/triggers', asyncRoute(async (req: Request, res: Response) => {
   const { projectId } = req.params
   const auth = await authenticate(req)
   if (!auth.userId) {
@@ -122,6 +123,6 @@ router.delete('/:projectId/triggers', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
-})
+}))
 
 export default router

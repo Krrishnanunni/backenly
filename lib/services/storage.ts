@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import { S3StorageService } from './s3Storage'
 import { clampIsPublic } from '@/lib/storage/access-policy'
 import { requireStorageSecret } from '@/lib/auth/jwt-secret'
+import { StorageUnavailableError } from '@/lib/storage/errors'
 
 export interface StorageService {
   // Bucket operations
@@ -614,8 +615,15 @@ class LocalStorageService implements StorageService {
         name: file.name,
       }
     } catch (error) {
+      // NOT `return null`. The metadata row exists, so this is a storage fault,
+      // and the caller renders null as `404 File not found` - a definite claim
+      // that the object does not exist, made while the only thing known is that
+      // its bytes could not be read. See lib/storage/errors.ts.
       console.error(`Failed to read file ${file.path}:`, error)
-      return null
+      throw new StorageUnavailableError(
+        `the bytes for file ${fileId} could not be read from local storage`,
+        error,
+      )
     }
   }
 

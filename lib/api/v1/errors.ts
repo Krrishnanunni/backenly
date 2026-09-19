@@ -98,5 +98,9 @@ export const ErrorCodes = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   BAD_REQUEST: 'BAD_REQUEST',
   CONFLICT: 'CONFLICT',
+  // The request was valid and a dependency this deployment needs was not
+  // reachable. Distinct from INTERNAL_ERROR because it is RETRYABLE, and
+  // distinct from NOT_FOUND because the resource exists.
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
 } as const
 

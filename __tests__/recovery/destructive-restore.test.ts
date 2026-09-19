@@ -47,6 +47,10 @@ const WEAK_PASSWORD = randomBytes(12).toString('hex')
 
 let sourceUrl = ''
 let targetUrl = ''
+let adminUrl = ''
+/** The application role the restore replays as. Cluster-wide, so suffixed. */
+const APP_ROLE = `recovery_app_${SUFFIX}`
+const APP_PASSWORD = randomBytes(12).toString('hex')
 let bundleDir = ''
 let corruptDir = ''
 let credential = ''
@@ -133,8 +137,23 @@ beforeAll(async () => {
 
   // Stand up a live deployment from the bundle, then let it diverge.
   await onAdmin(`CREATE DATABASE "${TARGET_DB}"`)
-  targetUrl = urlForDatabase(sourceUrl, TARGET_DB)
-  await restoreDeployment({ bundleDir, credential, targetUrl })
+  adminUrl = urlForDatabase(sourceUrl, TARGET_DB)
+
+  // TWO connections. Admin provisions - dropping schemas, creating roles and
+  // installing extensions are elevation the application role must not have -
+  // and the application role REPLAYS, because pg_dump runs with --no-owner so
+  // ownership follows the connection, and FORCE RLS keys on the owner.
+  await onAdmin(
+    `CREATE ROLE "${APP_ROLE}" LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE ` +
+      `PASSWORD '${APP_PASSWORD}'`,
+  )
+  await onAdmin(`GRANT CONNECT, CREATE, TEMPORARY ON DATABASE "${TARGET_DB}" TO "${APP_ROLE}"`)
+  targetUrl = urlForDatabase(sourceUrl, TARGET_DB).replace(
+    /\/\/[^@]+@/,
+    `//${APP_ROLE}:${APP_PASSWORD}@`,
+  )
+
+  await restoreDeployment({ bundleDir, credential, adminUrl, targetUrl, appRole: APP_ROLE })
 
   await onTarget(
     `INSERT INTO public.projects (id, name, "userId", "createdAt", "updatedAt")
@@ -162,6 +181,8 @@ afterAll(async () => {
     await onAdmin(`DROP DATABASE IF EXISTS "${TARGET_DB}"`).catch(() => {})
   }
   await onAdmin(`DROP ROLE IF EXISTS "${WEAK_ROLE}"`).catch(() => {})
+  await onAdmin(`DROP OWNED BY "${APP_ROLE}" CASCADE`).catch(() => {})
+  await onAdmin(`DROP ROLE IF EXISTS "${APP_ROLE}"`).catch(() => {})
   for (const dir of [bundleDir, corruptDir]) {
     if (dir) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {})
   }
@@ -180,7 +201,7 @@ describe('the live deployment has diverged from the bundle', () => {
 
 describe('a damaged archive does not get to touch it', () => {
   test('the restore refuses', async () => {
-    await expect(restoreDeployment({ bundleDir: corruptDir, credential, targetUrl }))
+    await expect(restoreDeployment({ bundleDir: corruptDir, credential, adminUrl, targetUrl, appRole: APP_ROLE }))
       .rejects.toThrow(RestoreAbortedError)
   })
 
@@ -188,7 +209,7 @@ describe('a damaged archive does not get to touch it', () => {
     // Not a detail. This is what tells an operator whether they still have a
     // deployment or a problem.
     try {
-      await restoreDeployment({ bundleDir: corruptDir, credential, targetUrl })
+      await restoreDeployment({ bundleDir: corruptDir, credential, adminUrl, targetUrl, appRole: APP_ROLE })
       throw new Error('expected a refusal')
     } catch (err) {
       expect(err).toBeInstanceOf(RestoreAbortedError)
@@ -209,7 +230,13 @@ describe('a damaged archive does not get to touch it', () => {
 describe('a wrong credential does not get to touch it either', () => {
   test('the restore refuses', async () => {
     await expect(
-      restoreDeployment({ bundleDir, credential: 'WRONG-CREDENTIAL-ENTIRELY', targetUrl }),
+      restoreDeployment({
+        bundleDir,
+        credential: 'WRONG-CREDENTIAL-ENTIRELY',
+        adminUrl,
+        targetUrl,
+        appRole: APP_ROLE,
+      }),
     ).rejects.toThrow(RestoreAbortedError)
   })
 
@@ -229,8 +256,9 @@ describe('a credential without the privileges to restore', () => {
       /\/\/[^@]+@/,
       `//${WEAK_ROLE}:${WEAK_PASSWORD}@`,
     )
-    await expect(restoreDeployment({ bundleDir, credential, targetUrl: weakUrl }))
-      .rejects.toThrow(RestoreAbortedError)
+    await expect(
+      restoreDeployment({ bundleDir, credential, adminUrl, targetUrl: weakUrl }),
+    ).rejects.toThrow(RestoreAbortedError)
   })
 
   test('and the live deployment is still there', async () => {
@@ -245,21 +273,25 @@ describe('a credential without the privileges to restore', () => {
       `//${WEAK_ROLE}:${WEAK_PASSWORD}@`,
     )
     try {
-      await restoreDeployment({ bundleDir, credential, targetUrl: weakUrl })
+      await restoreDeployment({ bundleDir, credential, adminUrl, targetUrl: weakUrl })
       throw new Error('expected a refusal')
     } catch (err) {
       expect(err).toBeInstanceOf(RestoreAbortedError)
       expect(RESTORE_ORDER).toContain((err as RestoreAbortedError).step)
-      // Past validation, so it cannot promise the target is untouched - and
-      // saying so honestly is the point.
-      expect((err as RestoreAbortedError).targetUntouched).toBe(false)
+
+      // It now promises MORE than it used to, and the promise is the point:
+      // the credentials are proven before the first destructive statement, so
+      // a restore that cannot finish has not started. This assertion was
+      // `false` when the check happened mid-restore.
+      expect((err as RestoreAbortedError).targetUntouched).toBe(true)
+      expect((err as RestoreAbortedError).message).toMatch(/Preflight refused/i)
     }
   })
 })
 
 describe('a good archive replaces the deployment rather than merging into it', () => {
   test('the restore succeeds over a live target', async () => {
-    const progress = await restoreDeployment({ bundleDir, credential, targetUrl })
+    const progress = await restoreDeployment({ bundleDir, credential, adminUrl, targetUrl, appRole: APP_ROLE })
     expect(progress.completed).toContain('verify-health-and-integrity')
   })
 
@@ -285,7 +317,7 @@ describe('a good archive replaces the deployment rather than merging into it', (
   test('restoring the same bundle twice lands in the same place', async () => {
     // Idempotence is an operational property, not a theoretical one: an
     // interrupted restore gets re-run, and it must not matter how many times.
-    await restoreDeployment({ bundleDir, credential, targetUrl })
+    await restoreDeployment({ bundleDir, credential, adminUrl, targetUrl, appRole: APP_ROLE })
     expect(await divergenceSurvives()).toBe(false)
     const notes = await onTarget<{ body: string }>(`SELECT body FROM "${schemaName}"."notes"`)
     expect(notes.map(n => n.body)).toEqual(['from the bundle'])
@@ -300,7 +332,7 @@ describe('the manifest is what makes any of this checkable', () => {
         if (name === MANIFEST_FILE) continue
         await fs.promises.copyFile(path.join(bundleDir, name), path.join(naked, name))
       }
-      await expect(restoreDeployment({ bundleDir: naked, credential, targetUrl }))
+      await expect(restoreDeployment({ bundleDir: naked, credential, adminUrl, targetUrl, appRole: APP_ROLE }))
         .rejects.toThrow(/manifest/i)
       expect(await divergenceSurvives()).toBe(false)
     } finally {

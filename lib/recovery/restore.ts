@@ -247,11 +247,33 @@ export interface RestoreOptions {
   bundleDir: string
   credential: string
   /**
-   * Connection the SQL is replayed over. Must be the APPLICATION role, not the
-   * backup role: workspace tables use FORCE ROW LEVEL SECURITY, which keys on
-   * the owner, so restoring as anything else silently rebinds every policy.
+   * PRIVILEGED PROVISIONING ONLY. Dropping `public`, creating the PostgREST
+   * roles and installing extensions all require elevation the application role
+   * does not have and must not be given.
+   *
+   * Optional only for `validateOnly`, which touches nothing. A real restore
+   * refuses without it, before the first destructive statement.
+   */
+  adminUrl?: string
+  /**
+   * Connection the dumps are REPLAYED over, and the reason there are two.
+   *
+   * pg_dump runs with --no-owner, so psql creates whatever it replays as the
+   * role it connected with. This must therefore be the APPLICATION role:
+   * workspace tables use FORCE ROW LEVEL SECURITY, which keys on the owner, so
+   * replaying as the superuser leaves every table owned by the wrong role and
+   * silently rebinds every policy.
+   *
+   * It must equally not be the BACKUP role, which is read-only by design.
+   *
+   *   admin provisions - app owns and replays - backup reads
    */
   targetUrl: string
+  /**
+   * The application role's name, when it is not `backenly_app`. Resolved from
+   * the deployment when absent.
+   */
+  appRole?: string
   /** Where storage objects are written. Defaults to STORAGE_DIR. */
   storageDir?: string
   /** Stop after validation. Nothing is touched. */
@@ -266,6 +288,109 @@ export interface RestoreOptions {
  * failure means the archive was never usable - that throws, because there is
  * nothing to report progress about.
  */
+/**
+ * Prove BOTH credentials before anything is destroyed.
+ *
+ * The restore's first mutating act is `DROP SCHEMA public CASCADE`. Discovering
+ * after that that the application role cannot connect, or is the backup role by
+ * mistake, leaves a deployment with neither its old state nor its new one. So
+ * every connection this restore will need is opened and interrogated first,
+ * while the target is still untouched.
+ */
+async function preflightConnections(options: RestoreOptions): Promise<string> {
+  const { adminUrl, targetUrl } = options
+  if (!adminUrl) {
+    throw new Error(
+      'BACKENLY_ADMIN_DATABASE_URL is not set. A restore drops and recreates schemas, ' +
+        'creates the PostgREST roles and installs extensions, none of which the application ' +
+        'role may do. Pass an elevated connection, or use --validate-only, which touches nothing.',
+    )
+  }
+
+  // Same server, same database. Two connections that disagree about where they
+  // point would provision one database and replay into another.
+  const admin = new URL(adminUrl)
+  const target = new URL(targetUrl)
+  const place = (u: URL) => `${u.hostname}:${u.port || '5432'}${u.pathname}`
+  if (place(admin) !== place(target)) {
+    throw new Error(
+      `The admin and application connections point at different databases: ` +
+        `${place(admin)} and ${place(target)}. A restore must provision and replay into one.`,
+    )
+  }
+
+  const adminRole = (await psql(adminUrl, 'SELECT current_user')).trim()
+  const adminSuper = (
+    await psql(adminUrl, `SELECT rolsuper FROM pg_roles WHERE rolname = current_user`)
+  ).trim()
+  if (adminSuper !== 't' && adminSuper !== 'true') {
+    throw new Error(
+      `The admin connection authenticates as "${adminRole}", which is not a superuser. ` +
+        `Dropping schemas, creating roles and installing extensions all require elevation.`,
+    )
+  }
+
+  const appRoleActual = (await psql(targetUrl, 'SELECT current_user')).trim()
+  const [appSuper, appBypass, appCreate] = (
+    await psql(
+      targetUrl,
+      `SELECT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)::text || '|' ||
+              (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user)::text || '|' ||
+              has_database_privilege(current_user, current_database(), 'CREATE')::text`,
+    )
+  )
+    .trim()
+    .split('|')
+
+  const backupRole = process.env.BACKENLY_BACKUP_ROLE?.trim() || 'backenly_backup'
+  if (appRoleActual === backupRole) {
+    throw new Error(
+      `The application connection authenticates as "${appRoleActual}", which is the BACKUP ` +
+        `credential. It is read-only by design and owns nothing; replaying over it cannot work.`,
+    )
+  }
+
+  // The property that makes replaying as this role correct, and the one that
+  // makes restoring as a superuser wrong.
+  if (appSuper === 't' || appSuper === 'true') {
+    throw new Error(
+      `The application connection authenticates as "${appRoleActual}", which is a SUPERUSER. ` +
+        `pg_dump ran with --no-owner, so every restored object would be owned by it rather ` +
+        `than by the application role, and FORCE ROW LEVEL SECURITY keys on the owner.`,
+    )
+  }
+  if (appBypass === 't' || appBypass === 'true') {
+    throw new Error(
+      `The application connection authenticates as "${appRoleActual}", which has BYPASSRLS. ` +
+        `The application role must be subject to its own policies.`,
+    )
+  }
+  if (appCreate !== 't' && appCreate !== 'true') {
+    throw new Error(
+      `"${appRoleActual}" has no CREATE privilege on this database, so it cannot create the ` +
+        `schemas the dumps recreate.`,
+    )
+  }
+
+  // The name, when the deployment says what it should be.
+  const configured = (
+    await psql(
+      adminUrl,
+      `SELECT coalesce(nullif(current_setting('backenly.app_role', true), ''), '')`,
+    ).catch(() => '')
+  ).trim()
+  const expected = options.appRole ?? process.env.BACKENLY_APP_ROLE?.trim() ?? configured
+  if (expected && expected !== appRoleActual) {
+    throw new Error(
+      `The application connection authenticates as "${appRoleActual}", but this deployment's ` +
+        `application role is "${expected}". Restoring as the wrong role leaves the objects ` +
+        `owned by it.`,
+    )
+  }
+
+  return `admin=${adminRole} (superuser), application=${appRoleActual} (NOSUPERUSER NOBYPASSRLS)`
+}
+
 export async function restoreDeployment(options: RestoreOptions): Promise<RestoreProgress> {
   const completed: RestoreStep[] = []
   const results: StepResult[] = []
@@ -284,6 +409,24 @@ export async function restoreDeployment(options: RestoreOptions): Promise<Restor
 
   if (options.validateOnly) {
     return { completed, results, runnableSubsystems: runnableSubsystems(completed) }
+  }
+
+  // Before the first destructive statement, and reported so an operator can
+  // see which identity each half of the restore is about to use.
+  try {
+    const detail = await preflightConnections(options)
+    options.onStep?.({
+      step: 'provision-database-roles-and-extensions',
+      status: 'ok',
+      detail: `preflight: ${detail}`,
+    })
+  } catch (err) {
+    throw new RestoreAbortedError(
+      'provision-database-roles-and-extensions',
+      `Preflight refused the restore: ${(err as Error).message}`,
+      // Nothing has been touched. That is the entire point of preflighting.
+      true,
+    )
   }
 
   for (const step of RESTORE_ORDER) {
@@ -328,7 +471,7 @@ async function runStep(
     case 'rewrap-secrets-for-target':
       return 'secrets are restored with the platform database'
     case 'reconcile-derived-state':
-      return 'no derived state to reconcile'
+      return reconcileDerivedState(bundle, options)
     case 'verify-health-and-integrity':
       return verifyHealth(bundle, options)
     default:
@@ -360,7 +503,9 @@ async function provisionRolesAndExtensions(
     if (!/^(public|workspace_[A-Za-z0-9_-]+)$/.test(schema)) {
       throw new Error(`Refusing to drop ${JSON.stringify(schema)}: not a schema this bundle owns.`)
     }
-    await psql(options.targetUrl, `DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+    // ADMIN. `public` is not owned by the application role, and dropping a
+    // schema requires ownership.
+    await psql(adminUrl(options), `DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
   }
 
   // The workspace dumps carry GRANTs to anon, authenticated and service_role.
@@ -369,8 +514,9 @@ async function provisionRolesAndExtensions(
   // whoever set the machine up.
   const roles = ['anon', 'authenticated', 'service_role']
   for (const role of roles) {
+    // ADMIN. CREATE ROLE is elevation the application role does not have.
     await psql(
-      options.targetUrl,
+      adminUrl(options),
       `DO $$ BEGIN
          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN
            CREATE ROLE "${role}" NOLOGIN;
@@ -381,15 +527,35 @@ async function provisionRolesAndExtensions(
 
   for (const extension of bundle.manifest.requiredExtensions) {
     if (extension === 'plpgsql') continue // always present
-    await psql(options.targetUrl, `CREATE EXTENSION IF NOT EXISTS "${extension}"`).catch(() => {
+    // ADMIN. Installing an extension is elevation too.
+    await psql(adminUrl(options), `CREATE EXTENSION IF NOT EXISTS "${extension}"`).catch(() => {
       // An extension the target cannot provide is reported by
       // verify-health-and-integrity rather than aborting here, because some are
       // genuinely optional and the manifest cannot tell which.
     })
   }
 
+  // The dumps are replayed by the APPLICATION role, and the first thing they do
+  // is CREATE SCHEMA - including `public`, which was just dropped. That needs
+  // CREATE on the DATABASE, which only the admin connection can grant.
+  //
+  // Deliberately NOT a grant on schema `public`: it does not exist at this
+  // point, and granting on it here failed with "schema public does not exist".
+  // It does not need one either - the application role creates the schema, so
+  // it OWNS it, which is the ownership this whole two-connection split exists
+  // to produce.
+  const appRole = (await psql(options.targetUrl, 'SELECT current_user')).trim()
+  if (appRole) {
+    await psql(
+      adminUrl(options),
+      `GRANT CONNECT, CREATE, TEMPORARY ON DATABASE ${quoteIdent(await currentDatabase(options))} ` +
+        `TO ${quoteIdent(appRole)}`,
+    )
+  }
+
   return `${schemas.length} schemas cleared, ${roles.length} roles, ` +
-    `${bundle.manifest.requiredExtensions.length} extensions`
+    `${bundle.manifest.requiredExtensions.length} extensions, ` +
+    `${appRole} may create`
 }
 
 /**
@@ -404,12 +570,56 @@ async function provisionRolesAndExtensions(
  * after skipping every statement that failed, which is the exact shape of a
  * restore that looks complete and is not.
  */
+/**
+ * Remove `ALTER DEFAULT PRIVILEGES` from a dump about to be replayed.
+ *
+ * Default ACLs belong to the role that owns them, and PostgreSQL only lets that
+ * role (or a superuser) change them. The workspace dump deliberately keeps
+ * privileges - the grants to anon, authenticated and service_role are what make
+ * /db/* work - but it also carries the default ACLs of whichever role owned
+ * them on the SOURCE, and the application role replaying them is not that role
+ * whenever the two deployments differ. psql stops with "permission denied to
+ * change default privileges" and the restore fails after the target has already
+ * been dropped.
+ *
+ * They are not lost: default privileges are PRIVILEGED DERIVED STATE, and
+ * `reconcile-derived-state` re-establishes them immediately afterwards by
+ * re-running the canonical support SQL under the ADMIN connection, which sets
+ * them for the role this deployment actually uses. Carrying the source's
+ * version across would be wrong even where it was permitted.
+ *
+ * Statement-oriented rather than line-oriented: pg_dump may wrap a long GRANT
+ * list, so this consumes to the terminating semicolon.
+ */
+export function stripDefaultPrivileges(sql: string): { sql: string; removed: number } {
+  const lines = sql.split('\n')
+  const kept: string[] = []
+  let removed = 0
+  let skipping = false
+
+  for (const line of lines) {
+    if (!skipping && /^\s*ALTER DEFAULT PRIVILEGES\b/i.test(line)) {
+      skipping = true
+      removed += 1
+    }
+    if (skipping) {
+      if (/;\s*$/.test(line)) skipping = false
+      continue
+    }
+    kept.push(line)
+  }
+
+  return { sql: kept.join('\n'), removed }
+}
+
 function replaySql(
   sql: Buffer | null,
   options: RestoreOptions,
   label: string,
 ): Promise<string> {
   if (!sql || sql.length === 0) return Promise.resolve(`${label}: nothing to restore`)
+  const stripped = stripDefaultPrivileges(sql.toString('utf8'))
+  sql = Buffer.from(stripped.sql, 'utf8')
   const conn = connectionArgs(options.targetUrl)
 
   return new Promise((resolve, reject) => {
@@ -428,6 +638,8 @@ function replaySql(
       if (spawnError) {
         reject(new Error(`could not run psql for ${label}: ${spawnError.message}`))
       } else if (code === 0) {
+        // Reported, not silent: a restore that quietly edits the SQL it
+        // replays is exactly the kind of thing that should be in the log.
         resolve(`${label}: replayed ${sql.length} bytes`)
       } else {
         reject(new Error(
@@ -484,6 +696,172 @@ async function restoreStorageObjects(
   return `${written} objects into ${destination}`
 }
 
+/**
+ * Put the privileged support objects back under the installer's identity.
+ *
+ * The dumps are replayed by the APPLICATION role, which is what makes the
+ * platform and workspace tables come back owned correctly. But `public` carries
+ * more than application tables: the PostgREST registry and the SECURITY DEFINER
+ * functions and event triggers around it are installed by the ELEVATED role on
+ * a fresh install, and replaying them as the application role leaves them
+ * application-owned. A SECURITY DEFINER function owned by the wrong role runs
+ * with the wrong privileges, which is the opposite of a detail.
+ *
+ * So after the replay, the canonical support SQL is re-applied under the admin
+ * connection. It is the same file the installer runs, it is idempotent, and it
+ * ends by re-registering the restored workspace so the data plane serves it.
+ *
+ * This step used to return "no derived state to reconcile" and do nothing.
+ */
+async function reconcileDerivedState(
+  bundle: ValidatedBundle,
+  options: RestoreOptions,
+): Promise<string> {
+  const admin = adminUrl(options)
+  const applied: string[] = []
+
+  // ── Re-own the support objects BEFORE re-running their SQL ──────────────
+  //
+  // The platform dump is replayed by the application role, so everything in
+  // `public` comes back owned by it - including the PostgREST registry and the
+  // SECURITY DEFINER functions and event triggers around it, which a fresh
+  // install creates as the ELEVATED role. A SECURITY DEFINER function owned by
+  // the wrong role runs with the wrong privileges.
+  //
+  // Re-running the canonical SQL does not fix this on its own: CREATE TABLE IF
+  // NOT EXISTS skips an existing table, and CREATE OR REPLACE FUNCTION KEEPS
+  // the existing owner. So ownership is corrected explicitly, first.
+  //
+  // Deliberately NARROW. This names the support objects by their own prefix
+  // rather than sweeping with REASSIGN OWNED BY, which would also move objects
+  // that are meant to stay where they are.
+  const adminRole = (await psql(admin, 'SELECT current_user')).trim()
+  const reowned: string[] = []
+
+  // ── The deployment has to remember which role it is ─────────────────────
+  //
+  // `public.backenly_app_role()` reads the database-level setting
+  // `backenly.app_role`, and every ownership and grant decision in the
+  // privileged SQL routes through it. pg_dump does NOT carry
+  // `ALTER DATABASE ... SET`, so a restored deployment comes back with the
+  // setting absent and the function falling back to its default.
+  //
+  // That default is a role name which may not exist on the target at all - CI
+  // restores onto a cluster whose superuser is `postgres`, and reconciliation
+  // failed with `role "backenly_user" does not exist` while trying to set
+  // default privileges for it. Worse than the error is the silent case: where
+  // the fallback role DOES exist, every future grant would be aimed at the
+  // wrong one.
+  //
+  // So the setting is re-established from the role the dumps were actually
+  // replayed as, which is by definition this deployment's application role.
+  // ALTER DATABASE ... SET is elevation, which is why it belongs here.
+  const appRole = (await psql(options.targetUrl, 'SELECT current_user')).trim()
+  const database = (await psql(admin, 'SELECT current_database()')).trim()
+  await psql(
+    admin,
+    `ALTER DATABASE ${quoteIdent(database)} SET backenly.app_role = ${quoteLiteral(appRole)}`,
+  )
+
+  const registryExists = (
+    await psql(
+      admin,
+      `SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relname = 'backenly_pgrst_schema_registry'`,
+    )
+  ).trim()
+  if (registryExists !== '0') {
+    await psql(
+      admin,
+      `ALTER TABLE public.backenly_pgrst_schema_registry OWNER TO ${quoteIdent(adminRole)}`,
+    )
+    reowned.push('backenly_pgrst_schema_registry')
+  }
+
+  const functions = (
+    await psql(
+      admin,
+      `SELECT pr.oid::regprocedure::text FROM pg_proc pr
+         JOIN pg_namespace n ON n.oid = pr.pronamespace
+        WHERE n.nspname = 'public' AND pr.proname LIKE 'backenly_pgrst%'`,
+    )
+  )
+    .split('\n')
+    .map(s => s.trim())
+    .filter(Boolean)
+  for (const signature of functions) {
+    await psql(admin, `ALTER FUNCTION ${signature} OWNER TO ${quoteIdent(adminRole)}`)
+  }
+  if (functions.length > 0) reowned.push(`${functions.length} function(s)`)
+
+  for (const file of ['postgrest-schema-registry.sql', 'postgrest-ddl-sync.sql']) {
+    const full = path.join(process.cwd(), 'scripts', 'sql', file)
+    if (!fs.existsSync(/*turbopackIgnore: true*/ full)) {
+      // Refused rather than skipped. A restore that silently omits the data
+      // plane's support objects produces a deployment whose /db/* answers
+      // PGRST106 for every table, and reports success while doing it.
+      throw new Error(
+        `${full} is missing, so the PostgREST support objects cannot be reinstalled. ` +
+          `Run the restore from a Backenly checkout.`,
+      )
+    }
+    await psqlFile(admin, full)
+    applied.push(file)
+  }
+
+  // Re-register every workspace the bundle restored, so the data plane serves
+  // it again. The function is SECURITY DEFINER and owned by the installer role
+  // after the step above, which is why this runs here and not earlier.
+  const metadata = await readComponent(bundle, 'deployment-metadata')
+  const schemas: string[] = metadata
+    ? (JSON.parse(metadata.toString('utf8')).schemas ?? [])
+    : []
+  const workspaces = schemas.filter(s => s.startsWith('workspace_'))
+  for (const schema of workspaces) {
+    await psql(admin, `SELECT public.backenly_pgrst_register_schema('${schema.replace(/'/g, "''")}')`)
+  }
+
+  return (
+    `backenly.app_role=${appRole}; ` +
+    `re-owned to ${adminRole}: ${reowned.join(', ') || 'nothing'}; ` +
+    `${applied.join(', ')} reinstalled; ${workspaces.length} workspace(s) re-registered`
+  )
+}
+
+async function currentDatabase(options: RestoreOptions): Promise<string> {
+  return (await psql(options.targetUrl, 'SELECT current_database()')).trim()
+}
+
+function adminUrl(options: RestoreOptions): string {
+  if (!options.adminUrl) {
+    // Unreachable in practice: preflight refuses first. Stated anyway, because
+    // "unreachable" is how a privileged step quietly runs as the wrong role.
+    throw new Error('the admin connection is required for privileged restore steps')
+  }
+  return options.adminUrl
+}
+
+function quoteIdent(name: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_$-]*$/.test(name)) {
+    throw new Error(`unsafe identifier: ${name}`)
+  }
+  return `"${name}"`
+}
+
+function quoteLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+async function psqlFile(url: string, file: string): Promise<string> {
+  const conn = connectionArgs(url)
+  const { stdout } = await execFileAsync(
+    'psql',
+    [...conn.args, '--quiet', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1', '--file', file],
+    { env: conn.env, timeout: 300_000, maxBuffer: 1024 * 1024 * 16 },
+  )
+  return String(stdout)
+}
+
 async function verifyHealth(bundle: ValidatedBundle, options: RestoreOptions): Promise<string> {
   // Deliberately about the RESTORED SYSTEM, not about the process having
   // exited 0. Those are different claims, and only this one is worth acting on.
@@ -503,6 +881,139 @@ async function verifyHealth(bundle: ValidatedBundle, options: RestoreOptions): P
       )
     }
     checks.push(`ownership matches (${expected.users.length})`)
+  }
+
+  // ── The state the two-connection restore exists to produce ───────────────
+  //
+  // "The tables came back" is not the claim. The claim is that they came back
+  // OWNED BY THE APPLICATION ROLE, still protected, with the privileged support
+  // objects privileged again. Each of these is a way a restore can report
+  // success and leave a deployment that cannot serve or cannot be trusted.
+  const admin = adminUrl(options)
+  const appRole = (await psql(options.targetUrl, 'SELECT current_user')).trim()
+
+  // 1. Application tables are owned by the application role. Replaying as a
+  //    superuser is what this rules out, and it is invisible from the data.
+  const misowned = (
+    await psql(
+      admin,
+      `SELECT count(*) FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_roles r ON r.oid = c.relowner
+        WHERE c.relkind = 'r'
+          AND (n.nspname = 'public' OR n.nspname LIKE 'workspace\\_%')
+          AND c.relname NOT LIKE 'backenly_pgrst%'
+          AND r.rolname <> '${appRole.replace(/'/g, "''")}'`,
+    )
+  ).trim()
+  if (misowned !== '0') {
+    throw new Error(
+      `${misowned} restored table(s) are not owned by ${appRole}. pg_dump runs with ` +
+        `--no-owner, so this means the replay used the wrong connection: the application ` +
+        `role cannot ALTER its own tables, and FORCE ROW LEVEL SECURITY keys on the owner.`,
+    )
+  }
+  checks.push(`all tables owned by ${appRole}`)
+
+  // 2. FORCE RLS survived. A restore that dropped it serves every row of every
+  //    tenant to anyone the policies were supposed to stop.
+  const unforced = (
+    await psql(
+      admin,
+      `SELECT count(*) FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'r' AND n.nspname LIKE 'workspace\\_%'
+          AND c.relrowsecurity AND NOT c.relforcerowsecurity`,
+    )
+  ).trim()
+  if (unforced !== '0') {
+    throw new Error(
+      `${unforced} restored workspace table(s) have RLS enabled but not FORCED. Under FORCE ` +
+        `the owner is subject to its own policies; without it the owner is exempt.`,
+    )
+  }
+  checks.push('FORCE RLS intact')
+
+  // 3. The registry names every served schema, so exposing it hands any client
+  //    the tenant list. It must be reachable by NONE of the PostgREST roles.
+  const exposed = (
+    await psql(
+      admin,
+      `SELECT count(*) FROM (
+         SELECT unnest(ARRAY['anon','authenticated','service_role']) AS role
+       ) r
+       WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r.role)
+         AND has_table_privilege(r.role, 'public.backenly_pgrst_schema_registry', 'SELECT')`,
+    ).catch(() => '0')
+  ).trim()
+  if (exposed !== '0') {
+    throw new Error(
+      `The PostgREST registry is readable by ${exposed} of the end-user roles. It names every ` +
+        `served schema, so exposing it hands any client the tenant list.`,
+    )
+  }
+  checks.push('registry not exposed to end-user roles')
+
+  // 4. The support functions are SECURITY DEFINER and owned by the elevated
+  //    role. Owned by the application role they would run with the wrong
+  //    privileges - which is exactly what the replay leaves behind, and what
+  //    reconcile-derived-state is there to undo.
+  const adminRole = (await psql(admin, 'SELECT current_user')).trim()
+  const definers = (
+    await psql(
+      admin,
+      `SELECT count(*) FROM pg_proc pr
+         JOIN pg_roles r ON r.oid = pr.proowner
+        WHERE pr.proname LIKE 'backenly_pgrst%'
+          AND pr.prosecdef
+          AND r.rolname = '${adminRole.replace(/'/g, "''")}'`,
+    )
+  ).trim()
+  if (definers === '0') {
+    throw new Error(
+      `No SECURITY DEFINER backenly_pgrst_* function is owned by ${adminRole}. The support ` +
+        `objects were replayed as the application role and not reconciled, so they run with ` +
+        `the wrong privileges.`,
+    )
+  }
+  checks.push(`${definers} support function(s) owned by ${adminRole}`)
+
+  // 5. The event triggers that keep grants in step with DDL.
+  const triggers = (
+    await psql(admin, `SELECT count(*) FROM pg_event_trigger WHERE evtname LIKE 'backenly%'`)
+  ).trim()
+  if (triggers === '0') {
+    throw new Error(
+      'No Backenly event trigger exists after the restore. Without them a table created ' +
+        'later gets no grants, and the data plane answers 403 for it forever.',
+    )
+  }
+  checks.push(`${triggers} event trigger(s)`)
+
+  // 6. The registry identifies the workspace that was actually restored.
+  const metadata = await readComponent(bundle, 'deployment-metadata')
+  const expectedSchemas: string[] = metadata
+    ? (JSON.parse(metadata.toString('utf8')).schemas ?? []).filter((s: string) =>
+        s.startsWith('workspace_'),
+      )
+    : []
+  for (const schema of expectedSchemas) {
+    const registered = (
+      await psql(
+        admin,
+        `SELECT count(*) FROM public.backenly_pgrst_schema_registry ` +
+          `WHERE schema_name = '${schema.replace(/'/g, "''")}'`,
+      )
+    ).trim()
+    if (registered === '0') {
+      throw new Error(
+        `${schema} was restored but is not in the PostgREST registry, so /db/* will answer ` +
+          `PGRST106 for every table in it.`,
+      )
+    }
+  }
+  if (expectedSchemas.length > 0) {
+    checks.push(`${expectedSchemas.length} workspace(s) registered`)
   }
 
   return checks.join(', ')

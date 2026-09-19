@@ -50,6 +50,7 @@ import { stripUpstreamError } from '@/lib/postgrest/translate'
 import { ensureSchemaRegistered } from '@/lib/postgrest/registration'
 import { getProjectIdFromAuth } from './dynamic'
 import { enforceRateLimitByKeyId } from '../lib/auth'
+import { asyncRoute } from '../lib/async-route'
 
 const router = Router()
 
@@ -65,7 +66,7 @@ function operationFor(method: string, hasId: boolean): Operation | null {
   }
 }
 
-router.all('/:projectId/*', async (req: Request, res: Response) => {
+router.all('/:projectId/*', asyncRoute(async (req: Request, res: Response) => {
   const projectId = req.params.projectId
   const rest = (req.params as Record<string, string>)[0] ?? ''
   const [table, maybeId] = rest.split('/').filter(Boolean)
@@ -230,6 +231,6 @@ router.all('/:projectId/*', async (req: Request, res: Response) => {
       message: err instanceof Error ? err.message : 'PostgREST did not respond.',
     })
   }
-})
+}))
 
 export default router

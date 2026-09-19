@@ -15,7 +15,7 @@
 import 'dotenv/config'
 import { Client } from 'pg'
 
-import { runSelfHostMigrations, MigrationRefused } from '../lib/selfhost/run-migrations'
+import { runSelfHostMigrations, MigrationRefused, MigrationFailed } from '../lib/selfhost/run-migrations'
 import { assembleMigrationWorkspace } from '../tools/managed-db/migration-workspace'
 
 async function main(): Promise<void> {
@@ -49,6 +49,20 @@ async function main(): Promise<void> {
       console.log('  the schema is already current')
     }
   } catch (err) {
+    if (err instanceof MigrationFailed) {
+      // A migration RAN and failed. Prisma already explained which one and
+      // why; printing the command line instead of that explanation is what
+      // this branch exists to stop.
+      console.error('')
+      console.error('The upgrade did NOT complete.')
+      console.error('')
+      console.error(err.message)
+      console.error('')
+      console.error('The deployment is still on its previous schema. Nothing else will')
+      console.error('be applied until this migration is resolved.')
+      console.error('')
+      process.exit(1)
+    }
     if (err instanceof MigrationRefused) {
       // A refusal is a message for a human, not a stack trace. Nothing was
       // written, and the text says what to do instead.

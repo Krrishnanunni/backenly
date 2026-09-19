@@ -14,6 +14,7 @@ import {
 } from '@/lib/services/end-user-auth-table'
 import { canAcceptNewEndUser, trackEndUserActive } from '@/lib/quota/kernel'
 import { sanitizeDiagnostic } from '@/lib/errors/diagnostic-sanitize'
+import { asyncRoute } from '../lib/async-route'
 
 /**
  * END-USER OAUTH RUNTIME (Express)
@@ -567,7 +568,7 @@ async function handleOAuthCallback(req: Request, res: Response) {
 
 // Callback registered before the bare provider route so the extra path segment
 // is matched unambiguously (Express distinguishes by segment count anyway).
-router.get('/:projectId/auth/:provider/callback', handleOAuthCallback)
-router.get('/:projectId/auth/:provider', handleOAuthInit)
+router.get('/:projectId/auth/:provider/callback', asyncRoute(handleOAuthCallback))
+router.get('/:projectId/auth/:provider', asyncRoute(handleOAuthInit))
 
 export default router
