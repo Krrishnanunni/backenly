@@ -134,6 +134,17 @@ async function main(): Promise<void> {
   const pgDb = envValue('POSTGRES_DB', 'backenly')
   const schema = `workspace_${projectId}`
 
+  // Reading is done with psql; WRITING SCHEMA IS NOT.
+  //
+  // psql here runs as POSTGRES_USER, the installer's elevated role, and the
+  // application connects as backenly_app. Tables created by the wrong one are
+  // owned by the wrong one: the app cannot read them, PostgREST has no grants
+  // on them (the default privileges are declared FOR ROLE backenly_app), and
+  // pg_dump as the app role fails with "permission denied". The first run of
+  // this file did exactly that and produced three unrelated-looking failures.
+  //
+  // So DDL goes through `appSql`, on the application's own connection, which is
+  // also how the product creates tables.
   const psql = (sql: string): string =>
     docker(['exec', '-T', 'postgres', 'psql', '-h', '127.0.0.1', '-U', pgUser, '-d', pgDb, '-tAc', sql])
 
@@ -145,6 +156,18 @@ async function main(): Promise<void> {
   console.log(`runtime ${RUNTIME}`)
 
   const { prisma } = await import('@/lib/db/prisma')
+  /**
+   * DDL and writes, as the application role the deployment actually runs as.
+   *
+   * ONE STATEMENT PER CALL. Prisma's raw API sends a prepared statement and
+   * PostgreSQL refuses more than one command in it, so a multi-statement block
+   * fails outright - which is why each statement is passed separately rather
+   * than as one readable blob.
+   */
+  const appSql = (sql: string) => prisma.$executeRawUnsafe(sql)
+  const appSqlEach = async (statements: string[]) => {
+    for (const sql of statements) await appSql(sql)
+  }
   const { createApiKey } = await import('@/lib/auth/apiKeyAuth')
   const { ensureSchemaRegistered } = await import('@/lib/postgrest/registration')
   const { storageService } = await import('@/lib/services/storage')
@@ -166,27 +189,27 @@ async function main(): Promise<void> {
 
   // A table with the shapes that break naive dump/restore: a self-referencing
   // FK, a composite key, a unique constraint, a check constraint and a default.
-  psql(`
-    CREATE TABLE IF NOT EXISTS "${schema}".final_nodes (
-      id serial PRIMARY KEY,
-      parent_id int REFERENCES "${schema}".final_nodes(id),
-      label text NOT NULL UNIQUE,
-      weight int NOT NULL DEFAULT 1 CHECK (weight > 0),
-      created_at timestamptz NOT NULL DEFAULT now()
-    );
-    CREATE TABLE IF NOT EXISTS "${schema}".final_pairs (
-      left_id int NOT NULL,
-      right_id int NOT NULL,
-      note text,
-      PRIMARY KEY (left_id, right_id)
-    );
-    CREATE INDEX IF NOT EXISTS final_nodes_label_idx ON "${schema}".final_nodes (label);
-  `)
-  psql(
+  await appSqlEach([
+    `CREATE TABLE IF NOT EXISTS "${schema}".final_nodes (
+       id serial PRIMARY KEY,
+       parent_id int REFERENCES "${schema}".final_nodes(id),
+       label text NOT NULL UNIQUE,
+       weight int NOT NULL DEFAULT 1 CHECK (weight > 0),
+       created_at timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE TABLE IF NOT EXISTS "${schema}".final_pairs (
+       left_id int NOT NULL,
+       right_id int NOT NULL,
+       note text,
+       PRIMARY KEY (left_id, right_id)
+     )`,
+    `CREATE INDEX IF NOT EXISTS final_nodes_label_idx ON "${schema}".final_nodes (label)`,
+  ])
+  await appSql(
     `INSERT INTO "${schema}".final_nodes (label) VALUES ('${MARKER}')
      ON CONFLICT (label) DO NOTHING`,
   )
-  psql(
+  await appSql(
     `INSERT INTO "${schema}".final_pairs (left_id, right_id, note)
      SELECT id, id, '${MARKER}' FROM "${schema}".final_nodes WHERE label = '${MARKER}'
      ON CONFLICT DO NOTHING`,
@@ -195,24 +218,32 @@ async function main(): Promise<void> {
 
   // A FORCE RLS table, because FORCE RLS keys on the OWNER and a restore that
   // re-owns the schema silently rewrites who every policy binds.
-  psql(`
-    CREATE TABLE IF NOT EXISTS "${schema}".final_secrets (
-      id serial PRIMARY KEY,
-      owner_id text NOT NULL,
-      body text NOT NULL
-    );
-    ALTER TABLE "${schema}".final_secrets ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE "${schema}".final_secrets FORCE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS final_secrets_owner ON "${schema}".final_secrets;
-    CREATE POLICY final_secrets_owner ON "${schema}".final_secrets
-      USING (owner_id = current_setting('request.jwt.claim.sub', true));
-  `)
-  psql(`INSERT INTO "${schema}".final_secrets (owner_id, body) VALUES ('someone', '${MARKER}')`)
+  await appSqlEach([
+    `CREATE TABLE IF NOT EXISTS "${schema}".final_secrets (
+       id serial PRIMARY KEY,
+       owner_id text NOT NULL,
+       body text NOT NULL
+     )`,
+    `ALTER TABLE "${schema}".final_secrets ENABLE ROW LEVEL SECURITY`,
+    `ALTER TABLE "${schema}".final_secrets FORCE ROW LEVEL SECURITY`,
+    `DROP POLICY IF EXISTS final_secrets_owner ON "${schema}".final_secrets`,
+    `CREATE POLICY final_secrets_owner ON "${schema}".final_secrets
+       USING (owner_id = current_setting('request.jwt.claim.sub', true))`,
+  ])
+  await appSql(
+    `INSERT INTO "${schema}".final_secrets (owner_id, body) VALUES ('someone', '${MARKER}')`,
+  )
+  // `::text` on a boolean renders `true`, not `t` - the shorthand is psql's
+  // display format, not the cast's output. The first run compared against 't/t'
+  // and reported a correctly-protected table as a failure.
   const forceRlsBefore = psql(
     `SELECT relrowsecurity::text || '/' || relforcerowsecurity::text
        FROM pg_class WHERE oid = '"${schema}".final_secrets'::regclass`,
   ).trim()
-  must(forceRlsBefore === 't/t', `final_secrets has RLS and FORCE RLS (${forceRlsBefore})`)
+  must(
+    forceRlsBefore === 'true/true',
+    `final_secrets has RLS and FORCE RLS (${forceRlsBefore})`,
+  )
 
   await ensureSchemaRegistered(projectId)
 
@@ -417,7 +448,7 @@ async function main(): Promise<void> {
     `SELECT relrowsecurity::text || '/' || relforcerowsecurity::text
        FROM pg_class WHERE oid = '"${schema}".final_secrets'::regclass`,
   ).trim()
-  must(forceRlsAfter === 't/t', `FORCE RLS survived the restore (${forceRlsAfter})`)
+  must(forceRlsAfter === 'true/true', `FORCE RLS survived the restore (${forceRlsAfter})`)
   must(
     Number(psql(`SELECT count(*) FROM pg_policies WHERE schemaname = '${schema}'`).trim()) > 0,
     'the RLS policy survived the restore',
