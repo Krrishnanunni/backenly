@@ -40,7 +40,7 @@ describe('the limits exist and are finite', () => {
     },
   )
 
-  it('sign-in is the tightest of the three, because it is the guessing surface', () => {
+  it('sign-in is the tightest of the three, because it is the guessing surface', async () => {
     // Recovery is tighter still per window; the point is that sign-in is not
     // the loosest, which would be the wrong way round.
     expect(AUTH_LIMITS.endUserSignin.ip.limit).toBeLessThanOrEqual(
@@ -50,27 +50,27 @@ describe('the limits exist and are finite', () => {
 })
 
 describe('throttling actually engages', () => {
-  it('allows attempts up to the limit and then denies', () => {
+  it('allows attempts up to the limit and then denies', async () => {
     const policy = AUTH_LIMITS.endUserSignin.ip
     const k = unique(key('endUserSignin', PROJECT, IP))
 
     for (let i = 0; i < policy.limit; i++) {
-      const r = consume(k, policy.limit, policy.windowMs)
+      const r = await consume(k, policy.limit, policy.windowMs)
       expect(r.allowed).toBe(true)
     }
 
     // The attempt after the budget is refused, with something to tell the
     // caller when to come back.
-    const denied = consume(k, policy.limit, policy.windowMs)
+    const denied = await consume(k, policy.limit, policy.windowMs)
     expect(denied.allowed).toBe(false)
     expect(denied.retryAfter).toBeGreaterThan(0)
   })
 
-  it('an exhausted budget stays exhausted within the window', () => {
+  it('an exhausted budget stays exhausted within the window', async () => {
     const policy = AUTH_LIMITS.endUserSignin.ip
     const k = unique(key('endUserSignin', PROJECT, IP))
-    for (let i = 0; i < policy.limit + 1; i++) consume(k, policy.limit, policy.windowMs)
-    expect(consume(k, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(k, policy.limit, policy.windowMs)
+    expect((await consume(k, policy.limit, policy.windowMs)).allowed).toBe(false)
   })
 })
 
@@ -81,14 +81,14 @@ describe('the identity dimension, against distributed stuffing', () => {
   const identityKey = (projectId: string, email: string) =>
     `v1:endUserSignin:${projectId}:${email.trim().toLowerCase()}`
 
-  it('exhausts a budget for one identity regardless of source address', () => {
+  it('exhausts a budget for one identity regardless of source address', async () => {
     const policy = AUTH_LIMITS.endUserSignin.ip
     const k = unique(identityKey(PROJECT, 'victim@example.test'))
-    for (let i = 0; i < policy.limit + 1; i++) consume(k, policy.limit, policy.windowMs)
-    expect(consume(k, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(k, policy.limit, policy.windowMs)
+    expect((await consume(k, policy.limit, policy.windowMs)).allowed).toBe(false)
   })
 
-  it('normalises case, so one address cannot get two budgets', () => {
+  it('normalises case, so one address cannot get two budgets', async () => {
     const policy = AUTH_LIMITS.endUserSignin.ip
     const suffix = Math.random().toString(36).slice(2)
     const lower = identityKey(PROJECT, `victim-${suffix}@example.test`)
@@ -96,27 +96,27 @@ describe('the identity dimension, against distributed stuffing', () => {
     expect(lower).toBe(upper)
   })
 
-  it('does not let one identity exhaust another', () => {
+  it('does not let one identity exhaust another', async () => {
     const policy = AUTH_LIMITS.endUserSignin.ip
     const a = unique(identityKey(PROJECT, 'a@example.test'))
-    for (let i = 0; i < policy.limit + 1; i++) consume(a, policy.limit, policy.windowMs)
-    expect(consume(a, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(a, policy.limit, policy.windowMs)
+    expect((await consume(a, policy.limit, policy.windowMs)).allowed).toBe(false)
 
     const b = identityKey(PROJECT, `b-${Math.random()}@example.test`)
-    expect(consume(b, policy.limit, policy.windowMs).allowed).toBe(true)
+    expect((await consume(b, policy.limit, policy.windowMs)).allowed).toBe(true)
   })
 
-  it('keeps identity budgets separate across projects', () => {
+  it('keeps identity budgets separate across projects', async () => {
     const policy = AUTH_LIMITS.endUserSignin.ip
     const email = `shared-${Math.random().toString(36).slice(2)}@example.test`
     const inA = identityKey(PROJECT, email)
-    for (let i = 0; i < policy.limit + 1; i++) consume(inA, policy.limit, policy.windowMs)
-    expect(consume(inA, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(inA, policy.limit, policy.windowMs)
+    expect((await consume(inA, policy.limit, policy.windowMs)).allowed).toBe(false)
 
     // The same person may hold an account in two projects; one being attacked
     // must not lock them out of the other.
     const inB = identityKey(OTHER_PROJECT, email)
-    expect(consume(inB, policy.limit, policy.windowMs).allowed).toBe(true)
+    expect((await consume(inB, policy.limit, policy.windowMs)).allowed).toBe(true)
   })
 })
 
@@ -126,59 +126,59 @@ describe('forgot-password cannot be used as an email bomb', () => {
   const targetKey = (projectId: string, email: string) =>
     `v1:endUserRecover:target:${projectId}:${email.trim().toLowerCase()}`
 
-  it('stops repeated mail to the same address', () => {
+  it('stops repeated mail to the same address', async () => {
     const policy = AUTH_LIMITS.endUserRecover.ip
     const k = unique(targetKey(PROJECT, 'bombed@example.test'))
-    for (let i = 0; i < policy.limit + 1; i++) consume(k, policy.limit, policy.windowMs)
-    expect(consume(k, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(k, policy.limit, policy.windowMs)
+    expect((await consume(k, policy.limit, policy.windowMs)).allowed).toBe(false)
   })
 
-  it('keeps the requester budget and the target budget separate', () => {
+  it('keeps the requester budget and the target budget separate', async () => {
     // Otherwise one exhausted victim would block every other recovery request
     // from that address, or vice versa.
     const policy = AUTH_LIMITS.endUserRecover.ip
     const target = unique(targetKey(PROJECT, 'victim@example.test'))
-    for (let i = 0; i < policy.limit + 1; i++) consume(target, policy.limit, policy.windowMs)
-    expect(consume(target, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(target, policy.limit, policy.windowMs)
+    expect((await consume(target, policy.limit, policy.windowMs)).allowed).toBe(false)
 
     const requester = key('endUserRecover', PROJECT, IP)
-    expect(consume(requester, policy.limit, policy.windowMs).allowed).toBe(true)
+    expect((await consume(requester, policy.limit, policy.windowMs)).allowed).toBe(true)
   })
 })
 
 describe('the key is scoped per project AND per ip', () => {
-  it('exhausting one project does not lock out another', () => {
+  it('exhausting one project does not lock out another', async () => {
     // The tenant-isolation property. Without the projectId in the key, an
     // attack on one customer would deny sign-in to every other customer
     // sharing an egress address.
     const policy = AUTH_LIMITS.endUserSignin.ip
     const attacked = unique(key('endUserSignin', PROJECT, IP))
-    for (let i = 0; i < policy.limit + 1; i++) consume(attacked, policy.limit, policy.windowMs)
-    expect(consume(attacked, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(attacked, policy.limit, policy.windowMs)
+    expect((await consume(attacked, policy.limit, policy.windowMs)).allowed).toBe(false)
 
     const bystander = key('endUserSignin', OTHER_PROJECT, IP)
-    expect(consume(bystander, policy.limit, policy.windowMs).allowed).toBe(true)
+    expect((await consume(bystander, policy.limit, policy.windowMs)).allowed).toBe(true)
   })
 
-  it('one IP cannot spend another IP’s budget for the same project', () => {
+  it('one IP cannot spend another IP’s budget for the same project', async () => {
     const policy = AUTH_LIMITS.endUserSignin.ip
     const first = unique(key('endUserSignin', PROJECT, IP))
-    for (let i = 0; i < policy.limit + 1; i++) consume(first, policy.limit, policy.windowMs)
-    expect(consume(first, policy.limit, policy.windowMs).allowed).toBe(false)
+    for (let i = 0; i < policy.limit + 1; i++) await consume(first, policy.limit, policy.windowMs)
+    expect((await consume(first, policy.limit, policy.windowMs)).allowed).toBe(false)
 
     const second = key('endUserSignin', PROJECT, OTHER_IP)
-    expect(consume(second, policy.limit, policy.windowMs).allowed).toBe(true)
+    expect((await consume(second, policy.limit, policy.windowMs)).allowed).toBe(true)
   })
 
-  it('signin and signup budgets are independent', () => {
+  it('signin and signup budgets are independent', async () => {
     // Sharing one budget would let a signup flood disable sign-in.
     const p = AUTH_LIMITS.endUserSignin.ip
     const signinKey = unique(key('endUserSignin', PROJECT, IP))
-    for (let i = 0; i < p.limit + 1; i++) consume(signinKey, p.limit, p.windowMs)
-    expect(consume(signinKey, p.limit, p.windowMs).allowed).toBe(false)
+    for (let i = 0; i < p.limit + 1; i++) await consume(signinKey, p.limit, p.windowMs)
+    expect((await consume(signinKey, p.limit, p.windowMs)).allowed).toBe(false)
 
     const q = AUTH_LIMITS.endUserSignup.ip
     const signupKey = key('endUserSignup', PROJECT, IP)
-    expect(consume(signupKey, q.limit, q.windowMs).allowed).toBe(true)
+    expect((await consume(signupKey, q.limit, q.windowMs)).allowed).toBe(true)
   })
 })

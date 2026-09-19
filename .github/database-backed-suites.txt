@@ -38,6 +38,15 @@ tests/build-runs/hydration.test.ts
 tests/integration/mcp-oauth-flow.spec.ts
 tests/integration/webhook-delivery.spec.ts
 
+# Needs REDIS, not Postgres.
+#
+# The `integration` job is where CI runs suites that require a real backing
+# service, and this one requires a different service from the rest. It holds to
+# the same rule they do: it FAILS without its dependency rather than skipping,
+# so it can never sit green having tested nothing. Verify it the same way,
+# with and without REDIS_URL rather than with and without a database.
+tests/integration/rate-limit-shared-store.spec.ts
+
 __tests__/projects/deletion-transaction.test.ts
 __tests__/projects/purge-outbox.test.ts
 

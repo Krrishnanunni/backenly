@@ -2,11 +2,12 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest } from 'next/server'
 import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
+import { throttledV1Response } from '@/lib/security/rate-limit-response'
 import { createErrorResponse, createSuccessResponse, ErrorCodes } from '@/lib/api/v1/errors'
 import { signInSchema } from '@/lib/api/v1/schemas'
 import { validateRequestBody } from '@/lib/validation/schemas'
 import { prisma } from '@/lib/db'
-import { verifyPassword } from '@/lib/auth/password'
+import { verifyPassword, verifyPasswordAgainstDecoy } from '@/lib/auth/password'
 import { executeWithUserContext } from '@/lib/services/workspace-rls'
 import { stampLastLogin } from '@/lib/services/end-user-auth-table'
 import { trackEndUserActive } from '@/lib/quota/kernel'
@@ -34,18 +35,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     // Keyed on both so one project under attack cannot lock out sign-in attempts for a
     // different project behind the same egress address.
     const ip = clientIp(request)
-    const limit = consume(
+    const limit = await consume(
       `v1:endUserSignin:${projectId}:${ip}`,
       AUTH_LIMITS.endUserSignin.ip.limit,
       AUTH_LIMITS.endUserSignin.ip.windowMs,
     )
-    if (!limit.allowed) {
-      return createErrorResponse(
-        ErrorCodes.RATE_LIMIT_EXCEEDED,
-        'Too many attempts. Please try again later.',
-        429,
-      )
-    }
+    if (!limit.allowed) return throttledV1Response(limit)
 
     // Validate project exists
     const project = await prisma.project.findUnique({
@@ -82,21 +77,15 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     //
     // Normalised, so `Alice@x.com` and `alice@x.com` share one budget rather
     // than doubling it.
-    const identityLimit = consume(
+    const identityLimit = await consume(
       `v1:endUserSignin:${projectId}:${String(email).trim().toLowerCase()}`,
       AUTH_LIMITS.endUserSignin.ip.limit,
       AUTH_LIMITS.endUserSignin.ip.windowMs,
     )
-    if (!identityLimit.allowed) {
-      // Deliberately the same answer as an IP trip, and the same shape as a
-      // wrong password: a different response here would confirm the address
-      // exists and is being defended.
-      return createErrorResponse(
-        ErrorCodes.RATE_LIMIT_EXCEEDED,
-        'Too many attempts. Please try again later.',
-        429,
-      )
-    }
+    // Deliberately the same answer as an IP trip, and the same shape as a
+    // wrong password: a different response here would confirm the address
+    // exists and is being defended.
+    if (!identityLimit.allowed) return throttledV1Response(identityLimit)
     const schemaName = `workspace_${projectId}`
 
     // Check if users table exists
@@ -147,25 +136,41 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     )
 
     const user = users[0]
+    const storedHash: string | undefined = user
+      ? (user[pwCol] ?? user.password ?? user.password_hash)
+      : undefined
 
-    if (!user) {
-      return createErrorResponse(ErrorCodes.UNAUTHORIZED, 'Invalid email or password', 401)
-    }
+    // ── Both paths cost the same ────────────────────────────────────────────
+    //
+    // The message for an unknown address and a wrong password was already
+    // identical, and the TIMING was not: a missing user returned immediately
+    // while a real one paid for a bcrypt comparison first. bcrypt is tuned to
+    // be slow, so that gap is tens of milliseconds and trivially measurable
+    // over a few samples. It is a working account-enumeration oracle wearing
+    // the right error message.
+    //
+    // So an absent user is compared against a decoy hash generated at the same
+    // cost factor the product issues. The comparison cannot succeed and its
+    // result is discarded; the only thing wanted is the work.
+    const isValid = storedHash
+      ? await verifyPassword(password, storedHash)
+      : await verifyPasswordAgainstDecoy(password)
 
-    const storedHash: string | undefined = user[pwCol] ?? user.password ?? user.password_hash
-    if (!storedHash) {
-      return createErrorResponse(ErrorCodes.UNAUTHORIZED, 'Invalid email or password', 401)
-    }
-
-    // Reject blocked users
-    if (user.is_blocked) {
-      return createErrorResponse(ErrorCodes.FORBIDDEN, 'This account has been suspended.', 403)
-    }
-
-    // Verify password
-    const isValid = await verifyPassword(password, storedHash)
     if (!isValid) {
       return createErrorResponse(ErrorCodes.UNAUTHORIZED, 'Invalid email or password', 401)
+    }
+
+    // ── Suspension is disclosed only to someone who proved the password ─────
+    //
+    // This check used to run BEFORE the password was verified, so anyone could
+    // submit any address with a junk password and learn from the 403 both that
+    // the account exists and that it is suspended. That is enumeration with no
+    // credential at all, and it undid the matched messages above.
+    //
+    // After verification, the only caller who can see it is the account holder,
+    // who is entitled to know why they cannot get in.
+    if (user.is_blocked) {
+      return createErrorResponse(ErrorCodes.FORBIDDEN, 'This account has been suspended.', 403)
     }
 
     const token = jwt.sign(

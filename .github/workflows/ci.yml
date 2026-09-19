@@ -410,10 +410,27 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # The auth limiter's shared store.
+      #
+      # tests/integration/rate-limit-shared-store.spec.ts proves that two app
+      # instances spend ONE budget, which is a claim about Redis's own INCR and
+      # PEXPIRE semantics across two connections. A mock would be asserting the
+      # mock, so the suite FAILS rather than skips when REDIS_URL is unset -
+      # a skipped shared-store test is worse than none, because the tick beside
+      # it says the multi-instance claim was checked.
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/backenly_test
+      REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-not-a-real-secret
       # Keep the workspace pools inside a default Postgres.
       #

@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     // Rate limit before anything expensive. The policy already existed in
     // AUTH_LIMITS but this route never consumed it, so a script could register
     // unlimited accounts from one address at full speed.
-    const ipLimit = consume(`signup:ip:${ip}`, AUTH_LIMITS.signup.ip.limit, AUTH_LIMITS.signup.ip.windowMs)
+    const ipLimit = await consume(`signup:ip:${ip}`, AUTH_LIMITS.signup.ip.limit, AUTH_LIMITS.signup.ip.windowMs)
     if (!ipLimit.allowed) {
       await recordSecurityEvent({
         kind: 'signup_rate_limited',

@@ -24,7 +24,7 @@ import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
 export async function GET(request: NextRequest) {
   // 1. IP rate limit — OAuth callbacks are unauthenticated.
   const ip = clientIp(request)
-  const rl = consume(`oauth-cb:platform-google:${ip}`, AUTH_LIMITS.oauthCallback.ip.limit, AUTH_LIMITS.oauthCallback.ip.windowMs)
+  const rl = await consume(`oauth-cb:platform-google:${ip}`, AUTH_LIMITS.oauthCallback.ip.limit, AUTH_LIMITS.oauthCallback.ip.windowMs)
   if (!rl.allowed) {
     return NextResponse.redirect(`${appUrl()}/auth/login?error=rate_limited`)
   }
