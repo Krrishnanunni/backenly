@@ -27,6 +27,7 @@ import { redeemRealtimeTicketParam } from '@/lib/realtime/ticket-auth'
 import { mintSseTicket, SSE_TICKET_TTL_SECONDS } from '@/lib/realtime/sse-ticket'
 import { resolveJwtSecret } from '@/lib/services/jwtSecretManager'
 import { prisma } from '@/lib/db/prisma'
+import { asyncRoute } from '../lib/async-route'
 
 const router = Router()
 
@@ -52,7 +53,7 @@ async function realtimeAuth(req: Request, res: Response, next: NextFunction) {
   next()
 }
 
-router.get('/:projectId/realtime', realtimeAuth, async (req: Request, res: Response) => {
+router.get('/:projectId/realtime', asyncRoute(realtimeAuth), asyncRoute(async (req: Request, res: Response) => {
   const { projectId } = req.params
   const tableFilter = req.query.table as string | undefined
 
@@ -109,7 +110,7 @@ router.get('/:projectId/realtime', realtimeAuth, async (req: Request, res: Respo
     send({ type: 'error', message: 'Failed to connect to realtime stream' })
     cleanup()
   }
-})
+}))
 
 /**
  * POST /api/v1/:projectId/realtime/ticket
@@ -119,7 +120,7 @@ router.get('/:projectId/realtime', realtimeAuth, async (req: Request, res: Respo
  * before anything reaches a query string. Mirrors
  * app/api/v1/[projectId]/realtime/ticket/route.ts; nginx serves this one in prod.
  */
-router.post('/:projectId/realtime/ticket', v1AuthMiddleware, async (req: Request, res: Response) => {
+router.post('/:projectId/realtime/ticket', asyncRoute(v1AuthMiddleware), asyncRoute(async (req: Request, res: Response) => {
   const { projectId } = req.params
   const project = await prisma.project
     .findUnique({ where: { id: projectId }, select: { jwtSecret: true } })
@@ -161,6 +162,6 @@ router.post('/:projectId/realtime/ticket', v1AuthMiddleware, async (req: Request
             'that window.',
         }),
   })
-})
+}))
 
 export default router

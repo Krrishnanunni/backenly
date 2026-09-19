@@ -435,3 +435,15 @@ tests/integration/credential-rotation-provider-secrets.spec.ts
 # at a file that is not there, and retention must protect a project whose latest
 # run failed.
 tests/integration/scheduled-snapshots.spec.ts
+
+# HIGH, found by the final qualification on a real deployment: a PostgreSQL
+# restart made the next /api/v1/* request reject with P1017 and the RUNTIME
+# PROCESS EXITED. Express 4 does not await its handlers, so an async rejection
+# never reaches the global error middleware - it becomes an unhandled rejection
+# and Node 15+ terminates on those. Every v1 surface stayed down afterwards.
+#
+# The demonstration runs in a SUBPROCESS, because jest installs its own
+# unhandledRejection handler and the thing under test - Node terminating - can
+# never happen inside it. Wrapped: 500 and exit 0. Unwrapped: no response and a
+# non-zero exit, which is the CI log exactly.
+tests/integration/runtime-async-crash.spec.ts

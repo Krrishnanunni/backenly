@@ -1235,6 +1235,22 @@ jobs:
       - name: /db/*, end-user auth and realtime survive their dependencies
         run: npx tsx scripts/qualify-selfhost-runtime.ts
 
+      # ── The last gate ────────────────────────────────────────────────────
+      #
+      # Everything above tests one subsystem at a time against a fixture built
+      # for that subsystem. This builds ONE deployment carrying as much of the
+      # product as a real one would, takes it through build -> use -> snapshot
+      # -> bundle -> DESTROY -> restore -> verify, and ends with a bounded soak
+      # that watches for leaks rather than measuring throughput.
+      #
+      # The destruction is real: the workspace schema is dropped and the stored
+      # object's bytes are deleted, and both are checked to be gone BEFORE the
+      # restore runs. A restore verified while the original state is still there
+      # proves nothing, because every assertion can be satisfied by the thing
+      # that was never removed.
+      - name: final synthetic-production qualification
+        run: npx tsx scripts/qualify-selfhost-final.ts
+
       - name: runtime log on failure
         if: failure()
         run: tail -120 runtime.log || true

@@ -26,6 +26,7 @@ import {
   recordServiceRoleBrowserBlock,
   serviceRoleRefusalMessage,
 } from '@/lib/security/service-role-exposure'
+import { asyncRoute } from '../lib/async-route'
 
 const router = Router()
 
@@ -632,10 +633,10 @@ async function serveProjectDiscovery(projectId: string, req: Request, res: Respo
   }
 }
 
-router.get('/*', handleDynamicRequest)
-router.post('/*', handleDynamicRequest)
-router.put('/*', handleDynamicRequest)
-router.patch('/*', handleDynamicRequest)
-router.delete('/*', handleDynamicRequest)
+router.get('/*', asyncRoute(handleDynamicRequest))
+router.post('/*', asyncRoute(handleDynamicRequest))
+router.put('/*', asyncRoute(handleDynamicRequest))
+router.patch('/*', asyncRoute(handleDynamicRequest))
+router.delete('/*', asyncRoute(handleDynamicRequest))
 
 export default router

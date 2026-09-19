@@ -19,6 +19,7 @@ import { getAuthEmailContext } from '@/lib/services/end-user-auth-email'
 import { z } from 'zod'
 import jwt from 'jsonwebtoken'
 import { JWTSecretManager, resolveJwtSecret } from '@/lib/services/jwtSecretManager'
+import { asyncRoute } from '../lib/async-route'
 
 const router = Router()
 
@@ -516,26 +517,26 @@ async function handleMagicPage(req: Request, res: Response) {
 }
 
 // Primary routes
-router.post('/:projectId/auth/signup', handleSignUp)
-router.post('/:projectId/auth/signin', handleSignIn)
-router.post('/:projectId/auth/refresh-token', handleRefreshToken)
-router.post('/:projectId/auth/logout', handleLogout)
-router.post('/:projectId/auth/verify-email', handleVerifyEmail)
-router.get('/:projectId/auth/verify-email', handleVerifyEmailPage)
-router.post('/:projectId/auth/resend-verification', handleResendVerification)
-router.post('/:projectId/auth/magic-link', handleMagicLinkRequest)
-router.post('/:projectId/auth/magic-link/verify', handleMagicLinkVerify)
-router.get('/:projectId/auth/magic', handleMagicPage)
-router.post('/:projectId/auth/forgot-password', handleForgotPassword)
-router.post('/:projectId/auth/reset-password', handleResetPassword)
+router.post('/:projectId/auth/signup', asyncRoute(handleSignUp))
+router.post('/:projectId/auth/signin', asyncRoute(handleSignIn))
+router.post('/:projectId/auth/refresh-token', asyncRoute(handleRefreshToken))
+router.post('/:projectId/auth/logout', asyncRoute(handleLogout))
+router.post('/:projectId/auth/verify-email', asyncRoute(handleVerifyEmail))
+router.get('/:projectId/auth/verify-email', asyncRoute(handleVerifyEmailPage))
+router.post('/:projectId/auth/resend-verification', asyncRoute(handleResendVerification))
+router.post('/:projectId/auth/magic-link', asyncRoute(handleMagicLinkRequest))
+router.post('/:projectId/auth/magic-link/verify', asyncRoute(handleMagicLinkVerify))
+router.get('/:projectId/auth/magic', asyncRoute(handleMagicPage))
+router.post('/:projectId/auth/forgot-password', asyncRoute(handleForgotPassword))
+router.post('/:projectId/auth/reset-password', asyncRoute(handleResetPassword))
 
 // Aliases — AI platforms (Lovable, Replit, Base44) generate /auth/login and
 // /auth/register instead of Backenly's /auth/signin and /auth/signup.
 // Without these, requests fall through to the dynamic catch-all which tries
 // to validate an Authorization header and returns 401 "Invalid or expired token".
-router.post('/:projectId/auth/login', handleSignIn)
-router.post('/:projectId/auth/register', handleSignUp)
+router.post('/:projectId/auth/login', asyncRoute(handleSignIn))
+router.post('/:projectId/auth/register', asyncRoute(handleSignUp))
 // Alias — /auth/refresh for SDKs that use the short form.
-router.post('/:projectId/auth/refresh', handleRefreshToken)
+router.post('/:projectId/auth/refresh', asyncRoute(handleRefreshToken))
 
 export default router

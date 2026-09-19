@@ -18,6 +18,7 @@
 
 import 'dotenv/config'
 import { assertEditionCompositionOrExit } from '../lib/edition/cloud-extension'
+import { installProcessSafetyNet } from './lib/async-route'
 import app from './app'
 
 // Before the socket, not after. This process serves every /api/v1/* request in
@@ -25,6 +26,12 @@ import app from './app'
 // here rather than answer one request with single-tenant tenancy rules. A no-op
 // unless BACKENLY_EDITION is explicitly cloud.
 assertEditionCompositionOrExit('Runtime Server')
+
+// Before the socket. Every route is wrapped so nothing should reach this, but
+// the cost of one missed call site is the whole API going down - which is
+// exactly what happened when a PostgreSQL restart made the next request's
+// Prisma call reject with P1017 and Node terminated the process.
+installProcessSafetyNet()
 
 const PORT = parseInt(process.env.RUNTIME_PORT || '3001', 10)
 
