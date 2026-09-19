@@ -307,6 +307,17 @@ async function main(): Promise<void> {
     where: { id: serviceRecord.id },
     data: { serviceRole: true, keyType: 'service' },
   })
+
+  // Read back, because the whole service-role half of this file depends on it
+  // and "the update did not throw" is not the same claim as "the row says so".
+  const serviceRow = await prisma.apiKey.findUnique({
+    where: { id: serviceRecord.id },
+    select: { serviceRole: true, keyType: true, expiresAt: true, projectId: true },
+  })
+  must(
+    serviceRow?.serviceRole === true,
+    `the service key row reads back as service-role (${JSON.stringify(serviceRow)})`,
+  )
   ok('api keys created (client + service-role)')
 
   // ── CONTROL: every surface works before anything is broken ────────────────
@@ -320,7 +331,8 @@ async function main(): Promise<void> {
   })
   must(
     created.status >= 200 && created.status < 300,
-    `/db/${TABLE} accepted a service-role write (HTTP ${created.status})`,
+    `/db/${TABLE} accepted a service-role write (HTTP ${created.status}` +
+      `${created.status >= 400 ? ` — ${created.text.slice(0, 300)}` : ''})`,
   )
 
   // The paired refusal. Without it, "a write succeeded" says nothing about
@@ -340,7 +352,7 @@ async function main(): Promise<void> {
   must(listed.status === 200, `/db/${TABLE} served a read (HTTP ${listed.status})`)
   must(
     JSON.stringify(rows ?? '').includes(seeded),
-    'the read contained the row that was just written',
+    `the read contained the row that was just written (body: ${listed.text.slice(0, 300)})`,
   )
 
   const signup = await call(`/api/v1/${projectId}/auth/signup`, {
