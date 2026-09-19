@@ -314,7 +314,11 @@ async function main(): Promise<void> {
     apiKey: serviceKey,
     body: JSON.stringify({ label: `${MARKER}-via-api` }),
   })
-  must(write.status >= 200 && write.status < 300, `/db/* service-role write (HTTP ${write.status})`)
+  must(
+    write.status >= 200 && write.status < 300,
+    `/db/* service-role write (HTTP ${write.status}` +
+      `${write.status >= 400 ? ` — ${write.text.slice(0, 300)}` : ''})`,
+  )
 
   const read = await call(`/api/v1/${projectId}/db/final_nodes`, { apiKey: anonKey })
   must(read.status === 200, `/db/* read (HTTP ${read.status})`)
@@ -420,9 +424,17 @@ async function main(): Promise<void> {
   step('RESTORE — from the bundle, through the operator’s own library')
 
   const { restoreDeployment } = await import('@/lib/recovery/restore')
+  // targetUrl is REQUIRED and is deliberately the APPLICATION connection, not
+  // the backup one: workspace tables use FORCE ROW LEVEL SECURITY, which keys
+  // on the owner, so replaying as anything else silently rebinds every policy.
+  // Omitting it produced "Invalid URL" from the first psql call.
+  const targetUrl = process.env.DATABASE_URL
+  if (!targetUrl) throw new Error('DATABASE_URL is not set; the restore has nowhere to write')
+
   const progress = await restoreDeployment({
     bundleDir: exported.bundleDir,
     credential: exported.credential,
+    targetUrl,
     onStep: r => console.log(`     ${r.step}: ${r.status}${r.error ? ` (${r.error})` : ''}`),
   })
   const failedSteps = progress.results.filter(r => r.status !== 'ok' && r.status !== 'skipped')
