@@ -30,7 +30,7 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `cc9ea8ec` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `92e16991` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
@@ -707,6 +707,128 @@ and jest's `expect` takes no message argument, which is Playwright's.
 ### Register
 
 `DONE 21 · INTENTIONAL 2`. No PARTIAL, no REAL_GAP, no BACKEND_ONLY.
+
+## Upgrade: the register was green and the product was not
+
+The first lifecycle proof failed, with the feature register at `DONE 21`. That
+is the distinction the lifecycle stage exists to draw: capabilities complete,
+production-readiness not established.
+
+### The defect
+
+`scripts/selfhost.ts` returned as soon as `public.projects` existed. Correctly,
+as far as it went — `prisma db push` is unsafe against an installed deployment,
+because the PostgREST registry and its event triggers are created by SQL rather
+than by Prisma, so push sees objects its schema does not describe and sets out to
+drop them. A second run failed with P1014 on
+`backenly_pgrst_schema_registry`; had it succeeded it would have removed the
+registry the data plane reads.
+
+But there was no other branch. And a `db push` install records no
+`_prisma_migrations`, so `migrate deploy` had no history to work from and
+`startup-validation`'s pending-migration check had nothing to compare. `migrate
+deploy` appears only in the Cloud managed-db runner, never in the self-host path.
+
+Verified against a genuine older release rather than reasoned about:
+
+    installer check "to_regclass('public.projects') IS NOT NULL" -> true
+      => createTables() returns early
+    _prisma_migrations table: (absent)
+    current code reading project_email_configs -> P2021, table does not exist
+    pre-upgrade workspace row still present: "pre-upgrade-row"
+
+Data intact, schema frozen, and a runtime failure the first time new code touches
+anything added since. Silent until it isn't. **High, operational rather than
+security.**
+
+### The model now
+
+    empty database    deploy the canonical chain. Under migration control from
+                      birth, so the NEXT upgrade is an ordinary deploy.
+    legacy install    one-time adoption, then deploy. Afterwards it is
+                      indistinguishable from an install born under migrations.
+    tracked install   deploy what is pending, for ever. The legacy path is never
+                      entered again.
+
+`prisma db push` is gone from the installer entirely. Fixing the upgrade while
+leaving push on fresh installs would have fixed this release's problem and
+recreated it for the next one.
+
+### Adoption proves the whole migration, not a headline table
+
+The first design checked one "sentinel" table per migration. That is the
+silent-success shape this programme has spent its length removing: a migration
+creates several tables, indexes, constraints and types, and seeing one of them
+says nothing about the other forty. A migration with no `CREATE TABLE` — a
+backfill, an `ALTER COLUMN` — would have had no sentinel and been waved through.
+
+Postconditions are now parsed from each migration's own SQL: every table with
+its columns, every index, every constraint, every enum type. All of them are
+checked against the live catalog. A statement the parser cannot classify makes
+the migration **unverifiable**, and adoption stops rather than guessing.
+
+Three outcomes, and only one of them writes:
+
+- **satisfied** — recorded with `migrate resolve --applied`, having been proven.
+- **absent** — the prefix ends; `migrate deploy` runs it.
+- **partial** — refused, naming what is present and what is missing. A database
+  in this state is neither the old version nor the new one, and recording it
+  either way is a lie.
+
+Migrations are a prefix, not a set. Finding migration 3 satisfied while 2 is
+absent is not a database that skipped one; it is a database nobody understands,
+and it is refused too.
+
+Every decision is made before anything is written, which is what makes a refusal
+safe to act on.
+
+### `migrate diff` is not the upgrade mechanism
+
+It would generate a script that drops the PostgREST registry and the event
+triggers, for the same reason `db push` did: Prisma deliberately does not model
+every PostgreSQL object Backenly relies on. Useful as an analysis aid, never the
+thing that decides what to remove from a live deployment.
+
+After every run, the objects Prisma cannot see are checked explicitly. A deploy
+that left the schema correct and the registry gone would pass every Prisma check
+and break the data plane.
+
+### The supported floor, measured
+
+`12c740e2` (#49) is the oldest genuinely installable self-host release. Its
+122-table schema **fully satisfies** the baseline and both maintenance
+migrations; only the email migration needs deploying. So every self-host release
+that has ever existed is upgradable, and the floor is the first one.
+
+A database below it — or one that merely has tables with the same names — is
+refused before any mutation, with the minimum supported release named and the
+route out stated: take a deployment recovery bundle while the old deployment is
+still running, install into an EMPTY database, restore the bundle.
+
+### What is proven
+
+`tests/integration/selfhost-upgrade.spec.ts`, against a real PostgreSQL and a
+real git worktree of `645679e2`. The old install is built from **that release's
+own schema.prisma**, pushed the way its installer pushed it — not a downgraded
+copy of the current schema, which would be testing a hand-made artefact.
+
+Seeded as a deployment rather than a table: operator identity, a project with its
+signing secret, a workspace schema with a row, an end-user auth identity with a
+bcrypt hash, an API credential, and the PostgREST support objects.
+
+After upgrade: the feature added since the old release works, and the operator
+identity, project name, signing secret, workspace row, end-user hash, API key
+hash, registry contents and all three event triggers are still there. The second
+run adopts nothing, deploys nothing, and leaves a byte-identical schema
+fingerprint over every column, index and constraint.
+
+Also covered: a half-applied migration refused without writing, by both the
+planner and the executor; a below-floor database refused with its route; and a
+fresh empty database deploying the whole chain and recording all of it.
+
+CI asserts the invariant on the one machine where a real install exists: after
+`npm run selfhost`, the number of migrations recorded as applied must equal the
+number of canonical migrations.
 
 ## Surface integrity, verified 2026-09-19
 

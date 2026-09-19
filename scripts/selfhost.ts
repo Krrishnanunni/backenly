@@ -316,34 +316,64 @@ function configureAppRole(): void {
   }
 }
 
+/**
+ * Bring the database to the current schema, whatever state it is in.
+ *
+ * ── This used to be `prisma db push`, and that was only half a step ─────────
+ *
+ * Push is not idempotent against an installed deployment: the PostgREST
+ * registry and its event triggers are created by SQL rather than by Prisma, so
+ * push sees objects its schema does not describe and sets out to drop them. A
+ * second run failed with P1014 on `backenly_pgrst_schema_registry`, and had it
+ * succeeded it would have removed the registry the data plane reads.
+ *
+ * So this function used to detect an existing install and RETURN. Which made
+ * reruns safe and made upgrades impossible: an operator moving between releases
+ * got their data intact, their schema frozen, and a P2021 the first time the new
+ * code touched a table added since. Push also records no `_prisma_migrations`,
+ * so there was no history for `migrate deploy` to work from and nothing for the
+ * startup check to compare against.
+ *
+ * Now every case goes through the canonical migration chain:
+ *
+ *   empty database    deploy the whole chain. The install is under migration
+ *                     control from birth rather than being handed a history
+ *                     manufactured after the fact.
+ *   legacy install    one-time adoption - prove which migrations this database
+ *                     already satisfies IN FULL, record those, deploy the rest.
+ *   tracked install   deploy what is pending, which is usually nothing.
+ *
+ * The decision is made before anything is written, and a database that cannot
+ * be proven is refused with the route it should take instead.
+ */
 function createTables(): void {
-  heading('creating the platform tables')
+  heading('bringing the database to the current schema')
 
   run('npx', ['prisma', 'generate'], 'check the prisma schema')
 
-  // `prisma db push` runs ONCE, and only when the platform tables are absent.
-  //
-  // It is not idempotent against an installed deployment. The PostgREST support
-  // objects are created by SQL rather than by Prisma — a registry table and two
-  // event triggers that fire on schema DDL — so push sees objects its schema
-  // does not describe and sets out to drop them, which is what
-  // `--accept-data-loss` would authorise. Running it a second time failed with
-  // P1014 on `public.backenly_pgrst_schema_registry`; had it succeeded, it
-  // would have removed the registry the data plane reads to decide which
-  // schemas PostgREST serves.
-  //
-  // Found by the rerun assertion in CI, not by reasoning about it. The
-  // documented manual path only ever reaches this step once, so an installer
-  // that is safe to rerun has to check rather than repeat.
-  const present = psqlScalar("SELECT to_regclass('public.projects') IS NOT NULL")
-  if (present === 't') {
-    ok('platform tables already present; not re-pushing the schema')
-    return
+  // .env is the authority here: setupAppRole() may have just rewritten
+  // DATABASE_URL to the non-superuser application role, and this process's own
+  // environment still holds whatever it started with.
+  const url = envValue(readEnvLines(), 'DATABASE_URL') || process.env.DATABASE_URL || ''
+  if (!url) fail('DATABASE_URL is not set', 'check .env')
+
+  // Delegated to lib/ so the same code path is what the upgrade suite drives.
+  // A script-only implementation would be a second copy, and the two would
+  // disagree eventually.
+  const result = spawnSync(
+    process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    ['tsx', 'scripts/selfhost-migrate.ts'],
+    { stdio: 'inherit', env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url } },
+  )
+
+  if (result.status !== 0) {
+    fail(
+      'the database could not be brought to the current schema',
+      'the output above says what was refused and what to do about it',
+    )
   }
 
-  run('npx', ['prisma', 'db', 'push', '--accept-data-loss', '--skip-generate'],
-    'check DATABASE_URL in .env points at the Compose stack')
-  ok('schema in sync')
+  ok('schema is current, and recorded in _prisma_migrations')
 }
 
 /**
