@@ -249,9 +249,21 @@ async function main(): Promise<void> {
 
   await ensureSchemaRegistered(projectId)
 
-  const { rawKey: anonKey } = await createApiKey(projectId, operator.id, { name: 'final client' })
+  // A rate limit the soak will not spend.
+  //
+  // An API key carries its own per-key budget, defaulting to 100 per window,
+  // and the soak fires 640 requests. The first run reported 459 failures, which
+  // was the product's rate limiter working exactly as designed - a leak
+  // detector should not be arguing with it. Raised deliberately, and only for
+  // these qualification keys, rather than turning the limiter off.
+  const SOAK_BUDGET = 100_000
+  const { rawKey: anonKey } = await createApiKey(projectId, operator.id, {
+    name: 'final client',
+    rateLimit: SOAK_BUDGET,
+  })
   const { rawKey: serviceKey, record: serviceRecord } = await createApiKey(projectId, operator.id, {
     name: 'final server',
+    rateLimit: SOAK_BUDGET,
   })
   await prisma.apiKey.update({
     where: { id: serviceRecord.id },
@@ -551,12 +563,17 @@ async function main(): Promise<void> {
   const ROUNDS = 40
   const CONCURRENCY = 8
   let soakFailures = 0
+  // Every status seen, so a failure names what happened rather than a count.
+  const statuses = new Map<number, number>()
+  const seen = (status: number) => statuses.set(status, (statuses.get(status) ?? 0) + 1)
+
   for (let round = 0; round < ROUNDS; round++) {
     const batch: Promise<void>[] = []
     for (let i = 0; i < CONCURRENCY; i++) {
       batch.push(
         (async () => {
           const r = await call(`/api/v1/${projectId}/db/final_nodes`, { apiKey: anonKey })
+          seen(r.status)
           if (r.status !== 200) soakFailures++
         })(),
       )
@@ -567,6 +584,7 @@ async function main(): Promise<void> {
             apiKey: serviceKey,
             body: JSON.stringify({ label: `soak-${crypto.randomUUID()}` }),
           })
+          seen(r.status)
           if (r.status < 200 || r.status >= 300) soakFailures++
         })(),
       )
@@ -575,9 +593,14 @@ async function main(): Promise<void> {
   }
 
   const requests = ROUNDS * CONCURRENCY * 2
+  const histogram = [...statuses.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([code, n]) => `${code}x${n}`)
+    .join(' ')
   must(
     soakFailures === 0,
-    `${requests} requests under concurrency ${CONCURRENCY * 2}, ${soakFailures} failed`,
+    `${requests} requests under concurrency ${CONCURRENCY * 2}, ` +
+      `${soakFailures} failed [${histogram}]`,
   )
 
   // Let anything short-lived settle before measuring, so a connection still
