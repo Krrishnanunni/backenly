@@ -416,3 +416,22 @@ tests/integration/credential-rotation-database.spec.ts
 # same endpoint redacted its own response - so the intent was never in doubt and
 # the GET simply contradicted it.
 tests/integration/credential-rotation-provider-secrets.spec.ts
+
+# ── Scheduled snapshots ─────────────────────────────────────────────────────
+#
+# Default OFF, and it stays off: an upgrade must not start writing a dump of
+# every project to disk nightly on somebody's behalf while they are not looking.
+#
+# Nothing here calls backupWorkspace directly - that is the point. The
+# SCHEDULER'S own entry point is driven, including its auth gate, and the
+# artifact it produces is opened and read for the marker row. Calling the backup
+# function by hand proves the function works and says nothing about whether
+# anything ever calls it.
+#
+# The failure case encodes a real production incident: nightly backups failed
+# for four days while the pruner deleted the last good ones, ending at zero
+# backups on disk with one info-level line as the only trace. So a failed run
+# must leave a FAILED record and no artifact, never a completed record pointing
+# at a file that is not there, and retention must protect a project whose latest
+# run failed.
+tests/integration/scheduled-snapshots.spec.ts
