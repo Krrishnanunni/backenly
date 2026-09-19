@@ -30,12 +30,12 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `496f2faf` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `d99e6bda` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
 
-DONE 18 · INTENTIONAL 2 · PARTIAL 1 · REAL_GAP 2
+DONE 19 · INTENTIONAL 2 · REAL_GAP 2
 
 | Area | Capability | Verdict | Evidence |
 |---|---|---|---|
@@ -57,7 +57,7 @@ DONE 18 · INTENTIONAL 2 · PARTIAL 1 · REAL_GAP 2
 | Auth | SMTP configuration | **DONE** | lib/email/project-smtp.ts, app/api/projects/[id]/email/smtp/route.ts, components/auth/EmailSettingsPanel.tsx |
 | Auth | Email template editing | **DONE** | lib/email/template-kinds.ts, app/api/projects/[id]/email/templates/[kind]/route.ts, components/auth/EmailSettingsPanel.tsx |
 | Storage | Buckets and objects | **DONE** | app/api/v1/[projectId]/storage/upload/route.ts, lib/services/storage.ts, components/storage/StorageWorkbench.tsx |
-| Storage | Per-bucket access policies | **PARTIAL** | Buckets carry a public/private flag and nothing finer. There is no per-bucket policy model, so access cannot be expressed per role, per path or per operation the way RLS expresses it for tables. Present: lib/services/storage.ts. |
+| Storage | Per-bucket access policies | **DONE** | lib/storage/access-policy.ts, app/api/storage/files/[fileId]/download/route.ts, components/storage/BucketPolicyDialog.tsx, components/storage/StorageWorkbench.tsx |
 | Postgres admin | Index management | **DONE** | app/api/database/indexes/route.ts, app/app/projects/[id]/database/page.tsx |
 | Postgres admin | Extension allowlist provisioning | **REAL_GAP** | absent: backend lib/services/extensions.ts, ui components/database/ExtensionsPanel.tsx |
 | Postgres admin | Enums and domains | **REAL_GAP** | absent: backend lib/services/enums.ts, ui components/database/EnumsPanel.tsx |
@@ -521,6 +521,108 @@ same job.
 ### Still PARTIAL in Auth
 
 Nothing. The remaining PARTIAL row is Storage's per-bucket policies.
+
+## Storage: a policy the serving path never read
+
+The register said "a public/private flag and nothing finer." That understated
+what was declared and, far more importantly, overstated what was enforced.
+
+`StorageBucket.accessPolicy` already existed with four values: `public_read`,
+`cdn_cacheable`, `private`, `owner_only`. It was used for exactly two things:
+deriving `StorageFile.isPublic` **at upload time**, as a snapshot, and choosing a
+`Cache-Control` header. What decided whether bytes left the server was
+`record.isPublic` — the file's own column.
+
+### A HIGH, verified against the real route
+
+An operator who tightens a bucket from `public_read` to `private` gets a success
+response and a bucket row that says `private`. Every object already in it stays
+world-readable, for ever.
+
+    1. bucket public_read, anonymous GET        -> 200
+    2. operator sets accessPolicy=private
+    3. anonymous GET after making it private    -> 200  + the bytes
+    4. storage_files.isPublic is still true
+
+Severity comes from *when* it bites. An operator reaches for "make this private"
+precisely when something has already leaked, and the action reports success while
+changing nothing about what is served. Any URL previously shared, cached, indexed
+or logged keeps working.
+
+It ran the other way too. `/api/v1/{projectId}/storage/upload` read `isPublic`
+from the request body and stored `isPublic || bucket.isPublic`, so an API-key
+holder could place a **world-readable object inside a `private` bucket**. A
+write-time policy bypass, honoured by the read path.
+
+And `owner_only` was accepted, stored, validated — and behaved identically to
+`private`, because the serving path had no concept of an owner. A policy value
+promising per-uploader restriction delivered project-wide access.
+`StorageFile.uploadedBy` was already being recorded and never read.
+
+### The bucket is a ceiling, evaluated per request
+
+A file may be more restricted than its bucket. It may never be less. The
+alternative — a file permitted to out-rank its bucket — IS the defect, so it was
+never a second option; and the existing `isPublic` values were *derived* from the
+bucket policy at upload rather than chosen per object, so there is no record of
+per-file operator intent being discarded.
+
+Evaluated when the request arrives, **not** cascaded into rows on update. A
+cascade would fix the reported case and leave all four writers of that column able
+to reopen the hole.
+
+Opening a bucket raises the ceiling and does not reach down to publish objects
+marked private, which the dialog says before an operator widens one.
+
+`owner_only` now means what it says: the end user in `uploadedBy` may read, other
+end users of the same project may not, and the project **operator** still can —
+narrowing which end user may read is not the same as locking an operator out of
+storage they administer. Signed links stop working under it, because a signed link
+is an anonymous grant and `owner_only` is a statement that anonymous reading is
+not acceptable for that bucket.
+
+An unrecognised policy value fails closed as `private`.
+
+### The one case the policy cannot govern, stated rather than hidden
+
+With the S3 driver and a public CDN base configured, a public object's URL points
+at the CDN, not at this deployment. Those reads never reach the code that enforces
+the policy, so tightening a bucket cannot revoke them until the CDN object or
+cache is purged.
+
+The server reports this and the policy dialog warns before an operator relies on
+a control a CDN will keep serving around. Saying so is the honest option; the
+alternative is a control that silently does not apply to the configuration
+serving the most traffic — which is the class of defect this whole tranche came
+from.
+
+### What is proven
+
+`tests/integration/storage-bucket-policy.spec.ts`, 17 assertions driving the real
+download route against a real database and real files on disk. Twelve of them
+failed before the fix, including the headline case; the four that passed were the
+control and the signed-link cases, which is how the fixture was known to be sound.
+
+Covered: a public bucket serves, so every refusal has a control; tightening stops
+existing objects immediately and **without the file rows being rewritten**;
+loosening works the same way but does not publish objects marked private; a file
+marked public inside a private bucket is refused; `owner_only` distinguishes two
+end users of the same project; signed links honour a valid signature and refuse
+forged, expired and other-file ones; an unknown policy fails closed; and the
+write-time clamp.
+
+The operator and cross-tenant cases are asserted on the decision rather than
+through the route, and that is a statement about the edition, not a shortcut: in
+single-tenant — which is what self-host is — any authenticated account is the
+operator of the one project, so a "stranger with a valid session" does not exist
+there. Driving the route produced `MultipleProjectsInSingleTenantError`,
+correctly, because one deployment is one project. Cross-tenant storage access is
+a Cloud claim and is tested where the logic lives.
+
+### Register
+
+Storage moves to DONE, and PARTIAL reaches zero:
+`DONE 19 · REAL_GAP 2 · INTENTIONAL 2`.
 
 ## Surface integrity, verified 2026-09-19
 

@@ -24,7 +24,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Upload, Download, Trash2, Copy, Search, Folder, File,
+  Upload, Download, Trash2, Copy, Search, Folder, File, Lock,
   Image as ImageIcon, FileText, AlertTriangle, Check,
   HardDrive, RefreshCw, Plus, X, Loader2, Sparkles, CheckSquare, Square,
 } from 'lucide-react'
@@ -33,6 +33,7 @@ import {
   getBuckets, getFiles, uploadFile, deleteFile, deleteFiles,
   getStorageStats, deleteBucket, createBucket,
   type StorageBucket, type StorageFile, type StorageStats,
+  getBucketsWithCaveat, updateBucketPolicy,
 } from '@/lib/api/storage'
 import { getCurrentProjectId } from '@/lib/api/client'
 import { getProject, type Project } from '@/lib/api/projects'
@@ -40,6 +41,7 @@ import {
   KitButton, KitNote, KitModal, KitConfirmDialog, KitField, KitInput,
   EmptyState, KIT,
 } from '@/components/inspector/kit'
+import { BucketPolicyDialog } from '@/components/storage/BucketPolicyDialog'
 
 const ALL_BUCKETS = '__all__'
 
@@ -111,6 +113,16 @@ export function StorageWorkbench({ projectId: projectIdProp }: { projectId?: str
   const [fileToDelete, setFileToDelete] = useState<StorageFile | null>(null)
   const [deletingFile, setDeletingFile] = useState(false)
   const [bucketToDelete, setBucketToDelete] = useState<{ id: string; name: string; fileCount: number } | null>(null)
+  /**
+   * The bucket whose read policy is being changed.
+   *
+   * Policy is the control that decides who may read this bucket's objects, and
+   * the dashboard previously could not show it, let alone change it: the list
+   * response carried `isPublic` only.
+   */
+  const [bucketPolicyTarget, setBucketPolicyTarget] = useState<StorageBucket | null>(null)
+  /** Deployment-level, reported by the server. See BucketPolicyDialog. */
+  const [cdnServesPublicObjects, setCdnServesPublicObjects] = useState(false)
   const [deletingBucket, setDeletingBucket] = useState(false)
   const [pendingUpload, setPendingUpload] = useState<File[] | null>(null)
   const [showNewBucket, setShowNewBucket] = useState(false)
@@ -150,11 +162,13 @@ export function StorageWorkbench({ projectId: projectIdProp }: { projectId?: str
     if (!activePid) return
     try {
       setLoading(true)
-      const [bucketsData, filesData, statsData] = await Promise.all([
-        getBuckets(activePid),
+      const [bucketsResult, filesData, statsData] = await Promise.all([
+        getBucketsWithCaveat(activePid),
         getFiles({ projectId: activePid }),
         getStorageStats(activePid),
       ])
+      const bucketsData = bucketsResult.buckets
+      setCdnServesPublicObjects(bucketsResult.cdnServesPublicObjects)
       setBuckets(bucketsData)
       setFiles(filesData)
       setStats(statsData)
@@ -520,11 +534,18 @@ export function StorageWorkbench({ projectId: projectIdProp }: { projectId?: str
                           <span className={`flex-1 truncate font-mono text-[12px] ${active ? 'text-zinc-50' : ''}`}>
                             {bucket.name}
                           </span>
-                          {bucket.isPublic && (
-                            <span className="flex-shrink-0 font-mono text-[10px] text-emerald-300/70 group-hover:opacity-0">
-                              public
-                            </span>
-                          )}
+                          {/* The POLICY, not a derived boolean. `public` next to a
+                              bucket whose policy is `owner_only` would be telling
+                              the operator the opposite of what is enforced. */}
+                          <span
+                            className={`flex-shrink-0 font-mono text-[10px] group-hover:opacity-0 ${
+                              bucket.accessPolicy === 'public_read' || bucket.accessPolicy === 'cdn_cacheable'
+                                ? 'text-amber-300/70'
+                                : 'text-zinc-600'
+                            }`}
+                          >
+                            {bucket.accessPolicy ?? 'private'}
+                          </span>
                           <span
                             className={`flex-shrink-0 font-mono text-[10.5px] tabular-nums transition-all group-hover:opacity-0 ${
                               active ? 'text-zinc-400' : 'text-zinc-600'
@@ -532,6 +553,16 @@ export function StorageWorkbench({ projectId: projectIdProp }: { projectId?: str
                           >
                             {countFor(bucket.name)}
                           </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setBucketPolicyTarget(bucket)
+                            }}
+                            className="absolute right-8 rounded-md p-1 opacity-0 transition-all hover:bg-white/[0.08] group-hover:opacity-100"
+                            title="Who may read this bucket"
+                          >
+                            <Lock className="h-3 w-3 text-zinc-400" />
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -978,6 +1009,24 @@ export function StorageWorkbench({ projectId: projectIdProp }: { projectId?: str
         danger
         busy={deletingBucket}
       />
+
+      {/* Who may read a bucket */}
+      {bucketPolicyTarget && (
+        <BucketPolicyDialog
+          bucketName={bucketPolicyTarget.name}
+          current={bucketPolicyTarget.accessPolicy ?? 'private'}
+          // Read from the server's own view of its storage configuration, not
+          // guessed in the browser: whether a CDN serves public objects decides
+          // whether this policy can be revoked at all.
+          cdnCaveat={cdnServesPublicObjects}
+          onClose={() => setBucketPolicyTarget(null)}
+          onSave={async (policy) => {
+            await updateBucketPolicy(bucketPolicyTarget.id, policy)
+            setBucketPolicyTarget(null)
+            await fetchData()
+          }}
+        />
+      )}
 
       {/* New bucket */}
       <KitModal
