@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
+import { throttledV1Response } from '@/lib/security/rate-limit-response'
 import { resetEndUserPassword } from '@/lib/services/end-user-auth-flows'
 
 /**
@@ -21,17 +22,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
   // Keyed on both so one project under attack cannot lock out recovery for a
   // different project behind the same egress address.
   const ip = clientIp(request)
-  const limit = consume(
+  const limit = await consume(
     `v1:endUserRecover:${params.projectId}:${ip}`,
     AUTH_LIMITS.endUserRecover.ip.limit,
     AUTH_LIMITS.endUserRecover.ip.windowMs,
   )
-  if (!limit.allowed) {
-    return NextResponse.json(
-      { error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please try again later.' } },
-      { status: 429 },
-    )
-  }
+  if (!limit.allowed) return throttledV1Response(limit, 'RATE_LIMITED')
   let token: unknown
   let password: unknown
   try {

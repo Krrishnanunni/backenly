@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest } from 'next/server'
 import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
+import { throttledV1Response } from '@/lib/security/rate-limit-response'
 import { createErrorResponse, createSuccessResponse, ErrorCodes } from '@/lib/api/v1/errors'
 import { signUpSchema } from '@/lib/api/v1/schemas'
 import { validateRequestBody } from '@/lib/validation/schemas'
@@ -40,18 +41,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     // Keyed on both so one project under attack cannot lock out sign-up attempts for a
     // different project behind the same egress address.
     const ip = clientIp(request)
-    const limit = consume(
+    const limit = await consume(
       `v1:endUserSignup:${projectId}:${ip}`,
       AUTH_LIMITS.endUserSignup.ip.limit,
       AUTH_LIMITS.endUserSignup.ip.windowMs,
     )
-    if (!limit.allowed) {
-      return createErrorResponse(
-        ErrorCodes.RATE_LIMIT_EXCEEDED,
-        'Too many attempts. Please try again later.',
-        429,
-      )
-    }
+    if (!limit.allowed) return throttledV1Response(limit)
 
     // Validate project exists
     const project = await prisma.project.findUnique({

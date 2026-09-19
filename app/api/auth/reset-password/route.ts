@@ -15,7 +15,7 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   // IP rate limit — these are unauthenticated calls.
   const ip = clientIp(request)
-  const rl = consume(`reset:ip:${ip}`, AUTH_LIMITS.resetPassword.ip.limit, AUTH_LIMITS.resetPassword.ip.windowMs)
+  const rl = await consume(`reset:ip:${ip}`, AUTH_LIMITS.resetPassword.ip.limit, AUTH_LIMITS.resetPassword.ip.windowMs)
   if (!rl.allowed) {
     return NextResponse.json(
       { error: 'Too many requests. Please try again later.' },

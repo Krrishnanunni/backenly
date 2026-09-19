@@ -31,9 +31,16 @@ export async function register() {
     // nothing about raising a replica count would prompt anybody to notice.
     // Failing at startup is the point - the alternative is serving traffic
     // with a control that is quietly weaker than it reads.
-    const { assertRateLimitStoreSupportsTopology } = await import('./lib/security/rate-limit-store')
+    const { assertRateLimitStoreSupportsTopology, assertSharedStoreIsOperational } =
+      await import('./lib/security/rate-limit-store')
     try {
       assertRateLimitStoreSupportsTopology()
+      // And then prove it. The check above reads configuration; this one makes
+      // the store answer. A declared-but-unreachable Redis would otherwise boot
+      // cleanly and fail closed on the first sign-in, which reports a typo as
+      // an auth outage at the worst moment to be diagnosing one.
+      const store = await assertSharedStoreIsOperational()
+      console.log(`[RateLimit] ${store}`)
     } catch (err) {
       console.error('')
       console.error(err instanceof Error ? err.message : String(err))

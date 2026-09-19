@@ -17,9 +17,14 @@
  * that runs more than one without a shared store fails loudly at startup
  * instead of quietly weakening.
  *
- * This is deliberately not a Redis implementation. Wiring a shared store is the
- * real fix and belongs with the Auth tranche; this is the much cheaper thing
- * that makes the gap impossible to cross by accident in the meantime.
+ * The shared store now exists — see lib/security/rate-limit-backend.ts — so a
+ * deployment that needs more than one instance has a way to get one rather
+ * than only a refusal. This module stays the place that decides whether the
+ * declared topology and the declared store agree.
+ *
+ * Self-host ships no Redis and does not need one: it is single-tenant, runs a
+ * single web process, and the in-memory store is the correct answer there. The
+ * shared store is opt-in, and the default is unchanged.
  *
  *   BACKENLY_APP_INSTANCES        how many web/runtime instances run. Default 1.
  *   BACKENLY_RATE_LIMIT_STORE     'memory' (default) or 'redis'.
@@ -80,8 +85,7 @@ export function assertRateLimitStoreSupportsTopology(
       `${instances} budgets and the effective limit on /api/auth/login and ` +
       `/api/v1/{projectId}/auth/* is ${instances}x what it reads.\n\n` +
       `Either run a single instance, or configure a shared store with ` +
-      `BACKENLY_RATE_LIMIT_STORE=redis (see checkRateLimitRedis in ` +
-      `lib/middleware/rateLimiter.ts, which is not yet wired).`,
+      `BACKENLY_RATE_LIMIT_STORE=redis and REDIS_URL.`,
     )
   }
 
@@ -91,5 +95,75 @@ export function assertRateLimitStoreSupportsTopology(
     throw new RateLimitStoreMisconfigured(
       'BACKENLY_RATE_LIMIT_STORE=redis requires REDIS_URL to be set.',
     )
+  }
+}
+
+/**
+ * Prove the shared store actually answers, at startup.
+ *
+ * `assertRateLimitStoreSupportsTopology` checks that REDIS_URL is *set*, which
+ * is not the same claim. A deployment with a typo in the host, a firewall in
+ * the way or a Redis that never came up would pass that check, boot, and then
+ * fail closed on the first sign-in — reporting a configuration error as an
+ * auth outage, at the worst possible moment to be diagnosing one.
+ *
+ * "Multi-instance startup should be allowed only if the shared store is
+ * actually operational" is the requirement, and only a round trip can answer
+ * it. This performs one.
+ *
+ * Returns a description on success so the caller can log which store is live;
+ * throws on failure so startup can refuse.
+ */
+export async function assertSharedStoreIsOperational(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  const store = declaredStoreKind(env)
+  const instances = declaredInstanceCount(env)
+
+  if (store === 'memory') return `in-memory counters, ${instances} instance(s)`
+
+  const url = env.REDIS_URL?.trim()
+  if (!url) {
+    throw new RateLimitStoreMisconfigured(
+      'BACKENLY_RATE_LIMIT_STORE=redis requires REDIS_URL to be set.',
+    )
+  }
+
+  const { Redis } = await import('ioredis')
+  const client = new Redis(url, {
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    lazyConnect: true,
+    connectTimeout: 5_000,
+  })
+
+  try {
+    await client.connect()
+    const pong = await client.ping()
+    if (pong !== 'PONG') {
+      throw new RateLimitStoreMisconfigured(
+        `REDIS_URL answered ${JSON.stringify(pong)} rather than PONG.`,
+      )
+    }
+    // A read-only replica would accept PING and silently drop every INCR, so
+    // the counter would never rise and the limiter would never deny. Writing
+    // is the capability actually required, so writing is what is tested.
+    const probe = `backenly:ratelimit:startup-probe:${process.pid}`
+    await client.set(probe, '1', 'PX', 5_000)
+    await client.del(probe)
+    return `shared Redis counters, ${instances} instance(s)`
+  } catch (err: any) {
+    if (err instanceof RateLimitStoreMisconfigured) throw err
+    throw new RateLimitStoreMisconfigured(
+      `This deployment declares BACKENLY_RATE_LIMIT_STORE=redis, but the store did ` +
+      `not answer: ${err?.message ?? err}
+
+` +
+      `The auth limiter fails CLOSED when it cannot reach its store, so booting ` +
+      `now would mean every sign-in is denied. Fix REDIS_URL, or set ` +
+      `BACKENLY_APP_INSTANCES=1 and BACKENLY_RATE_LIMIT_STORE=memory.`,
+    )
+  } finally {
+    await client.quit().catch(() => client.disconnect())
   }
 }
