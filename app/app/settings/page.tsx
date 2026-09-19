@@ -19,7 +19,7 @@ import {
   LogOut, Mail, Lock, Trash2, HelpCircle, Key, Check, X,
   User, Shield, AlertTriangle, Sparkles, Smartphone, MessageSquare,
   Activity, Calendar, FolderKanban, Loader2, Copy, ShieldCheck, ShieldAlert,
-  Send, ArrowUpRight, CheckCircle2,
+  Send, ArrowUpRight, CheckCircle2, LifeBuoy,
 } from 'lucide-react'
 import { OrgShell } from '@/components/shell/OrgShell'
 import {
@@ -27,8 +27,10 @@ import {
   KitField, KitInput, KitNote, KitBadge, KitTabs, KitTab,
 } from '@/components/inspector/kit'
 import { GlobalLoading } from '@/components/ui/GlobalLoading'
+import { CLOUD_CONTROL_PLANE } from '@/lib/cloud/control-plane'
+import { DeploymentRecoverySection } from '@/components/app/DeploymentRecoverySection'
 
-type Section = 'profile' | 'security' | 'support' | 'danger'
+type Section = 'profile' | 'security' | 'recovery' | 'support' | 'danger'
 
 interface UserProfile {
   id: string
@@ -277,6 +279,15 @@ export default function SettingsPage() {
   const TABS: { id: Section; label: string; icon: typeof User }[] = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'security', label: 'Security', icon: Shield },
+    // Self-host only, and absent rather than disabled in Cloud. Deployment
+    // recovery reads the whole platform database - every tenant's projects,
+    // users and secrets - which is right when the single account IS the
+    // operator of the machine, and is one tenant exporting everybody in Cloud.
+    // The route refuses by edition too; this stops the dashboard offering a
+    // control for work that would be refused.
+    ...(CLOUD_CONTROL_PLANE
+      ? []
+      : [{ id: 'recovery' as Section, label: 'Recovery', icon: LifeBuoy }]),
     { id: 'support', label: 'Support', icon: HelpCircle },
     { id: 'danger', label: 'Danger zone', icon: AlertTriangle },
   ]
@@ -342,6 +353,8 @@ export default function SettingsPage() {
             onLogout={handleLogout}
           />
         )}
+
+        {activeSection === 'recovery' && !CLOUD_CONTROL_PLANE && <DeploymentRecoverySection />}
 
         {activeSection === 'support' && <SupportSection userEmail={user?.email} />}
 

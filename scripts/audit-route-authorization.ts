@@ -56,6 +56,7 @@ export interface RouteRecord {
   authn:
     | 'withProjectAccess' | 'withTenantIsolation' | 'withProjectValidation'
     | 'withAuth' | 'requireAuth' | 'authenticateRequest' | 'requireAdmin' | 'verifySession'
+    | 'requireUser'
     | 'v1ApiMiddleware' | 'getProjectContext'
     | 'mcpGuard' | 'verifyToken' | 'sharedSecret' | 'none'
   /** Explicit authorization helpers called in the file. */
@@ -124,6 +125,11 @@ function classify(file: string): RouteRecord {
     : /requireAuth\s*\(/.test(src) ? 'requireAuth'
     : /authenticateRequest\s*\(/.test(src) ? 'authenticateRequest'
     : /verifySession\s*\(/.test(src) ? 'verifySession'
+    // What requireAdmin and getProjectContext are both built on: it verifies
+    // the cookie token AND that a matching session row exists and has not
+    // expired. Listed after those two so a route using a stronger guard is
+    // still classified by the stronger one.
+    : /requireUser\s*\(/.test(src) ? 'requireUser'
     : /mcpGuard\s*\(/.test(src) ? 'mcpGuard'
     : /verifyToken\s*\(/.test(src) ? 'verifyToken'
     // A scheduled or machine caller proves itself with a shared secret rather
