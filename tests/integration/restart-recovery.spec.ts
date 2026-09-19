@@ -39,13 +39,13 @@
  * simulated process boundary.
  */
 
-import { execFileSync } from 'child_process'
 import net from 'net'
 import crypto from 'crypto'
 import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
 
 import { RedisRateLimitBackend, createRateLimitRedis } from '@/lib/security/rate-limit-backend'
+import { redisProcessControl, waitForRedis } from '../helpers/redis-process'
 
 const REDIS_URL = process.env.REDIS_URL?.trim()
 const prisma = new PrismaClient()
@@ -268,34 +268,22 @@ describe('the auth limiter across a REAL Redis restart', () => {
     return
   }
 
-  const port = new URL(REDIS_URL).port || '6379'
+  // Stopping and starting the REAL server. How that is done depends on where
+  // this runs, which is why it is a helper rather than one hard-coded path: the
+  // first version knew only about WSL, passed here, and failed in CI with
+  // `spawnSync wsl.exe ENOENT`.
+  const redis = redisProcessControl(REDIS_URL!)
+  // eslint-disable-next-line no-console
+  console.log(`[restart] controlling Redis via ${redis.kind}`)
 
-  function wsl(command: string): string {
-    return execFileSync(
-      'wsl.exe',
-      ['-d', 'backenly-builder', '-u', 'root', '-e', 'bash', '-lc', command],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-    )
-      .replace(/\0/g, '')
-      .trim()
-  }
-
-  const ping = () => wsl(`redis-cli -h 127.0.0.1 -p ${port} ping 2>&1 || true`).includes('PONG')
-  const stopRedis = () => wsl(`redis-cli -h 127.0.0.1 -p ${port} shutdown nosave 2>&1 || true`)
-  const startRedis = () =>
-    wsl(`redis-server --daemonize yes --bind 0.0.0.0 --protected-mode no --port ${port}`)
-
-  async function waitFor(up: boolean, timeoutMs = 30_000): Promise<boolean> {
-    const deadline = Date.now() + timeoutMs
-    while (Date.now() < deadline) {
-      if (ping() === up) return true
-      await new Promise(r => setTimeout(r, 300))
-    }
-    return false
-  }
+  const waitFor = (up: boolean, timeoutMs = 60_000) => waitForRedis(REDIS_URL!, up, timeoutMs)
+  const stopRedis = () => redis.stop()
+  const startRedis = () => redis.start()
 
   afterAll(async () => {
-    if (!ping()) {
+    // Leaving Redis down would fail every later suite for a reason that has
+    // nothing to do with what they test.
+    if (!(await waitFor(true, 1_000))) {
       startRedis()
       await waitFor(true)
     }

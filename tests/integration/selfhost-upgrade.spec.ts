@@ -89,8 +89,7 @@ function ensureRefPresent(ref: string): void {
   } catch (err: any) {
     throw new Error(
       `the old release ${ref} is not in this clone and could not be fetched: ` +
-        `${String(err?.message ?? err).split('
-')[0]}. This suite upgrades from a REAL ` +
+        `${String(err?.message ?? err).split(/\r?\n/)[0]}. This suite upgrades from a REAL ` +
         `older release, so without that commit there is nothing to upgrade from.`,
     )
   }
