@@ -738,6 +738,31 @@ async function reconcileDerivedState(
   const adminRole = (await psql(admin, 'SELECT current_user')).trim()
   const reowned: string[] = []
 
+  // ── The deployment has to remember which role it is ─────────────────────
+  //
+  // `public.backenly_app_role()` reads the database-level setting
+  // `backenly.app_role`, and every ownership and grant decision in the
+  // privileged SQL routes through it. pg_dump does NOT carry
+  // `ALTER DATABASE ... SET`, so a restored deployment comes back with the
+  // setting absent and the function falling back to its default.
+  //
+  // That default is a role name which may not exist on the target at all - CI
+  // restores onto a cluster whose superuser is `postgres`, and reconciliation
+  // failed with `role "backenly_user" does not exist` while trying to set
+  // default privileges for it. Worse than the error is the silent case: where
+  // the fallback role DOES exist, every future grant would be aimed at the
+  // wrong one.
+  //
+  // So the setting is re-established from the role the dumps were actually
+  // replayed as, which is by definition this deployment's application role.
+  // ALTER DATABASE ... SET is elevation, which is why it belongs here.
+  const appRole = (await psql(options.targetUrl, 'SELECT current_user')).trim()
+  const database = (await psql(admin, 'SELECT current_database()')).trim()
+  await psql(
+    admin,
+    `ALTER DATABASE ${quoteIdent(database)} SET backenly.app_role = ${quoteLiteral(appRole)}`,
+  )
+
   const registryExists = (
     await psql(
       admin,
@@ -797,6 +822,7 @@ async function reconcileDerivedState(
   }
 
   return (
+    `backenly.app_role=${appRole}; ` +
     `re-owned to ${adminRole}: ${reowned.join(', ') || 'nothing'}; ` +
     `${applied.join(', ')} reinstalled; ${workspaces.length} workspace(s) re-registered`
   )
@@ -820,6 +846,10 @@ function quoteIdent(name: string): string {
     throw new Error(`unsafe identifier: ${name}`)
   }
   return `"${name}"`
+}
+
+function quoteLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
 }
 
 async function psqlFile(url: string, file: string): Promise<string> {

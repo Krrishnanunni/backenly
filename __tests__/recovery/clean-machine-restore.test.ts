@@ -385,6 +385,22 @@ describe('the data plane can work on the recovered machine', () => {
     expect(rows.map(r => r.rolname).sort()).toEqual(['anon', 'authenticated', 'service_role'])
   })
 
+  test('the restored deployment remembers which role it is', async () => {
+    // `public.backenly_app_role()` reads the database-level setting
+    // `backenly.app_role`, and every ownership and grant decision in the
+    // privileged SQL routes through it. pg_dump does NOT carry
+    // `ALTER DATABASE ... SET`, so a restored deployment came back with the
+    // setting absent and the function falling back to a role name that may not
+    // exist on the target at all - CI restores onto a cluster whose superuser
+    // is `postgres`, and reconciliation failed there with
+    // `role "backenly_user" does not exist`.
+    //
+    // The silent case is worse than the error: where the fallback role happens
+    // to exist, every future grant is aimed at the wrong one.
+    const rows = await onTarget<{ role: string }>(`SELECT public.backenly_app_role() AS role`)
+    expect(rows[0].role).toBe(APP_ROLE)
+  })
+
   test('the workspace grants survived the trip', async () => {
     // Without these the restore looks complete and the data plane returns
     // nothing at all. Asserted on an ORDINARY table: the internal ones are
