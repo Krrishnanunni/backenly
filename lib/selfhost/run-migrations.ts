@@ -52,6 +52,44 @@ export class MigrationRefused extends Error {
   }
 }
 
+/**
+ * A migration RAN and failed, as opposed to a plan that was refused.
+ *
+ * It carries Prisma's own output, and that is the entire point of it existing.
+ * `execFileSync` throws an Error whose `message` is only
+ *
+ *   Command failed: <node> <prisma cli> migrate deploy --schema <temp path>
+ *
+ * while everything an operator needs - the P3018 code, WHICH migration failed,
+ * the PostgreSQL error underneath it, and the link explaining how to recover -
+ * is on `stderr`, which was being discarded. An upgrade that fails at 3am and
+ * says nothing but "Command failed" is an upgrade nobody can act on, and this
+ * is the third time in this programme a diagnostic has hidden its own cause.
+ */
+export class MigrationFailed extends Error {
+  readonly stdout: string
+  readonly stderr: string
+  /** The migration Prisma named, when its output named one. */
+  readonly migration: string | null
+
+  constructor(stdout: string, stderr: string) {
+    const named = /Migration name:\s*(\S+)/.exec(stderr)
+    const code = /Error:\s*(P\d{4})/.exec(stderr)
+    super(
+      `The migration run failed` +
+        (named ? ` on ${named[1]}` : '') +
+        (code ? ` (${code[1]})` : '') +
+        `. Prisma reported:
+
+${stderr.trim() || stdout.trim() || '(no output)'}`,
+    )
+    this.name = 'MigrationFailed'
+    this.stdout = stdout
+    this.stderr = stderr
+    this.migration = named ? named[1] : null
+  }
+}
+
 export interface MigrationReport {
   plan: MigrationPlan
   /** Migrations recorded as already applied, without running them. */
@@ -115,11 +153,19 @@ export async function checkSupportObjects(
  */
 function prisma(args: string[], schemaPath: string, databaseUrl: string): string {
   const cli = require.resolve('prisma/build/index.js')
-  return execFileSync(process.execPath, [cli, ...args, '--schema', schemaPath], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, DATABASE_URL: databaseUrl, DIRECT_URL: databaseUrl },
-  })
+  try {
+    return execFileSync(process.execPath, [cli, ...args, '--schema', schemaPath], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, DATABASE_URL: databaseUrl, DIRECT_URL: databaseUrl },
+    })
+  } catch (err: any) {
+    // Prisma explains itself on stderr and exits non-zero; execFileSync keeps
+    // that text on the error and puts none of it in `message`. Re-thrown with
+    // the output attached so the operator reads Prisma's explanation instead
+    // of the command line that produced it.
+    throw new MigrationFailed(String(err?.stdout ?? ''), String(err?.stderr ?? ''))
+  }
 }
 
 /**

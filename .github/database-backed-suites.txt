@@ -373,3 +373,21 @@ tests/integration/dependency-failure-redis.spec.ts
 # refusal is TERMINAL, a connection refusal is not. Collapsing the two would
 # either spam a forbidden URL or drop every event from a restarting receiver.
 tests/integration/dependency-failure-webhook-receiver.spec.ts
+
+# What happens when a migration FAILS halfway - the case an operator meets at
+# 3am and the one where a wrong answer is unrecoverable.
+#
+# The rehearsal migration exists only in the assembled workspace, never in the
+# repository, so a deliberately broken migration can never ship. It does real
+# work and then fails inside one transaction, which is the RECOVERABLE shape
+# and therefore the one worth proving first.
+#
+# It found that the failure was honest but ILLEGIBLE: execFileSync puts the
+# reason on stderr and none of it in `message`, so an operator got
+# "Command failed: <node> <cli> migrate deploy" while Prisma's P3018, the
+# migration name, the SQL error and the recovery link were all discarded.
+#
+# The fixture installs the PostgREST support objects the way the installer
+# does, from both SQL files in the installer's order. Without them case D is
+# vacuous: "nothing was lost" is trivially true when there was nothing to lose.
+tests/integration/selfhost-failed-migration.spec.ts

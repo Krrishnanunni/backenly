@@ -94,15 +94,37 @@ async function sleep(ms: number): Promise<void> {
   await new Promise(r => setTimeout(r, ms))
 }
 
-/** Poll until `probe` returns a value, or fail loudly with what it last saw. */
-async function until<T>(what: string, probe: () => Promise<T | null>, timeoutMs = 60_000): Promise<T> {
+/**
+ * Poll until `probe` returns a value, or fail loudly WITH WHAT IT LAST SAW.
+ *
+ * `observe` exists because the first version of this threw
+ * "timed out after 120000ms waiting for /db to serve again" and nothing else -
+ * the statuses it had spent two minutes collecting were all discarded. That is
+ * the same defect as the one this branch fixed in the migration runner and in
+ * the upgrade suite, so the helper carries the evidence rather than each caller
+ * remembering to.
+ */
+async function until<T>(
+  what: string,
+  probe: () => Promise<T | null>,
+  timeoutMs = 60_000,
+  observe?: () => string,
+): Promise<T> {
   const deadline = Date.now() + timeoutMs
+  const seen = new Map<string, number>()
   while (Date.now() < deadline) {
     const got = await probe()
     if (got) return got
+    if (observe) {
+      const note = observe()
+      seen.set(note, (seen.get(note) ?? 0) + 1)
+    }
     await sleep(500)
   }
-  throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`)
+  const detail = seen.size
+    ? `; observed ${[...seen.entries()].map(([k, n]) => `${k} x${n}`).join(', ')}`
+    : ''
+  throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}${detail}`)
 }
 
 interface Answer {
@@ -266,8 +288,26 @@ async function main(): Promise<void> {
   await installRealtimeTrigger(projectId, TABLE)
   ok(`realtime trigger installed on ${TABLE}`)
 
-  const { rawKey } = await createApiKey(projectId, operator.id, { name: 'qualification' })
-  ok('api key created')
+  // TWO credentials, because they are meant to get different answers.
+  //
+  // The first run of this used one anonymous key for everything and its write
+  // came back 401 with `permission denied for table qualification`. That was
+  // the product being RIGHT: an API key with no end-user identity mints the
+  // `anon` role, and anon has SELECT on a registered schema but not INSERT.
+  // A service-role key is what a server-side integration uses to write.
+  const { rawKey: anonKey } = await createApiKey(projectId, operator.id, {
+    name: 'qualification client',
+  })
+  const { rawKey: serviceKey, record: serviceRecord } = await createApiKey(
+    projectId,
+    operator.id,
+    { name: 'qualification server' },
+  )
+  await prisma.apiKey.update({
+    where: { id: serviceRecord.id },
+    data: { serviceRole: true, keyType: 'service' },
+  })
+  ok('api keys created (client + service-role)')
 
   // ── CONTROL: every surface works before anything is broken ────────────────
   step('CONTROL — every surface answers while the deployment is healthy')
@@ -275,15 +315,27 @@ async function main(): Promise<void> {
   const seeded = `control-${randomUUID()}`
   const created = await call(`/api/v1/${projectId}/db/${TABLE}`, {
     method: 'POST',
-    apiKey: rawKey,
+    apiKey: serviceKey,
     body: JSON.stringify({ marker: seeded }),
   })
   must(
     created.status >= 200 && created.status < 300,
-    `/db/${TABLE} accepted a write (HTTP ${created.status})`,
+    `/db/${TABLE} accepted a service-role write (HTTP ${created.status})`,
   )
 
-  const listed = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: rawKey })
+  // The paired refusal. Without it, "a write succeeded" says nothing about
+  // whether the data plane distinguishes the two credentials at all.
+  const anonWrite = await call(`/api/v1/${projectId}/db/${TABLE}`, {
+    method: 'POST',
+    apiKey: anonKey,
+    body: JSON.stringify({ marker: `anon-${randomUUID()}` }),
+  })
+  must(
+    anonWrite.status >= 400,
+    `/db/${TABLE} refused an anonymous write (HTTP ${anonWrite.status})`,
+  )
+
+  const listed = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: anonKey })
   const rows = listed.body?.data ?? listed.body?.rows ?? listed.body
   must(listed.status === 200, `/db/${TABLE} served a read (HTTP ${listed.status})`)
   must(
@@ -306,7 +358,7 @@ async function main(): Promise<void> {
   // ── Realtime, across a restart of the dependency it depends on ────────────
   step('REALTIME — a known event, after Postgres restarts underneath the stream')
 
-  let stream = await openStream(`/api/v1/${projectId}/realtime?table=${TABLE}`, rawKey)
+  let stream = await openStream(`/api/v1/${projectId}/realtime?table=${TABLE}`, anonKey)
   await stream.waitFor('the connected frame', f => f?.type === 'connected', 30_000)
   ok('stream open, and it said `connected` — not merely "no error yet"')
 
@@ -336,7 +388,7 @@ async function main(): Promise<void> {
   const stillOpen = stream.frames.some(f => f?.type === 'connected')
   if (!stillOpen) {
     stream.close()
-    stream = await openStream(`/api/v1/${projectId}/realtime?table=${TABLE}`, rawKey)
+    stream = await openStream(`/api/v1/${projectId}/realtime?table=${TABLE}`, anonKey)
     await stream.waitFor('the connected frame after reopening', f => f?.type === 'connected', 60_000)
   }
 
@@ -368,13 +420,19 @@ async function main(): Promise<void> {
   // ── The surfaces, after the restart ───────────────────────────────────────
   step('AFTER THE RESTART — the data plane and end-user auth still work')
 
+  let lastDb = 'nothing yet'
   const afterRead = await until(
     '/db to serve again',
     async () => {
-      const res = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: rawKey })
+      const res = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: anonKey })
+      lastDb = `HTTP ${res.status} ${res.text.slice(0, 120)}`
       return res.status === 200 ? res : null
     },
-    120_000,
+    // PostgREST keeps its own pool and reconnects with backoff after the server
+    // it was talking to goes away. This is the window that recovery has to fit
+    // inside WITHOUT anything being restarted by hand.
+    240_000,
+    () => lastDb,
   )
   must(
     JSON.stringify(afterRead.body ?? '').includes(seeded),
@@ -399,7 +457,7 @@ async function main(): Promise<void> {
   // makes the next calls address the database rather than memory.
   await sleep(20_000)
 
-  const dbDuring = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: rawKey })
+  const dbDuring = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: anonKey })
   must(dbDuring.status !== 200, `/db/* did not report success (HTTP ${dbDuring.status})`)
   must(
     dbDuring.status !== 404,
@@ -427,13 +485,16 @@ async function main(): Promise<void> {
   // ── Recovery, without restarting the application ──────────────────────────
   step('RECOVERY — the same application process serves again')
 
+  let lastRecovery = 'nothing yet'
   const recovered = await until(
     '/db to serve again after the outage',
     async () => {
-      const res = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: rawKey })
+      const res = await call(`/api/v1/${projectId}/db/${TABLE}`, { apiKey: anonKey })
+      lastRecovery = `HTTP ${res.status} ${res.text.slice(0, 120)}`
       return res.status === 200 ? res : null
     },
-    180_000,
+    240_000,
+    () => lastRecovery,
   )
   must(
     JSON.stringify(recovered.body ?? '').includes(seeded),
