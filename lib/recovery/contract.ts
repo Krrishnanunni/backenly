@@ -46,6 +46,8 @@
  * failure, which is a boundary they can reason about.
  */
 
+import type { WrappedDataKey } from './crypto'
+
 /** Bump when the on-disk shape changes in a way older readers cannot handle. */
 export const BUNDLE_FORMAT_VERSION = 1
 
@@ -116,16 +118,12 @@ export interface RecoveryManifest {
   /**
    * The per-bundle data key, wrapped by the operator's recovery credential.
    * The credential itself is NEVER present in the bundle.
+   *
+   * The shape lives in ./crypto beside the code that produces it, including the
+   * KDF cost it was written with - so raising that cost later does not make
+   * older bundles unreadable.
    */
-  wrappedDataKey: {
-    algorithm: 'aes-256-gcm'
-    /** KDF used to turn the operator passphrase into a wrapping key. */
-    kdf: 'scrypt'
-    salt: string
-    iv: string
-    authTag: string
-    ciphertext: string
-  } | null
+  wrappedDataKey: WrappedDataKey | null
 }
 
 /**

@@ -173,6 +173,7 @@ describe('the recovery credential is not in the bundle', () => {
       wrappedDataKey: {
         algorithm: 'aes-256-gcm',
         kdf: 'scrypt',
+        kdfParams: { N: 65536, r: 8, p: 1 },
         salt: 's', iv: 'i', authTag: 't', ciphertext: 'c',
       },
     })
