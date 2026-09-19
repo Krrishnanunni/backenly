@@ -18,6 +18,11 @@ import {
   RecoveryContractError,
   RESTORE_ORDER,
   VALIDATION_STEPS,
+  DURABLE_CREDENTIALS,
+  EPHEMERAL_CREDENTIALS,
+  isEphemeral,
+  QUIESCED_SUBSYSTEMS,
+  subsystemMayRun,
   type RecoveryManifest,
 } from '@/lib/recovery/contract'
 
@@ -173,5 +178,95 @@ describe('the recovery credential is not in the bundle', () => {
     expect(serialised).not.toMatch(/"recoveryKey"/)
     expect(serialised).not.toMatch(/"passphrase"/)
     expect(m.wrappedDataKey).not.toBeNull()
+  })
+})
+
+
+describe('durable credentials survive recovery, ephemeral ones must not', () => {
+  it('keeps the values other people’s code depends on', () => {
+    // These are embedded in client bundles, CI pipelines and other systems.
+    // Issuing fresh ones would be "restored" and would break every caller,
+    // which is not recovery in any sense the operator meant.
+    for (const durable of ['project.jwtSecret', 'project.anonKey', 'apiKey.records']) {
+      expect(DURABLE_CREDENTIALS).toContain(durable)
+      expect(isEphemeral(durable)).toBe(false)
+    }
+  })
+
+  it('keeps identity, so users still exist after recovery', () => {
+    expect(DURABLE_CREDENTIALS).toContain('user.passwordHash')
+    expect(DURABLE_CREDENTIALS).toContain('user.identity')
+  })
+
+  it('drops proof of a past login', () => {
+    // Restoring a week-old bundle must not resurrect a session somebody
+    // revoked. Identity is durable; having been logged in is not.
+    expect(isEphemeral('session.records')).toBe(true)
+  })
+
+  it('drops one-time credentials that were already spent or cancelled', () => {
+    for (const token of [
+      'passwordResetToken.records',
+      'workspace._magic_links',
+      'workspace._password_resets',
+      'workspace._email_verifications',
+    ]) {
+      expect(isEphemeral(token)).toBe(true)
+    }
+  })
+
+  it('drops the setup token', () => {
+    // Its whole purpose is to claim an UNCLAIMED deployment. Restoring it into
+    // a claimed one would reintroduce exactly the credential the claim was
+    // meant to consume.
+    expect(isEphemeral('deployment.setupToken')).toBe(true)
+  })
+
+  it('never classifies the same thing as both', () => {
+    // The lists are the contract; an overlap would make the contract
+    // unreadable and let an implementation pick whichever it preferred.
+    const durable = new Set<string>(DURABLE_CREDENTIALS)
+    const overlap = EPHEMERAL_CREDENTIALS.filter(e => durable.has(e))
+    expect(overlap).toEqual([])
+  })
+})
+
+describe('restore runs quiesced', () => {
+  it('names every subsystem that can act on its own', () => {
+    // A half-restored deployment describes a past state. Anything that acts on
+    // state autonomously will act on that description, and the actions reach
+    // the outside world where they cannot be taken back.
+    expect([...QUIESCED_SUBSYSTEMS].sort()).toEqual([
+      'autonomy-reconciler',
+      'background-jobs',
+      'cron-scheduler',
+      'email-delivery',
+      'function-invocation',
+      'webhook-delivery',
+    ])
+  })
+
+  it('keeps everything off during every mutating step', () => {
+    for (const step of RESTORE_ORDER) {
+      expect(subsystemMayRun(step, false)).toBe(false)
+    }
+  })
+
+  it('keeps everything off even while the final step is still running', () => {
+    // "Writing finished" is not "the restore worked". Autonomy starting here
+    // would observe a deployment that has not yet been verified.
+    expect(subsystemMayRun('verify-health-and-integrity', false)).toBe(false)
+  })
+
+  it('starts them only after final verification has COMPLETED', () => {
+    expect(subsystemMayRun('verify-health-and-integrity', true)).toBe(true)
+  })
+
+  it('does not start them after some earlier step merely completed', () => {
+    // The dangerous shape: a step finishes, something concludes the restore is
+    // far enough along, and autonomy begins repairing a deliberately partial
+    // schema - fighting the restore step by step.
+    expect(subsystemMayRun('reconcile-derived-state', true)).toBe(false)
+    expect(subsystemMayRun('restore-workspace-schemas', true)).toBe(false)
   })
 })

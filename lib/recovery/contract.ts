@@ -211,3 +211,103 @@ export function missingComponents(manifest: RecoveryManifest): RecoveryComponent
   const present = new Set(manifest.components.map(c => c.component))
   return RECOVERY_COMPONENTS.filter(c => !present.has(c))
 }
+
+/**
+ * DURABLE CREDENTIALS SURVIVE RECOVERY. EPHEMERAL ONES MUST NOT.
+ * =============================================================
+ *
+ * A bundle that restores everything restores too much. The distinction is not
+ * "secret vs not secret" — it is whether a client outside the deployment
+ * depends on the value continuing to exist.
+ *
+ * DURABLE things are why recovery is worth doing. A project's signing secret,
+ * its anon key, its API keys and its OAuth configuration are embedded in
+ * client bundles, CI pipelines and other people's code. Recovering a
+ * deployment that issued fresh ones would technically be "restored" and would
+ * break every caller, which is not recovery in any sense the operator meant.
+ *
+ * EPHEMERAL things are the opposite: one-time or time-bounded proofs of a
+ * moment. Restoring a week-old bundle must not resurrect a session somebody
+ * revoked, a password-reset link that was already used, a magic link that has
+ * since been cancelled, or the setup token that claims an unclaimed
+ * deployment. Each of those would hand back an authentication path that was
+ * deliberately taken away.
+ *
+ * Identity is durable; proof of a past login is not. After recovery a user's
+ * account and password hash are intact and they sign in again.
+ */
+
+/** Restored as-is. Clients outside the deployment depend on these values. */
+export const DURABLE_CREDENTIALS = [
+  'project.jwtSecret',
+  'project.anonKey',
+  'apiKey.records',
+  'authProvider.configuration',
+  'project.envVars',
+  'user.passwordHash',
+  'user.identity',
+] as const
+
+/**
+ * Deliberately NOT restored, even though they live in the same tables.
+ *
+ * `setupToken` is here for a reason worth stating: restoring it into an
+ * already-claimed deployment would reintroduce a credential whose whole
+ * purpose is to claim an unclaimed one.
+ */
+export const EPHEMERAL_CREDENTIALS = [
+  'session.records',
+  'passwordResetToken.records',
+  'oidcAccessToken.records',
+  'shareToken.records',
+  'workspace._magic_links',
+  'workspace._password_resets',
+  'workspace._email_verifications',
+  'workspace._token_blacklist',
+  'deployment.setupToken',
+] as const
+
+export type DurableCredential = (typeof DURABLE_CREDENTIALS)[number]
+export type EphemeralCredential = (typeof EPHEMERAL_CREDENTIALS)[number]
+
+/**
+ * SUBSYSTEMS THAT MUST BE SILENT WHILE A RESTORE IS IN FLIGHT.
+ * ===========================================================
+ *
+ * A half-restored deployment is a deployment describing a state that was true
+ * in the past. Anything that acts on state autonomously will act on that
+ * description, and the actions reach the outside world where they cannot be
+ * taken back.
+ *
+ * Concretely: webhook delivery would re-send events whose recipients already
+ * processed them; email would re-send verifications and invitations; cron and
+ * background jobs would re-run work already done; function invocations would
+ * bill and mutate; and autonomy would observe a deliberately partial schema,
+ * diagnose it as broken, and "repair" it — fighting the restore step by step.
+ *
+ * These stay off until `verify-health-and-integrity` passes, not until the
+ * last write completes. A restore that finished writing is not yet a restore
+ * that worked.
+ */
+export const QUIESCED_SUBSYSTEMS = [
+  'cron-scheduler',
+  'autonomy-reconciler',
+  'webhook-delivery',
+  'email-delivery',
+  'background-jobs',
+  'function-invocation',
+] as const
+
+export type QuiescedSubsystem = (typeof QUIESCED_SUBSYSTEMS)[number]
+
+/** True when this subsystem may run at the given point in the restore. */
+export function subsystemMayRun(step: RestoreStep, completed: boolean): boolean {
+  // Only after the FINAL step has completed successfully. During any step,
+  // including the last one while it is still running, everything stays off.
+  return completed && step === 'verify-health-and-integrity'
+}
+
+/** A credential the restore must drop rather than carry across. */
+export function isEphemeral(name: string): boolean {
+  return (EPHEMERAL_CREDENTIALS as readonly string[]).includes(name)
+}

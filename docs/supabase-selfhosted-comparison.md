@@ -110,6 +110,42 @@ was unreadable, which is terminal however loudly it fails afterwards.
 `verify-health-and-integrity` is deliberately last, so "recovery succeeded" is a
 claim about the restored system rather than about a command exiting 0.
 
+### Two semantics locked with the format
+
+**Durable credentials survive; ephemeral ones must not.** The line is not
+"secret vs not secret" — it is whether something outside the deployment depends
+on the value continuing to exist.
+
+Project signing secrets, anon keys, API keys, OAuth configuration and project
+env are embedded in client bundles, CI pipelines and other people's code. A
+recovery that issued fresh ones would be technically "restored" and would break
+every caller, which is not recovery in any sense the operator meant.
+
+Sessions, password-reset tokens, magic links, email verifications, the token
+blacklist and the setup token are the opposite: one-time or time-bounded proofs
+of a moment. Restoring a week-old bundle must not resurrect a session somebody
+revoked or a reset link already used. **Identity is durable; having been logged
+in is not** — a user's account and password hash come back, and they sign in
+again.
+
+The setup token is worth naming: its whole purpose is to claim an *unclaimed*
+deployment, so restoring it into a claimed one would reintroduce exactly the
+credential the claim consumed.
+
+**Restore runs quiesced.** A half-restored deployment describes a state that was
+true in the past, and anything acting on state autonomously will act on that
+description — where the actions reach the outside world and cannot be taken
+back. Webhook delivery would re-send events recipients already processed; email
+would re-send verifications; cron and background jobs would re-run completed
+work; function invocation would bill and mutate; and autonomy would observe a
+deliberately partial schema, diagnose it as broken, and *repair* it — fighting
+the restore step by step.
+
+All six stay off until `verify-health-and-integrity` has **completed**, not
+until the last write finishes. The tests assert that a subsystem may not start
+after some earlier step merely completed, because that is the shape that lets
+autonomy loose on a partial deployment.
+
 ### Still to build
 
 The contract is frozen; export, restore and the destructive acceptance test are
