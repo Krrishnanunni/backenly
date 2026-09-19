@@ -447,3 +447,19 @@ tests/integration/scheduled-snapshots.spec.ts
 # never happen inside it. Wrapped: 500 and exit 0. Unwrapped: no response and a
 # non-zero exit, which is the CI log exactly.
 tests/integration/runtime-async-crash.spec.ts
+
+# The fourth role. setup-app-role.ts and README.md have documented a four-role
+# architecture since the credential split; three were created by code, and
+# `backenly_backup` existed in prose plus a README section telling operators to
+# run the CREATE ROLE by hand - with a grant list covering the workspace schema
+# and NOT public, so even following it left recovery broken.
+#
+# Deployment Recovery therefore failed on every correctly split install with
+# "permission denied for table backenly_pgrst_schema_registry". Every existing
+# recovery test passed because they run where the role is a superuser.
+#
+# Granting the registry to the app role would have cleared that error and
+# stopped at the next: workspace tables are FORCE RLS and backenly_app is
+# NOBYPASSRLS. That is asserted here rather than argued - the app role is made
+# to try both dumps, and fails both.
+tests/integration/backup-role-contract.spec.ts

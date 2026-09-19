@@ -411,9 +411,27 @@ A backup is `pg_dump` of one project's `workspace_<id>` schema, gzipped under
 and not deployment-level disaster recovery: project secrets, API keys, storage
 objects and function definitions all live outside that schema.
 
-**If the role in `DATABASE_URL` cannot bypass RLS, set `BACKUP_DATABASE_URL`.**
-Workspace tables are `FORCE ROW LEVEL SECURITY`, and under FORCE even the owner
-is subject to its policies, so `pg_dump` aborts on the first protected table:
+**`npm run selfhost` creates the backup credential for you.** It converges a
+dedicated `backenly_backup` role and records `BACKUP_DATABASE_URL` in `.env`,
+as the last step of the install — last because the objects it must be able to
+read are created at different times: the platform tables by the migration
+chain, the PostgREST registry and event triggers by the elevated SQL after it,
+and the workspace schema by bootstrap after that.
+
+This used to be a manual step, and the instructions here were incomplete: they
+granted the workspace schema and not `public`, so an operator who followed them
+exactly still could not produce a Deployment Recovery bundle. `pg_dump --schema
+public` takes a `LOCK TABLE` on every table in the schema and stopped at the
+registry:
+
+```
+pg_dump: error: query failed:
+ERROR: permission denied for table backenly_pgrst_schema_registry
+```
+
+The credential is needed because workspace tables are `FORCE ROW LEVEL
+SECURITY`, and under FORCE even the owner is subject to its policies, so
+`pg_dump` over the application role aborts on the first protected table:
 
 ```
 pg_dump: error: query failed: ERROR: query would be affected by
@@ -426,23 +444,28 @@ hides it, because `POSTGRES_USER` there is the bootstrap superuser and
 superusers bypass RLS. Managed Postgres does not hide it.
 
 Do **not** fix this by granting `BYPASSRLS` to the application role — that
-disables every RLS policy on every tenant at once. Create a dedicated role with
-exactly this much, and no more:
+disables every RLS policy on every tenant at once. The installer creates a role
+with exactly this much and no more:
 
-```sql
-CREATE ROLE backenly_backup LOGIN PASSWORD '<secret>'
-  NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
-GRANT CONNECT ON DATABASE backenly TO backenly_backup;
-GRANT USAGE  ON SCHEMA "workspace_<project-id>" TO backenly_backup;
-GRANT SELECT ON ALL TABLES IN SCHEMA "workspace_<project-id>" TO backenly_backup;
+```
+LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS NOINHERIT
+CONNECT on the database
+USAGE + SELECT on public and on every workspace schema
+no CREATE, no INSERT/UPDATE/DELETE/TRUNCATE, member of nothing, owns nothing
 ```
 
-It needs no `CREATE`, no membership of the application role and no superuser.
+To converge it by hand on an existing deployment, or after adding a schema:
+
+```bash
+npx tsx scripts/setup-backup-role.ts --apply
+```
+
 Restore deliberately writes back over `DATABASE_URL` instead, so the
 application keeps ownership of its own schema — restoring over the backup role
 would re-own every table to it, and `FORCE ROW LEVEL SECURITY` keys on the
-owner. `__tests__/services/backup-restore-privileges.test.ts` builds exactly
-these two roles and proves the contract.
+owner. `tests/integration/backup-role-contract.spec.ts` builds both roles for
+real and proves the whole contract, including that the application role is
+refused where the backup role succeeds.
 
 #### Bringing your own database
 

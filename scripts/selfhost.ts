@@ -467,6 +467,97 @@ function installSuperuserPrerequisites(projectId: string): void {
   else info('privileged role helpers not installed; direct psql credentials will be unavailable')
 }
 
+/**
+ * The backup credential, converged LAST.
+ *
+ * Deployment Recovery and the project snapshot both run pg_dump, and on a
+ * correctly split install the application role cannot do it: it has no
+ * privileges on the installer-owned PostgREST registry in `public`, and
+ * workspace tables are FORCE ROW LEVEL SECURITY while `backenly_app` is
+ * deliberately NOBYPASSRLS. Recovery export failed with
+ * "permission denied for table backenly_pgrst_schema_registry".
+ *
+ * `scripts/setup-app-role.ts` and README.md have both described a four-role
+ * architecture since the credential split; only three were ever created by
+ * code, and the README told operators to run this CREATE ROLE by hand — with a
+ * grant list that covers the workspace schema and not `public`, so even
+ * following it left recovery broken.
+ *
+ * ORDER IS THE WHOLE REASON THIS IS HERE rather than beside configureAppRole().
+ * The objects appear at different times: platform tables from the migration
+ * chain, the registry and event triggers from the elevated SQL after it, the
+ * workspace schema from bootstrap after that. Grants taken any earlier would
+ * miss most of them. It converges existing objects every run AND sets default
+ * privileges for what is created later.
+ */
+function configureBackupRole(): void {
+  heading('creating the backup credential recovery needs')
+
+  const lines = readEnvLines()
+  const admin = envValue(lines, 'BACKENLY_ADMIN_DATABASE_URL') || ''
+  if (!admin) {
+    throw new InstallFailure(
+      'BACKENLY_ADMIN_DATABASE_URL is not set',
+      'it is recorded on the first run; rerunning the installer restores it'
+    )
+  }
+
+  // Rotate when .env has lost the credential. Unlike the application and
+  // authenticator passwords, nothing serves live requests with this one — it is
+  // an offline dump credential — so a deployment that cannot be backed up is
+  // the worse outcome. Explicit, and idempotent: with a credential already
+  // recorded, the password is left alone.
+  const existing = envValue(lines, 'BACKUP_DATABASE_URL') || ''
+  const args = ['tsx', 'scripts/setup-backup-role.ts', '--apply']
+  if (!existing) args.push('--rotate-password')
+
+  const r = capture('npx', args, { BACKENLY_ADMIN_DATABASE_URL: admin })
+  process.stdout.write(r.out)
+  if (r.code !== 0) {
+    throw new InstallFailure(
+      'could not create the backup role',
+      'see the output above; without it pg_dump cannot read this deployment'
+    )
+  }
+
+  const match = r.out.match(/postgresql:\/\/[^\s]+/)
+  if (match) {
+    const next = readEnvLines()
+    setEnvVar(next, 'BACKUP_DATABASE_URL', match[0])
+    writeFileSync(ENV_PATH, next.join('\n'), 'utf8')
+    ok('BACKUP_DATABASE_URL records the dedicated read-only backup role')
+  } else {
+    info('backup role already had a password; left BACKUP_DATABASE_URL alone')
+  }
+}
+
+/**
+ * Every role the architecture advertises must actually exist.
+ *
+ * The docs described four and the code created three, and nothing compared the
+ * two — so Deployment Recovery was broken on every correctly split install
+ * until the final qualification tried it. This is the ratchet that stops the
+ * mismatch coming back.
+ */
+function verifyRoles(): void {
+  heading('every advertised role exists')
+
+  const expected = ['backenly_app', 'backenly_authenticator', 'backenly_backup']
+  const missing: string[] = []
+  for (const role of expected) {
+    const found = psqlScalar(`SELECT count(*) FROM pg_roles WHERE rolname = '${role}'`)
+    if (found === '1') ok(`${role}`)
+    else missing.push(role)
+  }
+
+  if (missing.length > 0) {
+    throw new InstallFailure(
+      `the install finished without ${missing.join(', ')}`,
+      'the credential split is what keeps RLS enforceable and backups readable; rerunning is safe'
+    )
+  }
+}
+
 function startDataPlane(): void {
   heading('starting the data plane')
   run('docker', ['compose', ...COMPOSE, 'up', '-d', 'postgrest'],
@@ -510,6 +601,10 @@ function main(): void {
     // have stopped before starting it.
     startDataPlane()
   }
+
+  // Last, because it grants over objects every step above creates.
+  configureBackupRole()
+  verifyRoles()
 
   const setupToken = envValue(readEnvLines(), 'BACKENLY_SETUP_TOKEN') || ''
 
