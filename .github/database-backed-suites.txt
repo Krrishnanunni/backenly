@@ -362,3 +362,14 @@ tests/integration/dependency-failure-storage.spec.ts
 # so the shared-counter claim after recovery is made against a store that
 # genuinely restarted.
 tests/integration/dependency-failure-redis.spec.ts
+
+# The dependency that fails here is somebody ELSE'S server: the customer's HTTP
+# endpoint, which can be down for a week without this deployment being able to
+# do anything about it. The contract is therefore the opposite of the others -
+# keep the event, retry on a schedule, deliver exactly once on return - and the
+# three ways that goes wrong (lost, duplicated, never) are each asserted.
+#
+# It also pins the distinction that makes the ladder work: the egress guard's
+# refusal is TERMINAL, a connection refusal is not. Collapsing the two would
+# either spam a forbidden URL or drop every event from a restarting receiver.
+tests/integration/dependency-failure-webhook-receiver.spec.ts
