@@ -122,11 +122,12 @@ const CAPABILITIES: Capability[] = [
     ui: ['components/monitoring/MonitoringWorkbench.tsx'], uiMentions: '/api/monitoring' },
 
   // ── Data protection ────────────────────────────────────────────────────
-  { area: 'Data protection', name: 'Workspace logical backup',
+  { area: 'Data protection', name: 'Project database snapshot',
     backend: ['lib/services/workspace-backup.ts', 'app/api/projects/[id]/backup/route.ts'],
-    cloudOnly: 'Gated to Cloud in lib/edition/cloud-only.ts. UNDER REVIEW: the implementation is proven safe on a non-superuser role, and withholding it from operators who run their own database is a product decision worth re-taking on its own merits rather than by copying Supabase.' },
-  { area: 'Data protection', name: 'Deployment disaster recovery',
-    intentional: 'NOT YET DESIGNED. A workspace pg_dump is not DR: platform database, workspace schemas, storage objects, function definitions, project secrets and operator metadata are separate concerns. Must be designed or documented, never implied by the backup feature.' },
+    ui: ['components/database/DatabaseSnapshots.tsx'], uiMentions: '/backup' },
+  { area: 'Data protection', name: 'Deployment recovery',
+    backend: ['lib/recovery/export.ts', 'lib/recovery/restore.ts', 'scripts/recovery.ts'],
+    ui: ['components/app/DeploymentRecoverySection.tsx'], uiMentions: '/api/deployment/recovery' },
 
   // ── Integrations ───────────────────────────────────────────────────────
   { area: 'Integrations', name: 'Webhooks',

@@ -30,12 +30,12 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `49c408da` on 2026-09-18 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `8c70ee81` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
 
-BACKEND_ONLY 1 · CLOUD_ONLY 1 · DONE 13 · INTENTIONAL 3 · PARTIAL 3 · REAL_GAP 2
+BACKEND_ONLY 1 · DONE 15 · INTENTIONAL 2 · PARTIAL 3 · REAL_GAP 2
 
 | Area | Capability | Verdict | Evidence |
 |---|---|---|---|
@@ -50,8 +50,8 @@ BACKEND_ONLY 1 · CLOUD_ONLY 1 · DONE 13 · INTENTIONAL 3 · PARTIAL 3 · REAL_
 | Database | Dashboard SQL writes / DDL | **INTENTIONAL** | AGENTS.md: mutations go through typed governed actions so they can be planned, approved, verified and reversed. A SQL parser must never be the tenant boundary. |
 | Observability | Logs explorer | **DONE** | app/api/logs/route.ts, components/monitoring/LogsExplorer.tsx |
 | Observability | Monitoring workbench | **DONE** | app/api/monitoring/request-logs/route.ts, components/monitoring/MonitoringWorkbench.tsx |
-| Data protection | Workspace logical backup | **CLOUD_ONLY** | Gated to Cloud in lib/edition/cloud-only.ts. UNDER REVIEW: the implementation is proven safe on a non-superuser role, and withholding it from operators who run their own database is a product decision worth re-taking on its own merits rather than by copying Supabase. Backend present. |
-| Data protection | Deployment disaster recovery | **INTENTIONAL** | NOT YET DESIGNED. A workspace pg_dump is not DR: platform database, workspace schemas, storage objects, function definitions, project secrets and operator metadata are separate concerns. Must be designed or documented, never implied by the backup feature. |
+| Data protection | Project database snapshot | **DONE** | lib/services/workspace-backup.ts, app/api/projects/[id]/backup/route.ts, components/database/DatabaseSnapshots.tsx |
+| Data protection | Deployment recovery | **DONE** | lib/recovery/export.ts, lib/recovery/restore.ts, scripts/recovery.ts, components/app/DeploymentRecoverySection.tsx |
 | Integrations | Webhooks | **BACKEND_ONLY** | backend: app/api/projects/[id]/webhooks/route.ts, lib/webhooks/index.ts. absent: ui components/integrations/WebhooksPanel.tsx |
 | Auth | End-user auth runtime | **DONE** | app/api/v1/[projectId]/auth/signin/route.ts, app/app/projects/[id]/auth/page.tsx |
 | Auth | SMTP configuration | **PARTIAL** | A transport exists but reads SMTP_HOST/USER/PASS from deployment-wide env. There is no per-project configuration and no UI, so an operator cannot change mail settings without editing .env and restarting. Present: lib/email/smtp-transport.ts. |

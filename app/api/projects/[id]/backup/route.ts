@@ -1,7 +1,18 @@
 /**
- * GET  /api/projects/:id/backup  — list backups
- * POST /api/projects/:id/backup  — trigger on-demand backup
- * PUT  /api/projects/:id/backup  — restore from a backup (requires backupId in body)
+ * PROJECT DATABASE SNAPSHOTS
+ *
+ *   GET  /api/projects/:id/backup  — list this project's snapshots
+ *   POST /api/projects/:id/backup  — take one now
+ *   PUT  /api/projects/:id/backup  — restore one (requires backupId in the body)
+ *
+ * Un-gated from Cloud once lib/recovery/ made the pair coherent. A snapshot
+ * covers ONE project's schema and rows; it is not disaster recovery and the two
+ * are named apart so an operator cannot mistake one for the other. See the
+ * header of lib/services/workspace-backup.ts for what a snapshot excludes.
+ *
+ * The path stays `/backup` because it is an implementation route with tests and
+ * a baseline entry against it. What the operator reads is the surface, and that
+ * says "Database snapshot" everywhere.
  */
 
 export const dynamic = 'force-dynamic'
@@ -9,15 +20,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { withProjectValidation } from '@/lib/middleware/projectValidation'
 import { backupWorkspace, listBackups, restoreWorkspace } from '@/lib/services/workspace-backup'
-import { isCloudEdition } from '@/lib/edition/cloud-only'
-
-// Workspace backup/restore is a Backenly Cloud capability. 404 rather than 403:
-// on a self-hosted deployment the surface does not exist at all.
-const cloudOnly404 = () =>
-  NextResponse.json({ error: 'Not found', code: 'CLOUD_ONLY_FEATURE' }, { status: 404 })
-
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
-  if (!isCloudEdition()) return cloudOnly404()
   const params = await props.params
   return withProjectValidation<any>(request, async (validated) => {
     const { projectId } = validated
@@ -27,7 +30,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
 }
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
-  if (!isCloudEdition()) return cloudOnly404()
   const params = await props.params
   return withProjectValidation<any>(request, async (validated) => {
     const { projectId } = validated
@@ -40,7 +42,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 }
 
 export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
-  if (!isCloudEdition()) return cloudOnly404()
   const params = await props.params
   return withProjectValidation<any>(request, async (validated) => {
     const { projectId } = validated
