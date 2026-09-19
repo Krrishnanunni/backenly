@@ -214,11 +214,15 @@ export function CodeBlock({
     <div className="group relative overflow-hidden rounded-lg border border-white/10 bg-[#0a0a0c]">
       <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2">
         <span className="font-mono text-xs text-zinc-500">{label ?? language}</span>
+        {/* The label swap is the only confirmation a copy gets, so it has to
+            be announced: without aria-live the button silently relabels and a
+            screen reader user never learns the copy succeeded. */}
         <button
           type="button"
           onClick={copy}
           className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs font-medium text-zinc-400 transition hover:border-white/25 hover:text-white"
           aria-label="Copy code"
+          aria-live="polite"
         >
           {copied ? (
             <>

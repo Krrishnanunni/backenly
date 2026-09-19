@@ -20,7 +20,7 @@ import {
 const APP_URL = 'https://backenly.com'
 
 export const metadata: Metadata = {
-  title: 'Features — Everything Backenly Generates Automatically',
+  title: 'Features: Everything Backenly Generates Automatically',
   description:
     'Backenly automatically generates AI backend infrastructure: PostgreSQL databases, REST APIs, user authentication, file storage, realtime subscriptions, event triggers, and deployment. No backend code required.',
   keywords: [
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     'realtime backend',
   ],
   openGraph: {
-    title: 'Backenly Features — AI-Generated Backend Infrastructure',
+    title: 'Backenly Features: AI-Generated Backend Infrastructure',
     description:
       'Everything your backend needs, generated automatically from a plain English description.',
     url: `${APP_URL}/features`,
@@ -40,8 +40,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Backenly Features — AI-Generated Backend Infrastructure',
-    description: 'PostgreSQL, REST APIs, auth, storage, realtime — all generated automatically.',
+    title: 'Backenly Features: AI-Generated Backend Infrastructure',
+    description: 'PostgreSQL, REST APIs, auth, storage, realtime, all generated automatically.',
   },
   alternates: { canonical: `${APP_URL}/features` },
 }
@@ -62,7 +62,7 @@ const features: FeatureCard[] = [
     name: 'AI Backend Generation',
     tagline: 'Describe it, get it.',
     description:
-      'Tell Backenly what you need in plain English. The AI understands intent, generates the full backend schema, APIs, auth, and storage — instantly.',
+      'Tell Backenly what you need in plain English. The AI understands intent, generates the full backend schema, APIs, auth, and storage, instantly.',
     keywords: ['AI backend generation', 'natural language backend', 'AI-generated backend'],
   },
   {
@@ -71,7 +71,7 @@ const features: FeatureCard[] = [
     name: 'Database Setup',
     tagline: 'PostgreSQL, zero configuration.',
     description:
-      'Backenly generates a properly normalized PostgreSQL schema from your description. Tables, columns, foreign keys, indexes, and row-level security — all created automatically.',
+      'Backenly generates a properly normalized PostgreSQL schema from your description. Tables, columns, foreign keys, indexes, and row-level security, all created automatically.',
     keywords: ['automatic database setup', 'PostgreSQL schema generation', 'AI database'],
   },
   {
@@ -89,7 +89,7 @@ const features: FeatureCard[] = [
     name: 'Instant REST API',
     tagline: 'The API is your schema.',
     description:
-      'Every table is served by PostgREST — the same engine Supabase runs — reading directly from the PostgreSQL catalog. Filters, ordering, pagination, and embedded resources, with authorization enforced by Postgres grants and RLS. Nothing to regenerate or keep in sync.',
+      'Every table is served by PostgREST, the same engine Supabase runs, reading directly from the PostgreSQL catalog. Filters, ordering, pagination, and embedded resources, with authorization enforced by Postgres grants and RLS. Nothing to regenerate or keep in sync.',
     keywords: ['PostgREST API', 'instant REST API', 'PostgreSQL REST API', 'embedded resources'],
   },
   {
@@ -122,10 +122,9 @@ export default function FeaturesPage() {
       />
       <main className="relative z-20">
         <PageHero
-          align="center"
           eyebrow="Features"
           title="Everything your backend needs, generated automatically"
-          subtitle="Describe your backend in plain English. Backenly generates the complete infrastructure — database, APIs, auth, storage, and realtime — ready to use in minutes."
+          subtitle="Describe your backend in plain English. Backenly generates the complete infrastructure: database, APIs, auth, storage, and realtime, ready to use in minutes."
           actions={
             <PrimaryButton href="/auth/signup">
               Start building free
@@ -170,15 +169,15 @@ export default function FeaturesPage() {
           </div>
         </Section>
 
-        {/* How it works — GEO block */}
+        {/* How it works, GEO block */}
         <Section aria-label="How Backenly works" width="prose">
           <SectionHeading className="mb-8">How Backenly generates your backend</SectionHeading>
           <ol className="flex flex-col gap-6">
             {[
-              { step: '1', title: 'Describe your backend', body: 'Write a plain English description of what your app needs — tables, relationships, auth rules, and any other requirements.' },
+              { step: '1', title: 'Describe your backend', body: 'Write a plain English description of what your app needs: tables, relationships, auth rules, and any other requirements.' },
               { step: '2', title: 'AI generates the plan', body: "Backenly's AI understands your intent and creates a precise plan: database schema, API endpoints, auth configuration, storage buckets, and security policies." },
-              { step: '3', title: 'Everything is created instantly', body: 'The plan is executed automatically — tables created, APIs deployed, auth configured. Your backend is live and accessible via a REST API within seconds.' },
-              { step: '4', title: 'Continuous monitoring', body: 'Backenly monitors your backend continuously, detects drift or issues, and applies safe fixes automatically — without you having to ask.' },
+              { step: '3', title: 'Everything is created instantly', body: 'The plan is executed automatically: tables created, APIs deployed, auth configured. Your backend is live and accessible via a REST API within seconds.' },
+              { step: '4', title: 'Continuous monitoring', body: 'Backenly monitors your backend continuously, detects drift or issues, and applies safe fixes automatically, without you having to ask.' },
             ].map((s) => (
               <li key={s.step} className="flex gap-5">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-violet-500/[0.15] border border-violet-400/30 flex items-center justify-center text-sm font-normal text-violet-300">

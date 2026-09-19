@@ -30,7 +30,7 @@
  *     the self-healing loop (RUNNING chip, five phases with their real unit
  *     copy, RIGHT NOW / LAST 30 DAYS windows, the return-arc caption "Verify
  *     feeds the next Observe — no human at the top of the loop"), the agent's
- *     receipts in its own voice, the runtime strip, the Resources cards.
+ *     receipts in its own voice, the Resources cards.
  *   - Sections: the Database, Auth & Users and Storage inspector pages.
  *
  * One consistent story, and every number in it is this project's: nothing is
@@ -39,9 +39,17 @@
  * verified. 6 functions in the sidebar badge and the Resources card. 19 users
  * in Resources and 19 identities in Auth. 7 tables in Resources, in the
  * Database rail and in its "7 tables" footer. 0 buckets in Resources and the
- * empty Storage state. No traffic, so the runtime strip shows em dashes rather
- * than an invented uptime, and no frontend is paired, so the sidebar pill is
- * the unpaired one.
+ * empty Storage state.
+ *
+ * WHAT THIS CROP LEAVES OUT, and why (2026-09-18). Fidelity runs one way: this
+ * console may show FEWER panels than the real Overview, never invented ones.
+ * Two were cut because they could only report absence. The runtime strip read
+ * `0 / — / — / 0` under "No traffic yet", and the sidebar foot read "No
+ * frontend yet". Both were honest, and that was the trouble: the largest
+ * element in the hero of a page selling autonomous repair was the product
+ * sitting idle. Populating them would mean inventing traffic this project has
+ * never taken, so they are gone instead. Restore them, from git history and
+ * with real readings, if this project ever serves real requests.
  *
  * Palette tracks the product's neutral-first system (2026-07-23): buttons
  * and surfaces are monochrome; violet appears only where the product keeps
@@ -80,7 +88,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Activity,
-  AlertTriangle,
   ArrowUpRight,
   Bot,
   Braces,
@@ -93,7 +100,6 @@ import {
   Database,
   FileText,
   Folder,
-  Gauge,
   GitBranch,
   Github,
   HardDrive,
@@ -111,7 +117,6 @@ import {
   ShieldCheck,
   Sparkles,
   Table,
-  Timer,
   Upload,
   User,
   Zap,
@@ -256,17 +261,11 @@ const RECEIPTS = [
   { text: 'You approved a fix — applying it now', bright: false },
 ]
 
-/**
- * Mirrors ObservabilityStrip.tsx tiles. This project has taken no traffic, so
- * reliability and latency have nothing to average and the surface says so with
- * an em dash rather than a fabricated 100%.
- */
-const RUNTIME: { label: string; icon: LucideIcon; value: string; hint?: string }[] = [
-  { label: 'Requests', icon: Activity, value: '0' },
-  { label: 'Reliability', icon: Gauge, value: '—', hint: 'No traffic yet' },
-  { label: 'Avg response', icon: Timer, value: '—' },
-  { label: 'Failed', icon: AlertTriangle, value: '0' },
-]
+/* The RUNTIME tiles that mirrored ObservabilityStrip.tsx were removed with the
+   strip itself; see the note at its old call site. They were honest and that
+   was the problem: with no traffic to average they could only read `0` and
+   `—`. Restore them from git history the day this project serves real
+   requests, not before. */
 
 /* Mirrors the Resources cards. Functions = 6, same as the sidebar badge; Users
    = 19, the same identities Auth & Users counts. */
@@ -529,39 +528,24 @@ function OverviewCanvas() {
       <AgentPanelMini />
       <LoopPanelMini />
 
-          <div className="space-y-2">
-            <p className={LABEL}>Runtime · last 24 hours</p>
-            {/* `sm:divide-x` left the 2×2 phone grid with no rules at all —
-                four readings floating in one box. The mobile rules are drawn
-                per tile instead of by divide-*, which walks document order and
-                would put one down the left edge of the third tile, where no
-                column boundary exists. Both are dropped at sm so the 4-up row
-                is still divide-x's, to the pixel. */}
-            <div className={`${PANEL} grid grid-cols-2 divide-white/[0.06] sm:grid-cols-4 sm:divide-x`}>
-              {RUNTIME.map((tile, i) => {
-                const Icon = tile.icon
-                return (
-                  <div
-                    key={tile.label}
-                    className={`px-4 py-3 ${
-                      i < 2 ? 'border-b border-white/[0.06] sm:border-b-0' : ''
-                    } ${i % 2 === 0 ? 'border-r border-white/[0.06] sm:border-r-0' : ''}`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <Icon className="h-3 w-3 text-zinc-600" />
-                      <span className={LABEL}>{tile.label}</span>
-                    </div>
-                    <p className="mt-2 font-mono text-[17px] font-medium tabular-nums leading-none text-zinc-200">
-                      {tile.value}
-                    </p>
-                    {tile.hint && (
-                      <p className="mt-1.5 text-[10px] leading-none text-zinc-600">{tile.hint}</p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          {/* The `Runtime · last 24 hours` strip was CUT from this crop on
+              2026-09-18, and it should stay cut.
+
+              This project has taken no traffic, so the strip was four tiles
+              reading `0`, `—`, `—`, `0` under a `No traffic yet` hint: the
+              largest single element in the hero, saying nothing. On a page
+              whose boldest claim is that the platform repairs problems on its
+              own, the first thing a stranger saw was the product idling.
+
+              Cutting a panel invents nothing, which is why this is the
+              honest fix and populating the tiles is not: real numbers here
+              would mean fabricating traffic the project does not have. The
+              receipts above are the same surface doing something worth
+              looking at, and they are real. If this project ever takes real
+              traffic, the strip can come back with real readings.
+
+              See the header note on fidelity: this crop may show FEWER panels
+              than WorkspaceHome, never invented ones. */}
 
           <div className="space-y-2">
             <p className={LABEL}>Resources</p>
@@ -1233,21 +1217,37 @@ export function HeroConsole() {
               </div>
             ))}
           </nav>
-          {/* This project has no frontend paired, so the pill is the unpaired
-              state, not the connected one. */}
-          <div className="mt-3 flex items-center gap-2 border-t border-white/[0.07] px-2.5 pt-3">
-            <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-            <span className="text-[11px] text-zinc-500">No frontend yet</span>
-          </div>
+          {/* The `No frontend yet` pill was CUT here on 2026-09-18, for the
+              same reason as the runtime strip. It was the last thing in the
+              sidebar, so the tour ended on an absence: a grey dot reporting
+              something the project does not have. Same rule applies — showing
+              fewer elements is honest, inventing a paired frontend is not. */}
         </aside>
 
         {/* A floor tuned to Overview, the tallest panel, so clicking a section
-            does not shift the rest of the page. Measured at lg: without it the
-            three inspector panels come in 104px shorter and everything below
-            the hero jumps. The slack it leaves inside Storage is what the real
-            Storage page looks like when a project has no buckets. */}
+            does not shift the rest of the page. The slack it leaves inside
+            Storage is what the real Storage page looks like when a project has
+            no buckets.
+
+            Re-measured 2026-09-18 after the runtime strip was cut, which took
+            119px out of Overview. Natural panel heights, floor lifted:
+
+              width   Overview  Database  Auth  Storage   needed
+              1024+     679       527      527    527      679
+              800       770       561      527    527      770
+              390       890       561      469    287      890
+
+            So lg went 798 -> 679: still above everything it has to cover, with
+            the dead space gone. If you change Overview again, re-run this
+            measurement rather than nudging the number.
+
+            md and base are deliberately BELOW their max and always have been
+            (the original note says "measured at lg"). Raising base to 890 would
+            hand Storage, which is 287 tall there, 600px of blank panel. A
+            section change costs a scroll jump on small widths; that is the
+            better of two bad trades, not an oversight. */}
         <div
-          className="min-h-[520px] min-w-0 flex-1 md:min-h-[600px] lg:min-h-[798px]"
+          className="min-h-[520px] min-w-0 flex-1 md:min-h-[600px] lg:min-h-[679px]"
           aria-label={SECTION_LABEL[section]}
         >
           <Panel />

@@ -19,7 +19,7 @@ import {
 const APP_URL = 'https://backenly.com'
 
 export const metadata: Metadata = {
-  title: 'Documentation — Backenly',
+  title: 'Documentation: Backenly',
   description:
     'How Backenly works and how to use it: connecting a coding agent over MCP, the build loop and its verification checks, the data API and its two grammars, the row-level security model, what the autonomy loop does after launch, and self-hosting.',
   keywords: [
@@ -102,7 +102,7 @@ export default function ResourcesPage() {
               className={laneIndex === 0 ? '!pt-0' : ''}
             >
               {/*
-                The eyebrow carries the count, not the title — passing
+                The eyebrow carries the count, not the title, passing
                 lane.title to both rendered the same words twice, once as a
                 pill and once as the heading directly under it.
               */}
@@ -163,7 +163,7 @@ export default function ResourcesPage() {
                 href: '/pricing',
                 external: false,
                 title: 'Plan limits',
-                body: 'Capacity per plan — projects, monthly active users, storage, AI credits, and which features are plan-gated. Kept in one place so no guide restates a number that can move.',
+                body: 'Capacity per plan: projects, monthly active users, storage, AI credits, and which features are plan-gated. Kept in one place so no guide restates a number that can move.',
               },
               {
                 href: '/use-cases',
