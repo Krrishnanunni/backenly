@@ -13,6 +13,7 @@
  */
 
 import { prisma } from './prisma'
+import { rateLimitHealth } from '@/lib/security/rate-limit-backend'
 import { execSync } from 'child_process'
 
 interface ValidationResult {
@@ -262,11 +263,18 @@ export async function runStartupValidation(): Promise<void> {
 export async function runHealthCheck(): Promise<{
   healthy: boolean
   checks: Record<string, boolean>
+  rateLimiter: {
+    store: 'memory' | 'redis'
+    ready: boolean
+    lastError: string | null
+    lastErrorAt: string | null
+  }
   timestamp: string
 }> {
   const checks: Record<string, boolean> = {
     database: false,
     schema: false,
+    rateLimiter: false,
   }
 
   try {
@@ -281,9 +289,28 @@ export async function runHealthCheck(): Promise<{
     // Check failed
   }
 
+  // The auth limiter's store.
+  //
+  // Reported here because an operator needs to tell two failures apart that
+  // look identical from outside: end users being throttled, and the limiter
+  // being unable to count at all. The second denies every protected sign-in
+  // and is an outage; without a health signal its only symptom is a rise in
+  // refusals, which reads exactly like ordinary abuse.
+  //
+  // Message only, never the connection string: this response is served to
+  // whoever can reach /api/health, and REDIS_URL carries a password.
+  const limiter = rateLimitHealth()
+  checks.rateLimiter = limiter.ready
+
   return {
     healthy: Object.values(checks).every(v => v),
     checks,
+    rateLimiter: {
+      store: limiter.kind,
+      ready: limiter.ready,
+      lastError: limiter.lastError,
+      lastErrorAt: limiter.lastErrorAt ? new Date(limiter.lastErrorAt).toISOString() : null,
+    },
     timestamp: new Date().toISOString(),
   }
 }

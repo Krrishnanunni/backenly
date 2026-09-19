@@ -39,6 +39,8 @@ import {
   createRateLimitRedis,
   type RateLimitBackend,
 } from '@/lib/security/rate-limit-backend'
+import { throttleDecision } from '@/lib/security/rate-limit-response'
+import net from 'net'
 import { assertSharedStoreIsOperational, RateLimitStoreMisconfigured } from '@/lib/security/rate-limit-store'
 import type { Redis } from 'ioredis'
 
@@ -66,6 +68,7 @@ describe('the memory backend, which is what self-host runs', () => {
 
     const denied = await backend.consume(k, 3, 60_000)
     expect(denied.allowed).toBe(false)
+    expect(denied.outcome).toBe('limit_exceeded')
     // A denial that does not say when to come back is what made every route
     // retry blindly into the same wall.
     expect(denied.retryAfter).toBeGreaterThan(0)
@@ -90,6 +93,13 @@ describe('the memory backend, which is what self-host runs', () => {
       a.destroy()
       b.destroy()
     }
+  })
+
+  it('is always ready, because there is no store to be down', async () => {
+    const health = backend.health()
+    expect(health.kind).toBe('memory')
+    expect(health.ready).toBe(true)
+    expect(health.lastError).toBeNull()
   })
 
   it('starts a new window once the old one expires', async () => {
@@ -231,12 +241,198 @@ describe('the shared store, across independent instances', () => {
     try {
       const result = await broken.consume(key('dead-store'), 100, 60_000)
       expect(result.allowed).toBe(false)
+
+      // An OUTAGE, not a limit. This is the distinction the whole response
+      // layer hangs off: the caller has made one attempt, not a hundred.
+      expect(result.outcome).toBe('store_unavailable')
       expect(result.retryAfter).toBeGreaterThan(0)
 
       // CONTROL: a working store answers ALLOWED for the same shape of call,
       // so the denial above is caused by the outage and not by consume()
       // denying everything.
-      expect((await a.consume(shared('dead-store-control'), 100, 60_000)).allowed).toBe(true)
+      const control = await a.consume(shared('dead-store-control'), 100, 60_000)
+      expect(control.allowed).toBe(true)
+      expect(control.outcome).toBe('allowed')
+    } finally {
+      dead.disconnect()
+    }
+  }, 30_000)
+
+  it('does NOT silently fall back to per-process counters during an outage', async () => {
+    // The specific thing that must not happen. A fallback would look like
+    // success: requests keep flowing, nothing is logged as an outage, and each
+    // process quietly hands out its own full budget.
+    const dead = createRateLimitRedis('redis://127.0.0.1:1')
+    const broken = new RedisRateLimitBackend(dead, 400)
+    const k = key('no-fallback')
+
+    try {
+      // A limit of 1. If anything fell back to a local counter, the FIRST call
+      // would be allowed, because a fresh in-memory bucket always admits one.
+      for (let i = 0; i < 3; i++) {
+        const r = await broken.consume(k, 1, 60_000)
+        expect(r.allowed).toBe(false)
+        expect(r.outcome).toBe('store_unavailable')
+      }
+
+      // And the store it reports is still the shared one. It did not switch.
+      const health = broken.health()
+      expect(health.kind).toBe('redis')
+      expect(health.ready).toBe(false)
+      expect(health.lastError).toBeTruthy()
+
+      // The recorded error must not carry a connection string: this value is
+      // served by /api/health, and a real REDIS_URL carries a password.
+      expect(health.lastError).not.toMatch(/redis:\/\//)
+      expect(health.lastError).not.toMatch(/password/i)
+    } finally {
+      dead.disconnect()
+    }
+  }, 30_000)
+
+  it('recovers on its own when the store comes back, with no restart', async () => {
+    // A real TCP proxy in front of the real Redis, so the outage is a real
+    // socket going away rather than a flag flipped on the backend. Recovery is
+    // the half of fail-closed that is easy to claim and easy to get wrong: a
+    // backend that latched its failed state would deny for ever, and only a
+    // deploy would clear it.
+    //
+    // ── net.Server.close() is a trap, twice ────────────────────────────────
+    //
+    // It stops listening at once but only calls back when every EXISTING
+    // connection has ended. Awaiting it while a connection is still open waits
+    // for something nobody is doing. That cost this test two 60s timeouts: once
+    // for the proxy, whose sockets are cut after the close was awaited, and
+    // again for the revived server, which the ioredis client was still
+    // connected to while an inner `finally` awaited its close.
+    //
+    // So: sockets are always tracked, the client is always disconnected first,
+    // and every close is awaited only after the things holding it open are gone.
+    const target = new URL(REDIS_URL!)
+    const sockets: net.Socket[] = []
+
+    const forward = () =>
+      net.createServer(client => {
+        sockets.push(client)
+        const upstream = net.connect(Number(target.port || 6379), target.hostname)
+        sockets.push(upstream)
+        client.pipe(upstream)
+        upstream.pipe(client)
+        client.on('error', () => {})
+        upstream.on('error', () => {})
+      })
+
+    const cutSockets = () => {
+      for (const sock of sockets.splice(0)) sock.destroy()
+    }
+    const shutdown = async (server: net.Server) => {
+      const closed = new Promise<void>(resolve => server.close(() => resolve()))
+      cutSockets()
+      await closed
+    }
+
+    const proxy = forward()
+    await new Promise<void>(resolve => proxy.listen(0, '127.0.0.1', resolve))
+    const proxyPort = (proxy.address() as net.AddressInfo).port
+
+    const client = createRateLimitRedis(`redis://127.0.0.1:${proxyPort}`)
+    const backend = new RedisRateLimitBackend(client, 1_000)
+    const k = shared('recovery')
+    let revived: net.Server | null = null
+
+    try {
+      // Through the proxy, everything works. Stated first so the outage below
+      // is a change of state rather than the only thing ever observed.
+      expect((await backend.consume(k, 100, 60_000)).outcome).toBe('allowed')
+      expect(backend.health().ready).toBe(true)
+
+      await shutdown(proxy)
+
+      const during = await backend.consume(k, 100, 60_000)
+      expect(during.allowed).toBe(false)
+      expect(during.outcome).toBe('store_unavailable')
+      expect(backend.health().ready).toBe(false)
+
+      // Recovery: the same port answers again. ioredis reconnects, and because
+      // no failed state was latched the next call succeeds.
+      revived = forward()
+      await new Promise<void>(resolve => revived!.listen(proxyPort, '127.0.0.1', resolve))
+
+      // Poll the real condition rather than sleeping a round number, and fail
+      // loudly with what was actually observed if it never recovers.
+      const deadline = Date.now() + 20_000
+      let last = during
+      while (Date.now() < deadline) {
+        last = await backend.consume(k, 100, 60_000)
+        if (last.outcome === 'allowed') break
+        await new Promise(r => setTimeout(r, 200))
+      }
+      // jest's expect takes no message argument (that is Playwright's), so the
+      // detail goes in a throw. The point stands either way: a timeout here
+      // must name what was actually observed rather than just failing.
+      if (last.outcome !== 'allowed') {
+        throw new Error(
+          `the limiter never recovered after the store returned; last outcome was ` +
+            `${last.outcome}, health ${JSON.stringify(backend.health())}`,
+        )
+      }
+      expect(backend.health().ready).toBe(true)
+
+      // And it recovered onto the SAME counter, not a fresh local bucket: the
+      // attempts made before the outage are still counted against the budget.
+      const after = await backend.consume(k, 100, 60_000)
+      expect(after.remaining).toBeLessThan(98)
+    } finally {
+      // The client first. It is what holds a connection to `revived` open, and
+      // closing the server while it is attached is the second deadlock above.
+      client.disconnect()
+      if (revived) await shutdown(revived)
+      cutSockets()
+    }
+  }, 60_000)
+
+  it('answers 503 for a store outage and 429 for a real limit', async () => {
+    // The distinction has to survive all the way to the wire. Telling a caller
+    // "too many attempts" while the limiter is down accuses them of something
+    // they did not do, and buries an outage inside a metric operators read as
+    // ordinary abuse.
+    const k = shared('status-codes')
+
+    const exhausted = await (async () => {
+      let r = await a.consume(k, 1, 60_000)
+      r = await a.consume(k, 1, 60_000)
+      return r
+    })()
+    expect(exhausted.outcome).toBe('limit_exceeded')
+
+    // Asserted on the pure decision, not on a NextResponse. jest.setup.js
+    // replaces global.Response with a stub whose headers do not round-trip, so
+    // a header assertion through the framework here would be testing the stub.
+    const limited = throttleDecision(exhausted)
+    expect(limited.status).toBe(429)
+    expect(limited.headers['Retry-After']).toBeTruthy()
+    expect(limited.message).toMatch(/too many/i)
+
+    const dead = createRateLimitRedis('redis://127.0.0.1:1')
+    try {
+      const down = await new RedisRateLimitBackend(dead, 400).consume(key('sc'), 100, 60_000)
+      expect(down.outcome).toBe('store_unavailable')
+
+      const unavailable = throttleDecision(down)
+      expect(unavailable.status).toBe(503)
+      expect(unavailable.headers['Retry-After']).toBeTruthy()
+      expect(unavailable.headers['Cache-Control']).toBe('no-store')
+
+      // It does not claim the caller made too many attempts.
+      expect(unavailable.code).toBe('RATE_LIMITER_UNAVAILABLE')
+      expect(unavailable.message).not.toMatch(/too many/i)
+      // Nor does it name the backing service to an unauthenticated caller.
+      expect(JSON.stringify(unavailable)).not.toMatch(/redis/i)
+
+      // The short Retry-After belongs to the outage, not to a window nobody
+      // counted: a client told to wait out 15 minutes would stay away far
+      // longer than the outage lasts.
+      expect(Number(unavailable.headers['Retry-After'])).toBeLessThan(60)
     } finally {
       dead.disconnect()
     }

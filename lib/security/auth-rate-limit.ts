@@ -46,9 +46,19 @@ export async function consume(
   windowMs: number,
 ): Promise<RateLimitResult> {
   if (limit <= 0 || windowMs <= 0) {
-    // Misconfiguration — fail closed (deny). Better to throw 429 than to
-    // silently disable a security control because someone passed limit=0.
-    return { allowed: false, remaining: 0, retryAfter: 60, resetAt: Date.now() + 60_000 }
+    // Misconfiguration — fail closed (deny). Better to deny than to silently
+    // disable a security control because someone passed limit=0.
+    //
+    // Reported as `store_unavailable`, not `limit_exceeded`: nothing was
+    // counted and the caller has done nothing wrong, so telling them they have
+    // made too many attempts would be the same lie a store outage would tell.
+    return {
+      allowed: false,
+      outcome: 'store_unavailable',
+      remaining: 0,
+      retryAfter: 60,
+      resetAt: Date.now() + 60_000,
+    }
   }
   return getRateLimitBackend().consume(key, limit, windowMs)
 }

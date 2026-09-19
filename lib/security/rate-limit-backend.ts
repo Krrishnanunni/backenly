@@ -52,8 +52,28 @@
 import type { Redis } from 'ioredis'
 import { declaredStoreKind, RateLimitStoreMisconfigured } from './rate-limit-store'
 
+/**
+ * WHY a denial has to say which kind of denial it is.
+ *
+ * "You have made too many attempts" and "we cannot currently tell how many
+ * attempts you have made" are different facts about different systems, and the
+ * first version of this collapsed them into one 429. That is a lie to the
+ * caller and a trap for the operator: a legitimate user sees an accusation of
+ * abuse they are not guilty of, a client backs off on a `Retry-After` that
+ * describes a window nobody is counting, and a dashboard graphing 429s shows
+ * "users hitting limits" during what is actually a store outage.
+ *
+ * Both outcomes still DENY. Only the reporting differs.
+ */
+export type RateLimitOutcome = 'allowed' | 'limit_exceeded' | 'store_unavailable'
+
 export interface RateLimitResult {
   allowed: boolean
+  /**
+   * Which of the three happened. `allowed` is kept as the field every call site
+   * already branches on, so adding this could not change any existing decision.
+   */
+  outcome: RateLimitOutcome
   remaining: number
   /** Seconds the caller should wait. Belongs in a `Retry-After` header. */
   retryAfter: number
@@ -61,22 +81,48 @@ export interface RateLimitResult {
   resetAt: number
 }
 
+/**
+ * What an operator needs to tell "users are hitting limits" apart from "the
+ * limiter cannot count". Surfaced by /api/health.
+ */
+export interface RateLimitHealth {
+  kind: 'memory' | 'redis'
+  /** False means protected auth surfaces are denying because of the store. */
+  ready: boolean
+  /** Last store error, message only. Never a URL, never a credential. */
+  lastError: string | null
+  /** Unix ms of that error, so a stale one is recognisable as stale. */
+  lastErrorAt: number | null
+}
+
 export interface RateLimitBackend {
   consume(key: string, limit: number, windowMs: number): Promise<RateLimitResult>
   reset(key: string): Promise<void>
   /** Which store this is, for diagnostics and the startup report. */
   readonly kind: 'memory' | 'redis'
+  health(): RateLimitHealth
 }
 
-/** Denied, with a window's worth of wait. The shape every failure returns. */
-function denied(windowMs: number): RateLimitResult {
+/**
+ * Denied because the store could not be consulted.
+ *
+ * `retryAfter` is deliberately SHORT and unrelated to the window. There is no
+ * window — nothing was counted. The number is "come back soon, this is our
+ * problem", not "your budget resets in fifteen minutes", because a client told
+ * to wait out a window it never filled would stay away far longer than the
+ * outage lasts.
+ */
+function storeUnavailable(): RateLimitResult {
   return {
     allowed: false,
+    outcome: 'store_unavailable',
     remaining: 0,
-    retryAfter: Math.max(1, Math.ceil(windowMs / 1000)),
-    resetAt: Date.now() + windowMs,
+    retryAfter: STORE_UNAVAILABLE_RETRY_SECONDS,
+    resetAt: Date.now() + STORE_UNAVAILABLE_RETRY_SECONDS * 1_000,
   }
 }
+
+const STORE_UNAVAILABLE_RETRY_SECONDS = 5
 
 // ── Memory ───────────────────────────────────────────────────────────────────
 
@@ -116,22 +162,34 @@ export class MemoryRateLimitBackend implements RateLimitBackend {
 
     if (!b || b.resetAt <= now) {
       this.buckets.set(key, { count: 1, resetAt: now + windowMs })
-      return { allowed: true, remaining: limit - 1, retryAfter: 0, resetAt: now + windowMs }
+      return {
+        allowed: true, outcome: 'allowed',
+        remaining: limit - 1, retryAfter: 0, resetAt: now + windowMs,
+      }
     }
     if (b.count >= limit) {
       return {
         allowed: false,
+        outcome: 'limit_exceeded',
         remaining: 0,
         retryAfter: Math.max(1, Math.ceil((b.resetAt - now) / 1000)),
         resetAt: b.resetAt,
       }
     }
     b.count++
-    return { allowed: true, remaining: limit - b.count, retryAfter: 0, resetAt: b.resetAt }
+    return {
+      allowed: true, outcome: 'allowed',
+      remaining: limit - b.count, retryAfter: 0, resetAt: b.resetAt,
+    }
   }
 
   async reset(key: string): Promise<void> {
     this.buckets.delete(key)
+  }
+
+  health(): RateLimitHealth {
+    // The heap is always reachable. There is no store to be down.
+    return { kind: 'memory', ready: true, lastError: null, lastErrorAt: null }
   }
 
   /** Test seam: drop every counter and stop the sweep. */
@@ -172,6 +230,8 @@ return {current, ttl}
 
 export class RedisRateLimitBackend implements RateLimitBackend {
   readonly kind = 'redis' as const
+  private lastError: string | null = null
+  private lastErrorAt: number | null = null
 
   constructor(
     private readonly redis: Redis,
@@ -179,15 +239,72 @@ export class RedisRateLimitBackend implements RateLimitBackend {
     private readonly timeoutMs = 1_000,
   ) {}
 
-  private async withTimeout<T>(op: Promise<T>): Promise<T> {
+  health(): RateLimitHealth {
+    return {
+      kind: 'redis',
+      ready: this.redis.status === 'ready',
+      lastError: this.lastError,
+      lastErrorAt: this.lastErrorAt,
+    }
+  }
+
+  /**
+   * The limiter is not usable until the connection is READY, and says so rather
+   * than assuming.
+   *
+   * `enableOfflineQueue` will hold a command through a reconnect, which is what
+   * makes a blip survivable. But queued is not counted, and a command still
+   * sitting in that queue at the deadline has to be reported as an outage
+   * rather than waited on indefinitely. So readiness is checked explicitly and
+   * waited for within the same bounded budget as the round trip.
+   *
+   * This covers startup too: the first request after boot does not get to
+   * assume a socket that may still be connecting.
+   */
+  private async awaitReady(budgetMs: number): Promise<boolean> {
+    if (this.redis.status === 'ready') return true
+    // A client in state 'end' was deliberately closed and will not reconnect on
+    // its own, so waiting would be waiting for something nobody is doing.
+    if (this.redis.status === 'end') return false
+
+    return new Promise<boolean>(resolve => {
+      let settled = false
+      const finish = (ok: boolean) => {
+        if (settled) return
+        settled = true
+        this.redis.off('ready', onReady)
+        clearTimeout(timer)
+        resolve(ok)
+      }
+      const onReady = () => finish(true)
+      const timer = setTimeout(() => finish(false), budgetMs)
+      this.redis.once('ready', onReady)
+    })
+  }
+
+  /** Record a store failure for the health surface, without leaking anything. */
+  private noteFailure(err: unknown): void {
+    // Message only. A connection string carries a password and this value is
+    // served by /api/health.
+    const message = err instanceof Error ? err.message : String(err)
+    this.lastError = message.slice(0, 300)
+    this.lastErrorAt = Date.now()
+    console.error(
+      '[RateLimit] shared store unavailable - DENYING protected auth attempts ' +
+        'rather than falling back to per-process counters:',
+      this.lastError,
+    )
+  }
+
+  private async withTimeout<T>(op: Promise<T>, budgetMs = this.timeoutMs): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       return await Promise.race([
         op,
         new Promise<never>((_, reject) => {
           timer = setTimeout(
-            () => reject(new Error(`rate limiter store did not answer in ${this.timeoutMs}ms`)),
-            this.timeoutMs,
+            () => reject(new Error(`rate limiter store did not answer in ${budgetMs}ms`)),
+            budgetMs,
           )
         }),
       ])
@@ -197,9 +314,21 @@ export class RedisRateLimitBackend implements RateLimitBackend {
   }
 
   async consume(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
+    const started = Date.now()
+    if (!(await this.awaitReady(this.timeoutMs))) {
+      this.noteFailure(
+        new Error(`store was not ready within ${this.timeoutMs}ms (status: ${this.redis.status})`),
+      )
+      return storeUnavailable()
+    }
+
     try {
+      // Whatever readiness consumed comes off the round trip's budget, so a
+      // slow reconnect plus a slow command cannot together exceed the deadline.
+      const remainingBudget = Math.max(50, this.timeoutMs - (Date.now() - started))
       const [count, ttl] = (await this.withTimeout(
         this.redis.eval(CONSUME_SCRIPT, 1, key, String(windowMs)) as Promise<[number, number]>,
+        remainingBudget,
       )) as [number, number]
 
       const resetAt = Date.now() + Math.max(0, ttl)
@@ -207,21 +336,25 @@ export class RedisRateLimitBackend implements RateLimitBackend {
       if (count > limit) {
         return {
           allowed: false,
+          outcome: 'limit_exceeded',
           remaining: 0,
           retryAfter: Math.max(1, Math.ceil(ttl / 1000)),
           resetAt,
         }
       }
-      return { allowed: true, remaining: Math.max(0, limit - count), retryAfter: 0, resetAt }
+      return {
+        allowed: true, outcome: 'allowed',
+        remaining: Math.max(0, limit - count), retryAfter: 0, resetAt,
+      }
     } catch (err: any) {
-      // FAIL CLOSED. Not a fallback to memory — see the header. The log line is
-      // the point: this is an outage, and it must look like one.
-      console.error(
-        '[RateLimit] shared store unreachable, DENYING the request rather than ' +
-          'falling back to per-process counters:',
-        err?.message ?? err,
-      )
-      return denied(windowMs)
+      // FAIL CLOSED, and reported as an outage rather than as a limit. Not a
+      // fallback to memory, for the reason in the header.
+      //
+      // No state is latched: the next call tries again from scratch, so when the
+      // connection comes back the limiter recovers on its own without a
+      // restart. `lastError` is history for the health surface, not a switch.
+      this.noteFailure(err)
+      return storeUnavailable()
     }
   }
 
@@ -320,4 +453,25 @@ export async function closeRateLimitBackend(): Promise<void> {
   }
   if (backend && backend instanceof MemoryRateLimitBackend) backend.destroy()
   backend = null
+}
+
+/**
+ * The limiter's current health, for /api/health.
+ *
+ * Deliberately does NOT construct a backend as a side effect: asking a
+ * single-instance self-host deployment whether its limiter is healthy must not
+ * be what opens its first Redis connection. An unconfigured limiter reports the
+ * memory store, because that is what it will be when something first uses it.
+ */
+export function rateLimitHealth(): RateLimitHealth {
+  if (backend) return backend.health()
+  return {
+    kind: declaredStoreKind() === 'redis' ? 'redis' : 'memory',
+    // Nothing has used the limiter yet, so there is nothing to be unready.
+    // Startup has already proven the store answers; see
+    // assertSharedStoreIsOperational.
+    ready: true,
+    lastError: null,
+    lastErrorAt: null,
+  }
 }
