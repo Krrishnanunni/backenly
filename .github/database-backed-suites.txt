@@ -330,3 +330,35 @@ __tests__/recovery/clean-machine-restore.test.ts
 # produces a deployment matching no point in time at all. Run twice, since an
 # interrupted restore gets re-run.
 __tests__/recovery/destructive-restore.test.ts
+
+# ── Dependency failure ──────────────────────────────────────────────────────
+#
+# Restart qualification asks whether a deployment comes back. These ask what it
+# SAYS while a dependency is actually gone, which is a different question and is
+# where the dishonest answers live. Each one found a real defect:
+#
+#   postgres  every authorization wrapper reported a database outage as 401,
+#             so a signed-in operator was told their credentials were rejected -
+#             and the obvious response, signing out and back in, destroys the
+#             session and cannot succeed while the same database is down
+#   storage   both drivers collapsed "cannot read the bytes" into null, which
+#             both callers render as 404, so an unmounted volume told every
+#             caller their objects had ceased to exist
+#
+# The postgres suite cuts the transport with a proxy rather than stopping the
+# server, for the reason tests/helpers/severable-proxy.ts states, and repoints
+# DATABASE_URL BEFORE importing the routes so the product's own singleton is
+# what loses its database.
+tests/integration/dependency-failure-postgres.spec.ts
+tests/integration/dependency-failure-storage.spec.ts
+
+# Needs REDIS, not Postgres — same rule as rate-limit-shared-store.spec.ts, so
+# verify it with and without REDIS_URL rather than with and without a database.
+#
+# It does not repeat what that suite already proves about the limiter. It asks
+# how far a Redis outage spreads: a feature that has nothing to do with rate
+# limiting must stay completely available, or a defence-in-depth component has
+# become a single point of failure. It stops and starts redis-server for real,
+# so the shared-counter claim after recovery is made against a store that
+# genuinely restarted.
+tests/integration/dependency-failure-redis.spec.ts

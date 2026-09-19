@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken'
 import { canAccessProject } from '@/lib/edition/guard'
 import { resolveJwtSecret } from '@/lib/services/jwtSecretManager'
 import { cacheControlFor, mayRead, type Reader } from '@/lib/storage/access-policy'
+import { isStorageUnavailable } from '@/lib/storage/errors'
 
 /**
  * GET /api/storage/files/{fileId}/download — stream the file bytes.
@@ -93,6 +94,10 @@ export async function GET(request: NextRequest, props: { params: Promise<{ fileI
       )
     }
 
+    // `getFile` returns null ONLY for genuine absence, and throws
+    // StorageUnavailableError when the bytes could not be read. Both used to
+    // arrive here as null and leave as 404, so during a storage outage this
+    // route told every caller their object had ceased to exist.
     const file = await storageService.getFile(fileId, record.projectId)
     if (!file) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 })
@@ -112,6 +117,16 @@ export async function GET(request: NextRequest, props: { params: Promise<{ fileI
       },
     })
   } catch (error: any) {
+    if (isStorageUnavailable(error)) {
+      // 503, and RETRYABLE. The object exists; this deployment cannot reach its
+      // bytes right now. A client that receives 404 prunes its copy and stops
+      // asking, which is an irreversible reaction to a transient fault.
+      console.error('[storage/download] storage unavailable:', error.cause ?? error.message)
+      return NextResponse.json(
+        { error: 'Storage unavailable', code: error.code },
+        { status: 503, headers: { 'Retry-After': '30' } },
+      )
+    }
     console.error('[storage/download] failed:', error)
     return NextResponse.json(
       { error: error?.message || 'Failed to download file' },

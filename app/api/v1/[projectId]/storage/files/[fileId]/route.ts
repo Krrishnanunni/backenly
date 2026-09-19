@@ -5,6 +5,7 @@ import { v1ApiMiddleware, requirePermission, requireCapability } from '@/lib/api
 import { createErrorResponse, createSuccessResponse, ErrorCodes } from '@/lib/api/v1/errors'
 import { storageService } from '@/lib/services/storage'
 import { prisma } from '@/lib/db'
+import { isStorageUnavailable } from '@/lib/storage/errors'
 
 /**
  * GET /v1/{projectId}/storage/files/{fileId}
@@ -55,6 +56,16 @@ export async function GET(
       name: file.name,
     })
   } catch (error: any) {
+    if (isStorageUnavailable(error)) {
+      // The file record exists; its bytes are unreachable. Reporting 404 here
+      // would tell an API consumer the object had been deleted.
+      console.error('Storage get file: storage unavailable:', error.cause ?? error.message)
+      return createErrorResponse(
+        ErrorCodes.SERVICE_UNAVAILABLE,
+        'Storage is currently unavailable',
+        503
+      )
+    }
     console.error('Storage get file error:', error)
     return createErrorResponse(
       ErrorCodes.INTERNAL_ERROR,
