@@ -146,11 +146,50 @@ until the last write finishes. The tests assert that a subsystem may not start
 after some earlier step merely completed, because that is the shape that lets
 autonomy loose on a partial deployment.
 
+### Built and proven, 2026-09-19
+
+Export and restore both run against a real database. 118 assertions across six
+suites, four of which need Postgres.
+
+| Property | How it is proven |
+|---|---|
+| The bundle discloses nothing without the credential | A canary is planted in the database and must appear nowhere in the bundle's bytes as utf8, base64 or hex, across every file including the manifest — **and must appear once opened**, so the search is known to work |
+| Ephemeral credentials do not come back | A live session and a magic link are planted, then their tables come back present and empty. Each has a paired assertion that the source really held the row |
+| Durable credentials come back intact | The project signing secret is compared byte-for-byte on the restored machine |
+| Revocation survives | A revoked JTI is still in the denylist after recovery |
+| A bad archive cannot damage a live deployment | A marker row is written into a running target; a corrupted bundle and a wrong credential are both refused, both report the target untouched, and the marker is still there |
+| A good archive replaces rather than merges | Rows written after the bundle are gone from both the platform and workspace schemas; restoring twice lands in the same place |
+| The data plane still works afterwards | PostgREST roles exist and the workspace grants survived, with a paired assertion that the source had them to lose |
+
+**Recovery is onto a database created empty seconds earlier.** A restore test
+run against the source machine can silently borrow roles, extensions and schema
+from the environment, and proves nothing.
+
+Three corrections came out of building it, each recorded in the commit that made
+them:
+
+1. **The denylist was on the drop list.** End-user JWTs are stateless and signed
+   with the project secret, which recovery carries, so a token revoked before
+   the bundle was written still verifies afterwards. `_token_blacklist` is the
+   only thing that refuses it, and the middleware reads a missing table as "not
+   blacklisted" — it fails **open**. Now carried.
+2. **Encrypting only `project-secrets` was theatre.** The platform dump beside
+   it holds `Project.jwtSecret`, every password hash and every provider
+   credential in the clear. Everything is sealed now except
+   `deployment-metadata`, which stays readable so a bundle can be identified
+   before anyone fetches the credential.
+3. **The privileges asymmetry.** Platform dumps drop privileges; workspace dumps
+   keep them. `--no-privileges` on a workspace would give a restore that looks
+   complete and whose data plane returns nothing — and whose DEFAULT PRIVILEGES
+   are gone, so tables created later are invisible to PostgREST too. That
+   surfaces days later, attached to nothing.
+
 ### Still to build
 
-The contract is frozen; export, restore and the destructive acceptance test are
-not written. The workspace snapshot stays Cloud-gated until this tranche is
-coherent, so that nothing is exposed under a name that implies more than it does.
+The UI, and un-gating. The workspace snapshot stays Cloud-gated until then, so
+nothing is exposed under a name that implies more than it does. Storage objects
+are collected into the bundle but their restore is not implemented in format
+version 1, and the manifest says so rather than implying otherwise.
 
 ## Surface integrity, verified 2026-09-19
 
