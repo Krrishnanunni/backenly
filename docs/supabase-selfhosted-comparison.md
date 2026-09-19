@@ -30,7 +30,7 @@ call, or a Backenly repo path. A claim with no locator does not belong here.
 
 ## Capability register
 
-**Derived from `92e16991` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
+**Derived from `3b61a1ec` on 2026-09-19 by `scripts/derive-selfhost-register.ts`.**
 Do not hand-edit this section: it is regenerated, and a capability
 cannot be marked done by editing prose. The previous hand-maintained
 matrix listed five shipped capabilities as "not started".
@@ -829,6 +829,79 @@ fresh empty database deploying the whole chain and recording all of it.
 CI asserts the invariant on the one machine where a real install exists: after
 `npm run selfhost`, the number of migrations recorded as applied must equal the
 number of canonical migrations.
+
+## Restart and reboot
+
+State-based, not process-based. The question is never whether something came
+back up; it is whether the invariants came back with it.
+
+### What is proven where
+
+A **real** Redis restart — `redis-cli shutdown` then `redis-server` — drives the
+limiter cases. PostgreSQL is interrupted at the TRANSPORT, through a proxy this
+suite opens and severs, for two reasons and the second is the one that matters:
+the only PostgreSQL on a developer's machine is the one their work depends on,
+and a suite that stops it to prove a point is a worse bug than the one it is
+testing. What the pool experiences is identical either way — its sockets die,
+its checked-out clients error, and it must re-establish.
+
+What a proxy cannot show is the server losing its own state, so the whole-stack
+restart belongs to the self-host CI job, where a real installed deployment
+exists.
+
+### The pool recovers without the app restarting
+
+The same pool object, in the same process, serves again after the database comes
+back. No new pool, no process restart. Stated as a control first — established
+and serving — so the failure in the middle is the outage rather than a pool that
+never worked.
+
+### Durable work survives; acknowledged work is not re-delivered
+
+The webhook outbox is the durable queue, so it is what gets an item immediately
+before the restart. Across a fresh module registry the item is still there and
+becomes a delivery attempt; the outbox row is then gone, and a second drain
+delivers nothing. At-least-once must not become at-least-twice merely because a
+process restarted.
+
+### The limiter fails closed as an OUTAGE, and recovers on its own
+
+Down: `store_unavailable`, not `limit_exceeded`. Telling a caller "too many
+attempts" while the limiter cannot count accuses them of something they did not
+do and buries an outage in a metric operators read as abuse. Up again: the same
+client, the same process, no restart.
+
+### Redis durability is MEASURED, not assumed
+
+Whether the counters survive a restart is a property of the Redis deployment,
+not of Backenly, so the test asserts that the observed behaviour is one of the
+two coherent outcomes and reports which:
+
+    [restart] Redis durability observed: the counter RESET across a restart
+
+On the configuration used here the counters do not persist. **Operational
+consequence worth stating: a Redis restart resets in-flight rate-limit budgets.**
+An operator who needs budgets to survive a restart has to configure Redis
+persistence; Backenly does not silently pretend either way. Whichever happens,
+the limiter still ENFORCES from wherever it resumed — a restart never leaves it
+permanently allowing, and that is asserted separately.
+
+### The whole stack, in CI
+
+Every container is restarted and **nothing else is run**. `npm run selfhost` is
+installation and upgrade reconciliation; an operator must not have to run it
+after a reboot, and a deployment that only works because the installer was
+re-run is not one that survives a reboot.
+
+Asserted across the restart: the PostgREST registry row count and the migration
+history are unchanged, PostgREST answers again (a response, not a container
+being "up" — it restarts in a loop without a valid credential and `ps` calls
+that running), and `.env` is byte-identical, so nothing regenerated a secret to
+make the stack work.
+
+The browser suite then runs against the restarted deployment rather than a
+freshly installed one, which makes every one of its assertions a post-restart
+assertion too.
 
 ## Surface integrity, verified 2026-09-19
 

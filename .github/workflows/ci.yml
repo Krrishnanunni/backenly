@@ -1072,6 +1072,87 @@ jobs:
       # in, so they were not evidence for anything. The `selfhost` project
       # signs up through the real register route and asserts against the pages
       # the install produced.
+      - name: the whole stack comes back from persisted state
+        run: |
+          set -euo pipefail
+          # A reboot, as an operator would experience it: every container goes
+          # away and comes back, and NOTHING ELSE is run.
+          #
+          # `npm run selfhost` is installation and upgrade reconciliation. An
+          # operator must not have to run it after every restart, and a
+          # deployment that only works because the installer was re-run is not a
+          # deployment that survives a reboot.
+          PGUSER=$(grep -E '^POSTGRES_USER=' .env | head -1 | cut -d= -f2- || true)
+          PGDB=$(grep -E '^POSTGRES_DB=' .env | head -1 | cut -d= -f2- || true)
+          PGUSER=${PGUSER:-backenly_user}
+          PGDB=${PGDB:-backenly}
+
+          # What must still be true afterwards, captured first so the comparison
+          # is against observed state rather than against an expectation.
+          before_schemas=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM backenly_pgrst_schema_registry" | tr -d ' \r')
+          before_migrations=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL" | tr -d ' \r')
+          echo "  before: $before_schemas registry row(s), $before_migrations migration(s)"
+
+          docker compose -f docker-compose.dev.yml restart
+          echo "  every container restarted; the installer was NOT run"
+
+          # Postgres answering again, from its own persisted volume.
+          for i in $(seq 1 60); do
+            if docker compose -f docker-compose.dev.yml exec -T postgres \
+                 psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc 'select 1' >/dev/null 2>&1; then
+              echo "  postgres answered after ${i}s"; break
+            fi
+            sleep 1
+          done
+
+          after_schemas=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM backenly_pgrst_schema_registry" | tr -d ' \r')
+          after_migrations=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" -tAc \
+            "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL" | tr -d ' \r')
+
+          [ "$after_schemas" = "$before_schemas" ] || {
+            echo "the PostgREST registry changed across a restart: $before_schemas -> $after_schemas"
+            exit 1
+          }
+          [ "$after_migrations" = "$before_migrations" ] || {
+            echo "migration history changed across a restart: $before_migrations -> $after_migrations"
+            exit 1
+          }
+          echo "  registry and migration history survived"
+
+          # The data plane SERVING, not the container being up. PostgREST
+          # restarts in a loop without a valid credential and `ps` calls that
+          # running, so a response is the only evidence the credential survived.
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3002/ || true)
+            if [ "$code" != "000" ]; then echo "  postgrest answered $code after ${i}s"; break; fi
+            sleep 1
+          done
+          [ "$code" != "000" ] || { echo "postgrest never answered after the restart"; exit 1; }
+
+      - name: a restart did not require the installer
+        run: |
+          set -euo pipefail
+          # The installer is idempotent, so running it would hide the property
+          # under test. What is asserted instead is that the deployment was
+          # already serving BEFORE any installer run, which the step above did.
+          #
+          # This step exists to state the invariant next to the evidence: .env is
+          # untouched, so nothing regenerated a secret to make the stack work.
+          cp .env .env.after-restart
+          diff -q .env.before .env.after-restart || {
+            echo "a restart changed .env, which means something reconciled state"
+            exit 1
+          }
+          echo "  .env byte-identical across the restart"
+
+
       - name: install the browser
         run: npx playwright install --with-deps chromium
 

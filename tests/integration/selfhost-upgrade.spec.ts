@@ -68,6 +68,34 @@ function git(args: string[]): string {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 }
 
+/**
+ * Make sure a commit exists locally, fetching it if the clone is shallow.
+ *
+ * Failing here must say WHY: without the old release there is no genuine old
+ * install to upgrade from, and quietly substituting the current schema would
+ * turn this suite into a test of a hand-made artefact.
+ */
+function ensureRefPresent(ref: string): void {
+  try {
+    git(['cat-file', '-e', `${ref}^{commit}`])
+    return
+  } catch {
+    // Not present; fall through to fetching it.
+  }
+
+  try {
+    git(['fetch', '--depth', '1', 'origin', ref])
+    git(['cat-file', '-e', `${ref}^{commit}`])
+  } catch (err: any) {
+    throw new Error(
+      `the old release ${ref} is not in this clone and could not be fetched: ` +
+        `${String(err?.message ?? err).split('
+')[0]}. This suite upgrades from a REAL ` +
+        `older release, so without that commit there is nothing to upgrade from.`,
+    )
+  }
+}
+
 function prismaPush(schemaPath: string, url: string): void {
   // node + the CLI entrypoint, for the same reason run-migrations.ts does it:
   // no shell to re-parse arguments, and Node will not execFile a .cmd.
@@ -109,6 +137,12 @@ beforeAll(async () => {
   await a.end()
 
   // A genuine checkout of the old release, not a doctored schema.
+  //
+  // CI clones shallow (fetch-depth: 1), so the old commit is usually absent and
+  // `worktree add` fails with "invalid reference". Fetching it here keeps the
+  // suite self-sufficient in any clone — a developer's shallow one too — rather
+  // than depending on a workflow setting a future job would forget to copy.
+  ensureRefPresent(OLD_RELEASE)
   if (existsSync(WORKTREE)) git(['worktree', 'remove', '--force', WORKTREE])
   git(['worktree', 'add', '--force', WORKTREE, OLD_RELEASE])
 
