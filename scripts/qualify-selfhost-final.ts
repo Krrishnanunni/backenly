@@ -309,6 +309,28 @@ async function main(): Promise<void> {
   // ── 2. The surfaces ───────────────────────────────────────────────────────
   step('USE — every major surface, with the rows and bytes checked')
 
+  // PostgREST caches the schema, and these tables were created seconds ago. The
+  // product says so itself, in the 404 it returns:
+  //
+  //   "The data plane's schema cache does not yet know about final_nodes.
+  //    The table exists; the cache is stale. Backenly reloads it automatically."
+  //
+  // So this waits for the reload the product promises rather than asserting
+  // through it. Bounded: if the cache never catches up, that IS a failure and
+  // the wait reports the last status it saw.
+  let lastCache = 'nothing yet'
+  await until(
+    'the data plane to learn about final_nodes',
+    async () => {
+      const probe = await call(`/api/v1/${projectId}/db/final_nodes`, { apiKey: anonKey })
+      lastCache = `HTTP ${probe.status} ${probe.text.slice(0, 160)}`
+      return probe.status === 200 ? probe : null
+    },
+    120_000,
+    () => lastCache,
+  )
+  ok('the data plane picked up the new tables')
+
   const write = await call(`/api/v1/${projectId}/db/final_nodes`, {
     method: 'POST',
     apiKey: serviceKey,
