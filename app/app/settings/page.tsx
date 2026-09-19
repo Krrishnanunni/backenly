@@ -27,7 +27,7 @@ import {
   KitField, KitInput, KitNote, KitBadge, KitTabs, KitTab,
 } from '@/components/inspector/kit'
 import { GlobalLoading } from '@/components/ui/GlobalLoading'
-import { CLOUD_CONTROL_PLANE } from '@/lib/cloud/control-plane'
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import { DeploymentRecoverySection } from '@/components/app/DeploymentRecoverySection'
 
 type Section = 'profile' | 'security' | 'recovery' | 'support' | 'danger'
