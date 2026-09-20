@@ -33,6 +33,19 @@ export const ROUTES = {
   founder: 'https://calendly.com/adarsh-c-jose/30min',
   x: 'https://x.com/Backenly',
   linkedin: 'https://www.linkedin.com/company/117034579',
+  /**
+   * Product Hunt.
+   *
+   * INTERIM AND DELIBERATE: this is Product Hunt's own home page, not a
+   * Backenly page. Founder's call, so the hero launch chip has somewhere
+   * valid to point while Backenly's upcoming page does not exist yet.
+   * It is not a defect and does not block a release.
+   *
+   * Swap for Backenly's coming-soon URL once it exists
+   * (producthunt.com/products/<slug>), then for the live post URL on launch
+   * day. This constant is the ONLY reference in the codebase.
+   */
+  productHunt: 'https://www.producthunt.com',
   // The flagship open-source platform repo. Must be public for this link to
   // resolve for anonymous visitors. The navbar links to it with a bare icon:
   // the star count used to be rendered beside it and was deliberately removed.
