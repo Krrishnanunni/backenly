@@ -33,6 +33,20 @@ export const ROUTES = {
   founder: 'https://calendly.com/adarsh-c-jose/30min',
   x: 'https://x.com/Backenly',
   linkedin: 'https://www.linkedin.com/company/117034579',
+  /**
+   * Product Hunt.
+   *
+   * ⚠ PLACEHOLDER — this is the Product Hunt home page, not Backenly's.
+   * The launch pill in the hero (`LaunchPill` in app/page.tsx) points here,
+   * so until this is replaced a visitor who clicks it lands on Product Hunt's
+   * front page with no idea what they were promised.
+   *
+   * Replace with the real coming-soon URL as soon as it exists
+   * (producthunt.com/products/<slug> once the upcoming page is created), and
+   * swap it again for the live post URL on launch day. Nothing else in the
+   * codebase needs to change: this constant is the only reference.
+   */
+  productHunt: 'https://www.producthunt.com',
   // The flagship open-source platform repo. Must be public for this link to
   // resolve for anonymous visitors. The navbar links to it with a bare icon:
   // the star count used to be rendered beside it and was deliberately removed.
