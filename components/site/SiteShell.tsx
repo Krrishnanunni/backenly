@@ -36,15 +36,14 @@ export const ROUTES = {
   /**
    * Product Hunt.
    *
-   * ⚠ PLACEHOLDER — this is the Product Hunt home page, not Backenly's.
-   * The launch pill in the hero (`LaunchPill` in app/page.tsx) points here,
-   * so until this is replaced a visitor who clicks it lands on Product Hunt's
-   * front page with no idea what they were promised.
+   * INTERIM AND DELIBERATE: this is Product Hunt's own home page, not a
+   * Backenly page. Founder's call, so the hero launch chip has somewhere
+   * valid to point while Backenly's upcoming page does not exist yet.
+   * It is not a defect and does not block a release.
    *
-   * Replace with the real coming-soon URL as soon as it exists
-   * (producthunt.com/products/<slug> once the upcoming page is created), and
-   * swap it again for the live post URL on launch day. Nothing else in the
-   * codebase needs to change: this constant is the only reference.
+   * Swap for Backenly's coming-soon URL once it exists
+   * (producthunt.com/products/<slug>), then for the live post URL on launch
+   * day. This constant is the ONLY reference in the codebase.
    */
   productHunt: 'https://www.producthunt.com',
   // The flagship open-source platform repo. Must be public for this link to
