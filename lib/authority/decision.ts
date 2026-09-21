@@ -508,14 +508,39 @@ export function decideAuthority(input: AuthorityInputs): AuthorityDecision {
     )
   }
 
-  // Conflict: somebody else is changing this right now.
-  const conflicting = (input.recentChanges ?? []).filter(c => c.minutesBefore <= 10)
+  // ── Conflict: somebody ELSE is changing this right now ───────────────────
+  //
+  // "Else" is load-bearing and was missing. The first version counted every
+  // recent change, including `source: 'autonomy'` — Backenly's own prior
+  // repairs — so the loop blocked itself for ten minutes after doing anything,
+  // and a user who had just created tables got no repairs at all.
+  //
+  // Only `external_ddl` counts today. It is the one source that is definitely
+  // not Backenly: a direct database connection the platform did not make.
+  // `schema` and `deploy` are platform-recorded events that usually FOLLOW
+  // Backenly's own work, and `change-correlation` cannot yet say who caused
+  // them, because none of its four sources carries a principal — the gap named
+  // in the RFC's causal-attribution section.
+  //
+  // So this rule is deliberately narrow rather than deliberately cautious:
+  // widening it before correlation carries principals would produce a loop that
+  // refuses to act because it acted.
+  //
+  // TODO(autonomy): external_ddl is not the conceptual model, it is the only
+  // source attributable today. Once schema and deploy events carry principals,
+  // this becomes "a recent change by a principal OTHER than the executing
+  // controller", which is what conflict actually means. Keeping external_ddl as
+  // the permanent rule would quietly ignore an agent migrating the same table
+  // through the platform.
+  const conflicting = (input.recentChanges ?? []).filter(
+    c => c.minutesBefore <= 10 && c.source === 'external_ddl',
+  )
   if (conflicting.length > 0) {
     narrow(
       'PROPOSE_ONLY',
       'recent_conflicting_change',
-      `${conflicting.length} change(s) touched this backend in the last 10 minutes; ` +
-        'acting now risks fighting whoever made them.',
+      `${conflicting.length} change(s) arrived over a direct database connection in ` +
+        'the last 10 minutes; acting now risks fighting whoever made them.',
     )
   }
 

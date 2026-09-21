@@ -176,14 +176,43 @@ async function capturePreFixState(
  * Process one HealthFinding end-to-end.
  * Safe to call on any finding regardless of current status — it re-reads from DB.
  */
+/**
+ * Who is asking for this fix, and therefore which rules apply.
+ *
+ * Required at every call site rather than defaulted, because the default would
+ * decide the safety posture of whichever caller forgot to think about it. The
+ * two are genuinely different acts: a person clicking "fix this" has already
+ * authorised it by clicking, and the autonomous loop has authorised nothing
+ * until the Authority Decision says so.
+ */
+export type FixActor =
+  /**
+   * The autonomous loop. MUST pass the Authority Decision, which is evaluated
+   * here rather than at the caller so no entry point can skip it by omission.
+   */
+  | { kind: 'autonomous'; loop: 'reconciler' | 'maintenance' }
+  /**
+   * A person, through an authenticated surface. Not autonomy: the click IS the
+   * authorisation, and gating it behind a standing grant would mean a user
+   * could not fix their own backend without first delegating to a robot.
+   */
+  | { kind: 'human'; userId: string }
+  /**
+   * An operator running a script or a test harness against their own
+   * deployment. Recorded as such rather than disguised as one of the others.
+   */
+  | { kind: 'operator'; via: 'cli' | 'test' }
+
 export async function runAutoFix(
   findingId: string,
   projectId: string,
   // Test/verification harness only: bypass the 2-min post-mutation cooldown so
-  // multiple deterministic fixes can be exercised in one run. The autonomous
-  // reconciler NEVER passes this — cooldown pacing stays enforced in production.
-  opts: { skipCooldown?: boolean } = {},
+  // multiple deterministic fixes can be exercised in one run.
+  opts: { skipCooldown?: boolean; actor?: FixActor } = {},
 ): Promise<AutoFixResult> {
+  // Default-deny on omission. A caller that does not say who it is gets the
+  // strictest posture, not the most permissive one.
+  const actor: FixActor = opts.actor ?? { kind: 'autonomous', loop: 'reconciler' }
   const finding = await prisma.healthFinding.findUnique({ where: { id: findingId } })
   if (!finding) {
     return { findingId, outcome: 'notify_only', message: 'Finding not found.' }
@@ -222,6 +251,104 @@ export async function runAutoFix(
   }
 
   // ── auto branch ─────────────────────────────────────────────────────────────
+  //
+  // THE GATE. Everything above is classification; below this line something
+  // mutates. An autonomous caller must hold an AUTO_EXECUTE decision, and the
+  // check lives here rather than at each call site so that no entry point can
+  // skip it by forgetting to call it.
+  if (actor.kind === 'autonomous') {
+    const { authorizeAutonomousFix, revalidateAtMutationBoundary, enforceLegacyCompatibility } =
+      await import('@/lib/authority/gate')
+    const { authorityPathFor } = await import('@/lib/authority/action-classes')
+
+    const path = authorityPathFor(finding.type)
+
+    // ── Neither declared nor enumerated ──────────────────────────────────
+    //
+    // Nothing is known about this type's sensors, verifier or recovery, and it
+    // is not on the compatibility list either. Default deny.
+    if (path === 'freeze') {
+      return {
+        findingId,
+        outcome: 'notify_only',
+        message:
+          `Frozen: "${finding.type}" has no declared action class and is not a listed ` +
+          'legacy type, so Backenly cannot establish whether repairing it is safe.',
+      }
+    }
+
+    // ── Enumerated legacy type: today's proven behaviour, recorded as debt ──
+    //
+    // Deliberately NOT more permissive than before. The flag and the dial are
+    // enforced here because `runAutoFix` never checked them — only
+    // `runReconciler` did — so a direct caller could previously execute with
+    // ENABLE_AUTONOMY_LIVE_EXECUTION=false. The breaker, verification and
+    // recovery semantics below are unchanged.
+    if (path === 'legacy_compatibility') {
+      const compat = await enforceLegacyCompatibility(projectId, finding.type)
+      if (!compat.allowed) {
+        return { findingId, outcome: 'deferred', message: compat.reason ?? 'not permitted' }
+      }
+      return _executeAutoFix(finding.id, projectId, type, details, opts)
+    }
+
+    const tableName =
+      typeof details.tableName === 'string'
+        ? details.tableName
+        : typeof details.table === 'string'
+          ? (details.table as string)
+          : null
+
+    const gate = await authorizeAutonomousFix({
+      projectId,
+      findingType: finding.type,
+      tableName,
+      loop: actor.loop,
+    })
+
+    if (!gate.mayExecute) {
+      const d = gate.decision
+      // FREEZE must not surface an executable-looking proposal: the evidence
+      // for NEEDING the repair is what could not be established, so offering it
+      // would invite a human to approve something nobody can justify.
+      if (d.decision === 'FREEZE') {
+        await prisma.healthFinding
+          .update({ where: { id: finding.id }, data: { status: 'open' } })
+          .catch(() => {})
+        return {
+          findingId,
+          outcome: 'notify_only',
+          message: `Frozen: ${d.reasons[0] ?? 'state could not be established'}${
+            d.blocker ? ` Restore: ${d.blocker}.` : ''
+          }`,
+        }
+      }
+
+      // PROPOSE_ONLY and DENY: the repair is meaningful, authority is not
+      // sufficient. Surface it for a human rather than mutating.
+      await prisma.healthFinding
+        .update({ where: { id: finding.id }, data: { status: 'pending_approval' } })
+        .catch(() => {})
+      return {
+        findingId,
+        outcome: 'pending_approval',
+        message: `Authority: ${d.decision}. ${d.reasons[0] ?? ''}`.trim(),
+      }
+    }
+
+    // The decision was a lease. Prove it still holds now, immediately before
+    // the executor runs: between deciding and here an owner may have revoked
+    // the grant through a surface that never takes the execution lock.
+    const still = await revalidateAtMutationBoundary(gate, projectId)
+    if (!still.stillValid) {
+      return {
+        findingId,
+        outcome: 'deferred',
+        message: `Authority lapsed before execution: ${still.reason}`,
+      }
+    }
+  }
+
   return _executeAutoFix(finding.id, projectId, type, details, opts)
 }
 
@@ -920,7 +1047,14 @@ export async function findResolvableFinding(
  * Process all open findings for a project, ordered critical-first.
  * Called by the workspace observer on each health-check cycle.
  */
-export async function processOpenFindings(projectId: string): Promise<AutoFixResult[]> {
+export async function processOpenFindings(
+  projectId: string,
+  /**
+   * Who is driving this batch. Defaults to autonomous, which is the strict
+   * posture: a caller that has not said who it is gets the gate, not a bypass.
+   */
+  actor: FixActor = { kind: 'autonomous', loop: 'reconciler' },
+): Promise<AutoFixResult[]> {
   const severityOrder = { critical: 0, warning: 1, info: 2 }
 
   const findings = await prisma.healthFinding.findMany({
@@ -938,7 +1072,8 @@ export async function processOpenFindings(projectId: string): Promise<AutoFixRes
   const results: AutoFixResult[] = []
   for (const f of findings) {
     // Run sequentially so each fix is verified before the next begins
-    results.push(await runAutoFix(f.id, projectId))
+    // Inherits the caller's posture rather than assuming one.
+    results.push(await runAutoFix(f.id, projectId, { actor }))
   }
   return results
 }
