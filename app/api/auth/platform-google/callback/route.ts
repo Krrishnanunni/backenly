@@ -7,6 +7,8 @@ import { onSignupCompleted } from '@/lib/platform-signals'
 import { createSession } from '@/lib/auth/session'
 import { assertSignupAllowed, isBlocked } from '@/lib/platform-controls'
 import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
+import { googleVerifiedEmail } from '@/lib/auth/oauth/verified-email'
+import { oauthMayCreateAccount } from '@/lib/auth/setup-token'
 
 /**
  * Platform-level Google OAuth callback.
@@ -96,10 +98,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${appUrl()}/auth/login?error=userinfo_failed`)
   }
   const googleUser = await userInfoResponse.json()
-  if (!googleUser?.email) {
-    return NextResponse.redirect(`${appUrl()}/auth/login?error=userinfo_failed`)
+  // Only an address Google says it verified. The account below is created, or
+  // LINKED to an existing one by address, as email-verified, so accepting
+  // `email` without `verified_email` let an unverified address claim whichever
+  // Backenly account already held it.
+  const email = googleVerifiedEmail(googleUser)
+  if (!email) {
+    return NextResponse.redirect(`${appUrl()}/auth/login?error=email_not_verified`)
   }
-  const email = String(googleUser.email).trim().toLowerCase()
 
   // Founder block/abuse controls.
   const ipForBlock = ip === 'unknown' ? null : ip
@@ -115,6 +121,11 @@ export async function GET(request: NextRequest) {
     include: { role: true },
   })
   if (!user) {
+    // An OAuth round trip carries no setup token, so it cannot claim a
+    // self-hosted deployment that is waiting for one.
+    if (!(await oauthMayCreateAccount())) {
+      return NextResponse.redirect(`${appUrl()}/auth/login?error=claim_requires_setup_token`)
+    }
     const guard = await assertSignupAllowed(email, ipForBlock)
     if (!guard.ok) {
       return NextResponse.redirect(`${appUrl()}/auth/login?error=signup_not_allowed`)

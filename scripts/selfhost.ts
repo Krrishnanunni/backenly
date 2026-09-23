@@ -607,20 +607,42 @@ function main(): void {
   verifyRoles()
 
   const setupToken = envValue(readEnvLines(), 'BACKENLY_SETUP_TOKEN') || ''
+  const appUrl = (envValue(readEnvLines(), 'NEXT_PUBLIC_APP_URL') || 'http://localhost:3000').replace(/\/+$/, '')
 
   console.log('')
   console.log('  Backenly is installed.')
   console.log('')
   console.log('    npm run dev          dashboard :3000 · runtime :3001')
   console.log('')
-  console.log('  Then claim this deployment with the setup token below. The first')
-  console.log('  account to present it becomes the administrator and takes ownership')
-  console.log('  of this project in the same step — there is no second command to run.')
+  console.log('  Then claim this deployment. Open this link and create your account;')
+  console.log('  the first account to present the token becomes the administrator and')
+  console.log('  takes ownership of this project in the same step — there is no second')
+  console.log('  command to run.')
+  console.log('')
+  console.log(`    ${appUrl}/auth/signup?setup_token=${setupToken}`)
+  console.log('')
+  console.log('  Or paste the token into the Setup token field on the signup page:')
   console.log('')
   console.log(`    ${setupToken}`)
   console.log('')
   console.log('  It is in .env as BACKENLY_SETUP_TOKEN. Once the deployment is claimed')
   console.log('  the token stops working, whatever it is set to.')
+  console.log('')
+
+  // Said here because nothing else will say it until someone needs it: with
+  // no mail transport, password-reset codes cannot be sent, and a second
+  // account (BACKENLY_ALLOW_PUBLIC_SIGNUP=true) cannot verify its email.
+  const lines = readEnvLines()
+  const mailConfigured = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'].every(k => !!envValue(lines, k))
+  if (mailConfigured) {
+    console.log('  Email: configured (SMTP). Password-reset codes will be sent.')
+  } else {
+    console.log('  Email: not configured, so password-reset codes cannot be sent.')
+    console.log('  Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM in .env to')
+    console.log('  enable it. Until then, reset a password from this machine with:')
+    console.log('')
+    console.log('    npm run auth:reset-password -- --email you@example.com')
+  }
   console.log('')
 }
 
