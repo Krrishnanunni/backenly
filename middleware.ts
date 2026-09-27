@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { domainRoutingMiddleware, shouldUseDomainRouting } from '@/lib/middleware/domainRouting'
-import { extractTokenFromHeader } from '@/lib/auth/jwt'
+function extractTokenFromHeader(authHeader: string | null): string | null {
+  if (!authHeader) return null
+  if (!authHeader.startsWith('Bearer ')) return null
+  return authHeader.substring(7)
+}
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 
 // ── Per-project CORS cache ────────────────────────────────────────────────────
