@@ -609,3 +609,10 @@ tests/integration/scheduler-leader-lock.spec.ts
 # role (or backenly.backup_role) read on the schema it syncs, and never write.
 # Mutation-checked: the previous function fails the two grant tests.
 tests/integration/direct-access-backup-grants.spec.ts
+
+# Both storage drivers apply one per-file rule: the bucket's own limit under the
+# shared ceiling for uploads through the server. The local driver also applied
+# Project.maxFileSize, which nothing can set (10 MB everywhere), so a raised
+# bucket and every local multipart upload over 10 MB were refused on self-host.
+# Mutation-checked: the previous driver refuses the 12 MB file.
+tests/integration/local-upload-file-size.spec.ts
