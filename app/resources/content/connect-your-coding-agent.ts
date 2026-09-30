@@ -12,7 +12,7 @@ export const article: ArticleData = {
   dateModified: '2026-09-25',
   dateDisplay: 'Updated September 25, 2026',
   intro:
-    'Backenly has one build door: an MCP server your coding agent connects to. There is no in-product chat builder — the agent you already use is the operator, and Backenly is the governed runtime it talks to. Setup is one command and one scoped key. Run the command before you open the agent and the tools are there from the first message; if an agent installs it mid-conversation, the CLI carries the same tools until the next one.',
+    'Backenly has one build door: an MCP server your coding agent connects to. There is no in-product chat builder: the agent you already use is the operator, and Backenly is the governed runtime it talks to. Setup is one command and one scoped key. Run the command before you open the agent and the tools are there from the first message; if an agent installs it mid-conversation, the CLI carries the same tools until the next one.',
   sections: [
     {
       heading: 'Get a scoped key',
@@ -37,13 +37,13 @@ export const article: ArticleData = {
         {
           kind: 'code',
           language: 'bash',
-          label: 'Claude Code — local (stdio)',
+          label: 'Claude Code, local (stdio)',
           code: `claude mcp add backenly -- npx -y @backenly/mcp-server --project <PROJECT_ID> --key <KEY>`,
         },
         {
           kind: 'code',
           language: 'bash',
-          label: 'Claude Code — remote (Streamable-HTTP)',
+          label: 'Claude Code, remote (Streamable-HTTP)',
           code: `claude mcp add --transport http backenly https://backenly.com/api/mcp --header "x-api-key: <KEY>"`,
         },
         {
@@ -54,7 +54,7 @@ export const article: ArticleData = {
           kind: 'list',
           items: [
             'Cursor infers the transport from the presence of a `url` key, so a remote entry needs `url` + `headers` and no `type` field.',
-            'Cline remote must set `"type": "streamableHttp"` — camelCase, no hyphen. Omit it and Cline falls back to the legacy SSE transport and gets a 405 from our Streamable-HTTP endpoint. This is the most common Cline setup failure.',
+            'Cline remote must set `"type": "streamableHttp"`: camelCase, no hyphen. Omit it and Cline falls back to the legacy SSE transport and gets a 405 from our Streamable-HTTP endpoint. This is the most common Cline setup failure.',
             'The Codex CLI has no header flag, so an `x-api-key` server can only be configured by editing `~/.codex/config.toml`, where headers live under `http_headers`. If it is not picked up, add `[beta] rmcp = true`.',
           ],
         },
@@ -125,7 +125,7 @@ npx -y @backenly/cli@latest chat "add likes and comments to posts"`,
         },
         {
           kind: 'p',
-          text: 'A fresh project answers with almost nothing, and that is correct rather than broken. A new project has a `users` table and no exposed REST resources, because `/db/users` is deliberately never served — that table holds password hashes and is reached only through `/auth/*`. An empty resource list on a project whose only table is `users` is the right answer.',
+          text: 'A fresh project answers with almost nothing, and that is correct rather than broken. A new project has a `users` table and no exposed REST resources, because `/db/users` is deliberately never served. That table holds password hashes and is reached only through `/auth/*`. An empty resource list on a project whose only table is `users` is the right answer.',
         },
         {
           kind: 'p',
@@ -138,7 +138,7 @@ npx -y @backenly/cli@latest chat "add likes and comments to posts"`,
       blocks: [
         {
           kind: 'p',
-          text: 'The manifest advertises 23 tools. That number is a deliberate cap, not a roadmap gap: tool-selection accuracy degrades as a catalog grows, so the surface is an allowlist where every request has one obvious door. `tools/list` on the server is the authority — trust it over any document, including this one.',
+          text: 'The manifest advertises 23 tools. That number is a deliberate cap, not a roadmap gap: tool-selection accuracy degrades as a catalog grows, so the surface is an allowlist where every request has one obvious door. `tools/list` on the server is the authority: trust it over any document, including this one.',
         },
         {
           kind: 'table',
@@ -146,19 +146,19 @@ npx -y @backenly/cli@latest chat "add likes and comments to posts"`,
           rows: [
             ['Understand', 'read_backend_state · get_table_schema · run_query · fetch_docs'],
             ['Database', 'apply_migration · set_rls · db_insert · db_update · db_delete · generate_types · branch'],
-            ['One per section', 'auth · storage · functions · realtime · integrations · monitoring · autonomy · webhooks · deploy · connect — each with an action'],
-            ['Approvals', 'check_approval — destructive actions park the exact call for a human'],
-            ['Natural language', 'backend_chat — the fall-through for anything not named above'],
+            ['One per section', 'auth · storage · functions · realtime · integrations · monitoring · autonomy · webhooks · deploy · connect, each with an action'],
+            ['Approvals', 'check_approval: destructive actions park the exact call for a human'],
+            ['Natural language', 'backend_chat: the fall-through for anything not named above'],
           ],
           caption: 'The advertised surface. More tools remain dispatchable so clients pinned to an older manifest keep working.',
         },
         {
           kind: 'p',
-          text: 'Anything not on that list is reached by describing it to `backend_chat`, which plans and executes through the same governed path. Your agent does not need to learn Backenly\'s vocabulary to be useful — "add likes and comments to my posts table" is a complete instruction.',
+          text: 'Anything not on that list is reached by describing it to `backend_chat`, which plans and executes through the same governed path. Your agent does not need to learn Backenly\'s vocabulary to be useful: "add likes and comments to my posts table" is a complete instruction.',
         },
         {
           kind: 'p',
-          text: 'Agents can also browse live project state as MCP resources — `backenly://state`, `tables`, `apis`, `buckets`, `triggers` — instead of spending a tool call to ask.',
+          text: 'Agents can also browse live project state as MCP resources (`backenly://state`, `tables`, `apis`, `buckets`, `triggers`) instead of spending a tool call to ask.',
         },
       ],
     },
@@ -190,7 +190,7 @@ npx -y @backenly/cli@latest chat "add likes and comments to posts"`,
             {
               label: 'Agent',
               title: 'Polls `check_approval`',
-              body: 'Terminal statuses distinguish `failed` (nothing applied — safe to retry) from `partial` (some changes landed — verify current state instead of replaying).',
+              body: 'Terminal statuses distinguish `failed` (nothing applied, safe to retry) from `partial` (some changes landed, so verify current state instead of replaying).',
             },
           ],
         },
@@ -206,7 +206,7 @@ npx -y @backenly/cli@latest chat "add likes and comments to posts"`,
             'Install the MCP server before opening the agent, or let it work through the CLI until the next conversation.',
             'Choose read-only or read-write when you mint the key, and revoke keys you stop using.',
             'Approve or reject anything that reaches the Review Queue.',
-            'Keep the key out of your repository — it is a credential, not configuration.',
+            'Keep the key out of your repository. It is a credential, not configuration.',
           ],
         },
       ],

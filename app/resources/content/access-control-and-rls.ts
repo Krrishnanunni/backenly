@@ -12,7 +12,7 @@ export const article: ArticleData = {
   dateModified: '2026-08-29',
   dateDisplay: 'Updated August 29, 2026',
   intro:
-    'This is the page where being wrong is a vulnerability rather than a bug, so it is worth reading before you have users. Two things carry the weight: authorization lives in PostgreSQL rather than in your code, and the predicate you write is the predicate that gets installed — never a model\'s paraphrase of it.',
+    'This is the page where being wrong is a vulnerability rather than a bug, so it is worth reading before you have users. Two things carry the weight: authorization lives in PostgreSQL rather than in your code, and the predicate you write is the predicate that gets installed, never a model\'s paraphrase of it.',
   sections: [
     {
       heading: 'Isolation is a grant, not a filter',
@@ -27,7 +27,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'note',
-          text: 'A request with no `X-User-Token` runs unauthenticated and an RLS-protected table returns zero rows rather than an error. That is the policy filtering, working correctly — but it makes a missing header look identical to an empty table. Check the header first when a list is unexpectedly empty.',
+          text: 'A request with no `X-User-Token` runs unauthenticated and an RLS-protected table returns zero rows rather than an error. That is the policy filtering, working correctly, but it makes a missing header look identical to an empty table. Check the header first when a list is unexpectedly empty.',
         },
       ],
     },
@@ -57,7 +57,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'p',
-          text: 'Naming only some commands scopes the edit — pass `update` and `delete` and the `select` and `insert` rules are left byte-identical. Predicates can reach a parent row with `EXISTS`, which is how "participants may read, only the sender may edit" is expressed:',
+          text: 'Naming only some commands scopes the edit: pass `update` and `delete` and the `select` and `insert` rules are left byte-identical. Predicates can reach a parent row with `EXISTS`, which is how "participants may read, only the sender may edit" is expressed:',
         },
         {
           kind: 'code',
@@ -81,26 +81,26 @@ export const article: ArticleData = {
       blocks: [
         {
           kind: 'p',
-          text: 'When a policy is a standard shape, `add_rls` installs it by name. It is dispatchable but not on the advertised 20-tool surface, so ask for it by name through `backend_chat`. It never substitutes a different policy for the one you asked for — an unrecognised template is refused with the real list.',
+          text: 'When a policy is a standard shape, `add_rls` installs it by name. It is dispatchable but not on the advertised 20-tool surface, so ask for it by name through `backend_chat`. It never substitutes a different policy for the one you asked for. An unrecognised template is refused with the real list.',
         },
         {
           kind: 'table',
           columns: ['Template', 'When it is right'],
           rows: [
             ['auto', 'Reads the columns and foreign keys and installs what the schema implies. Refuses with an explanation rather than guessing when ownership is ambiguous.'],
-            ['owner_read_write', 'Exactly one user column — each user reads and writes only their own rows.'],
+            ['owner_read_write', 'Exactly one user column: each user reads and writes only their own rows.'],
             ['participants', 'Two or more user columns: connections(requester_id, addressee_id), conversations(user_a, user_b), follows, matches, invitations.'],
-            ['owned_via_parent', 'No user column of its own, but a foreign key to a user-owned table — line items, shipping addresses, messages in a conversation.'],
+            ['owned_via_parent', 'No user column of its own, but a foreign key to a user-owned table: line items, shipping addresses, messages in a conversation.'],
             ['public_read', 'Anyone reads, only the owner writes. Blogs, marketplaces.'],
             ['org_members', 'Multi-tenant B2B. Needs an organization_id column and enable_teams already run.'],
-            ['admin_only', 'Server-side jobs only — reachable with a service-role key and nothing else.'],
+            ['admin_only', 'Server-side jobs only, reachable with a service-role key and nothing else.'],
             ['all_access', 'Every authenticated user reads and writes everything. Rare; use deliberately.'],
-            ['custom', 'The escape hatch: your own predicate over this table\'s columns. Subqueries are refused here — use owned_via_parent when the rule has to read another table.'],
+            ['custom', 'The escape hatch: your own predicate over this table\'s columns. Subqueries are refused here; use owned_via_parent when the rule has to read another table.'],
           ],
         },
         {
           kind: 'note',
-          text: 'The most common wrong choice is `owner_read_write` on a two-party table. It grants access to one side and locks the other out of their own row — the conversation that only the sender can read. If a table has two user columns, it wants `participants`.',
+          text: 'The most common wrong choice is `owner_read_write` on a two-party table. It grants access to one side and locks the other out of their own row: the conversation that only the sender can read. If a table has two user columns, it wants `participants`.',
         },
       ],
     },
@@ -160,7 +160,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'p',
-          text: 'MCP keys can be minted read-only, which serves a reduced manifest and refuses every write door — including `backend_chat` — with `READ_ONLY_KEY` before anything runs. An agent cannot upgrade its own key, and no endpoint flips an existing one; read-only is chosen by a human at mint time.',
+          text: 'MCP keys can be minted read-only, which serves a reduced manifest and refuses every write door, including `backend_chat`, with `READ_ONLY_KEY` before anything runs. An agent cannot upgrade its own key, and no endpoint flips an existing one; read-only is chosen by a human at mint time.',
         },
         {
           kind: 'responsibility',
@@ -172,7 +172,7 @@ export const article: ArticleData = {
           ],
           you: [
             'Decide the access rule. The platform will not infer a policy you never stated.',
-            'Check `using` versus `check` on UPDATE — that is where policies leak.',
+            'Check `using` versus `check` on UPDATE. That is where policies leak.',
             'Read the isolation check on any table holding private data.',
             'Revoke keys you stop using, and keep them out of version control.',
           ],
@@ -181,6 +181,6 @@ export const article: ArticleData = {
     },
   ],
   conclusion:
-    'Authorization is enforced by PostgreSQL, written as SQL you control, and proven by signing in as a second user and getting nothing back. When you can write the predicate, write it — the deterministic door exists because a re-derived policy can come back simplified in the permissive direction, and that class of mistake does not announce itself.',
+    'Authorization is enforced by PostgreSQL, written as SQL you control, and proven by signing in as a second user and getting nothing back. When you can write the predicate, write it. The deterministic door exists because a re-derived policy can come back simplified in the permissive direction, and that class of mistake does not announce itself.',
   relatedSlugs: ['the-data-api', 'your-first-backend', 'after-you-launch'],
 }

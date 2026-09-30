@@ -109,7 +109,7 @@ const LIST: ComparisonData[] = [
     slug: 'backenly-vs-supabase',
     competitor: 'Supabase',
     category: 'Open-source Postgres platform',
-    metaTitle: 'Backenly vs. Supabase — the same Postgres, a different operating model',
+    metaTitle: 'Backenly vs. Supabase: the same Postgres, a different operating model',
     metaDescription:
       'Both serve PostgreSQL through PostgREST, so the query grammar is the same. The difference is who authors schema changes and policies, and who operates the backend after launch.',
     positioning:
@@ -130,7 +130,7 @@ const LIST: ComparisonData[] = [
       },
       {
         heading: 'And who is watching afterwards',
-        body: 'Supabase gives you logs, metrics, and a dashboard, and you decide what to do with them. Backenly declares a set of invariants about a backend — every table holding user data is protected by row-level security, no policy is silently a no-op, relationship columns have foreign keys and indexes, the REST plane is actually answering — and reconciles the live system against them on a schedule. Most findings are reported. A narrow, enumerable class is repaired automatically. Anything touching authentication, external credentials, or anything destructive requires a person, at every autonomy setting including the most permissive.',
+        body: 'Supabase gives you logs, metrics, and a dashboard, and you decide what to do with them. Backenly declares a set of invariants about a backend (every table holding user data is protected by row-level security, no policy is silently a no-op, relationship columns have foreign keys and indexes, the REST plane is actually answering) and reconciles the live system against them on a schedule. Most findings are reported. A narrow, enumerable class is repaired automatically. Anything touching authentication, external credentials, or anything destructive requires a person, at every autonomy setting including the most permissive.',
       },
     ],
     table: [
@@ -230,7 +230,7 @@ const LIST: ComparisonData[] = [
       },
       {
         title: 'Policy SQL is installed as written, and read back',
-        body: 'Backenly has a typed door for row-level security that takes your predicate verbatim, installs exactly the commands you named, and re-reads pg_policies before reporting success. It exists because the alternative — describing a policy to a language model — was observed dropping conjuncts and quietly narrowing predicates.',
+        body: 'Backenly has a typed door for row-level security that takes your predicate verbatim, installs exactly the commands you named, and re-reads pg_policies before reporting success. It exists because the alternative, describing a policy to a language model, was observed dropping conjuncts and quietly narrowing predicates.',
       },
       {
         title: 'Something keeps checking after you stop',
@@ -243,7 +243,7 @@ const LIST: ComparisonData[] = [
     ],
     operating: {
       heading: 'What the operating layer actually does, stated narrowly',
-      body: 'Backenly reconciles a live backend against a set of declared invariants and sorts each finding into one of three outcomes. Applied automatically: a narrow, enumerable band that is additive or restorative — create a missing index, vacuum a bloated table, reindex a bloated index, install a row-security policy where ownership is derivable from the schema, restore a missing REST surface, register a schema that was never exposed, adopt schema changes made over a direct connection, restart a data plane that is already down. Held for a person: anything touching authentication, external credentials, or anything destructive or irreversible, at every autonomy level including the most permissive. Reported only: everything with no safe repair, which is most of the catalogue, including behavioural regressions where the cause is not in the measurement. Schema-touching repairs take a restore point before they run and re-probe afterwards, and the result records whether the gap was confirmed closed or merely attempted. If the backend is already mid-incident, automatic changes are frozen for that cycle, because mutating a failing system is how automation makes an outage worse.',
+      body: 'Backenly reconciles a live backend against a set of declared invariants and sorts each finding into one of three outcomes. Applied automatically: a narrow, enumerable band that is additive or restorative: create a missing index, vacuum a bloated table, reindex a bloated index, install a row-security policy where ownership is derivable from the schema, restore a missing REST surface, register a schema that was never exposed, adopt schema changes made over a direct connection, restart a data plane that is already down. Held for a person: anything touching authentication, external credentials, or anything destructive or irreversible, at every autonomy level including the most permissive. Reported only: everything with no safe repair, which is most of the catalogue, including behavioural regressions where the cause is not in the measurement. Schema-touching repairs take a restore point before they run and re-probe afterwards, and the result records whether the gap was confirmed closed or merely attempted. If the backend is already mid-incident, automatic changes are frozen for that cycle, because mutating a failing system is how automation makes an outage worse.',
     },
     agents: {
       heading: 'Two different answers to the same agent question',
@@ -330,7 +330,7 @@ const LIST: ComparisonData[] = [
     slug: 'backenly-vs-firebase',
     competitor: 'Firebase',
     category: 'Google mobile and app platform',
-    metaTitle: 'Backenly vs. Firebase — document store and mobile SDKs vs. relational Postgres',
+    metaTitle: 'Backenly vs. Firebase: document store and mobile SDKs vs. relational Postgres',
     metaDescription:
       'Firebase is a document database with a mature mobile client ecosystem. Backenly is relational PostgreSQL with a governed change path. The data model is the decision that compounds.',
     positioning:
@@ -351,7 +351,7 @@ const LIST: ComparisonData[] = [
       },
       {
         heading: 'What each platform does when something is wrong',
-        body: 'Firebase and Google Cloud provide a mature observability stack: metrics, logging, error reporting, and alerting that will tell you a rule is rejecting traffic or a query is slow. It reports, and you act. Backenly reports too, and additionally acts on a narrow set of findings where the repair is additive and reversible — a missing index, a bloated table, a REST surface that stopped being served. Everything else, including anything touching authentication or anything destructive, is queued for a person. The difference is not that one platform watches and the other does not. It is that one of them will also apply a small, enumerable set of fixes without being asked.',
+        body: 'Firebase and Google Cloud provide a mature observability stack: metrics, logging, error reporting, and alerting that will tell you a rule is rejecting traffic or a query is slow. It reports, and you act. Backenly reports too, and additionally acts on a narrow set of findings where the repair is additive and reversible: a missing index, a bloated table, a REST surface that stopped being served. Everything else, including anything touching authentication or anything destructive, is queued for a person. The difference is not that one platform watches and the other does not. It is that one of them will also apply a small, enumerable set of fixes without being asked.',
       },
     ],
     table: [
@@ -529,7 +529,7 @@ const LIST: ComparisonData[] = [
     slug: 'backenly-vs-no-code-builders',
     competitor: 'No-Code App Builders',
     category: 'Integrated visual builders',
-    metaTitle: 'Backenly vs. no-code app builders — integrated builder or standalone backend',
+    metaTitle: 'Backenly vs. no-code app builders: integrated builder or standalone backend',
     metaDescription:
       'Visual app builders integrate the frontend and the backend in one system. Backenly is backend-only: standard PostgreSQL and a REST API that any frontend can use. The difference is where the boundary sits.',
     positioning:
@@ -538,11 +538,11 @@ const LIST: ComparisonData[] = [
     intro:
       'Visual app builders let you assemble an application without writing code, with the interface, the logic, and the data living in one integrated environment. That integration is the product, and for a lot of applications it is exactly the right shape.',
     summary:
-      'This is a comparison about architecture rather than capability, and the two are not really competing for the same job. An integrated builder gives you the interface and the data in one place, which is why a simple application comes together quickly in it. Backenly is deliberately only the back half: a PostgreSQL database and a REST API with authentication, storage, and realtime, and no opinion at all about your frontend. That means it does not replace a visual builder and cannot be judged on how fast it puts a screen on the internet. What it offers instead is a boundary — the data is standard Postgres, the interface is a standard API — and boundaries are worth little on day one and quite a lot the first time you need something the integrated environment does not express. The most useful framing is not either-or: many teams keep the visual builder for the interface and put the data layer somewhere it can be queried, secured, and taken with them.',
+      'This is a comparison about architecture rather than capability, and the two are not really competing for the same job. An integrated builder gives you the interface and the data in one place, which is why a simple application comes together quickly in it. Backenly is deliberately only the back half: a PostgreSQL database and a REST API with authentication, storage, and realtime, and no opinion at all about your frontend. That means it does not replace a visual builder and cannot be judged on how fast it puts a screen on the internet. What it offers instead is a boundary (the data is standard Postgres, the interface is a standard API), and boundaries are worth little on day one and quite a lot the first time you need something the integrated environment does not express. The most useful framing is not either-or: many teams keep the visual builder for the interface and put the data layer somewhere it can be queried, secured, and taken with them.',
     architecture: [
       {
         heading: 'Integration is the feature, and it is also the ceiling',
-        body: 'An integrated builder wins the first week precisely because everything is in one place: design a screen, bind it to data, publish. There is no API to design, no client to wire up, no second system to reason about. That is a real advantage and Backenly does not try to compete with it, because Backenly is backend-only and has no screen to give you. The trade is that the integrated environment defines what is expressible. When a requirement falls outside it — an interface the editor does not support, a second client such as a mobile app sharing the same data, a developer joining to extend what exists — you are working against the grain of the tool rather than with it. Neither shape is better. They are different bets about where you expect the surprises to come from.',
+        body: 'An integrated builder wins the first week precisely because everything is in one place: design a screen, bind it to data, publish. There is no API to design, no client to wire up, no second system to reason about. That is a real advantage and Backenly does not try to compete with it, because Backenly is backend-only and has no screen to give you. The trade is that the integrated environment defines what is expressible. When a requirement falls outside it (an interface the editor does not support, a second client such as a mobile app sharing the same data, a developer joining to extend what exists), you are working against the grain of the tool rather than with it. Neither shape is better. They are different bets about where you expect the surprises to come from.',
       },
       {
         heading: 'What a standalone data layer actually buys',
@@ -673,7 +673,7 @@ const LIST: ComparisonData[] = [
     slug: 'backenly-vs-traditional-backend-development',
     competitor: 'Traditional Backend Development',
     category: 'Custom-built backends',
-    metaTitle: 'Backenly vs. building your own backend — where a platform helps and where it stops',
+    metaTitle: 'Backenly vs. building your own backend: where a platform helps and where it stops',
     metaDescription:
       'A hand-built backend has no capability ceiling and costs engineering time to build and operate. Backenly covers a common shape and provides an operating layer. It does not remove engineering judgement.',
     positioning:
@@ -682,7 +682,7 @@ const LIST: ComparisonData[] = [
     intro:
       'Building a backend by hand means designing the schema, writing migrations, building endpoints, implementing authentication, configuring storage, setting up deployment, and operating all of it afterwards. It is well-understood work with mature tooling, and it produces exactly the system you specify.',
     summary:
-      'The trade is capability ceiling against time and operational load, and it is worth stating plainly in both directions. A hand-built backend can do anything, because you write every line: unusual data models, specific latency budgets, protocols nothing else speaks. A platform optimises for a common shape and is bounded by what it supports. Backenly covers that common shape — relational data, authentication, permissions, files, realtime, event and scheduled functions — and adds an operating layer that watches declared invariants and repairs a narrow class of problems. What it does not do is remove engineering. You still decide what the data model should be, whether a proposed schema is right, what your access rules are, and what your product does. It removes a set of repetitive operational tasks, not judgement.',
+      'The trade is capability ceiling against time and operational load, and it is worth stating plainly in both directions. A hand-built backend can do anything, because you write every line: unusual data models, specific latency budgets, protocols nothing else speaks. A platform optimises for a common shape and is bounded by what it supports. Backenly covers that common shape (relational data, authentication, permissions, files, realtime, event and scheduled functions) and adds an operating layer that watches declared invariants and repairs a narrow class of problems. What it does not do is remove engineering. You still decide what the data model should be, whether a proposed schema is right, what your access rules are, and what your product does. It removes a set of repetitive operational tasks, not judgement.',
     architecture: [
       {
         heading: 'What a platform is actually replacing',
@@ -690,7 +690,7 @@ const LIST: ComparisonData[] = [
       },
       {
         heading: 'The ceiling is real, and it is the strongest argument for building',
-        body: 'A hand-built backend has no capability limit, and that is not a small thing. If your backend is your product — you are building a database, an exchange, a protocol implementation, something with an unusual consistency model or a hard latency budget — a platform will be in your way, and the right answer is to hire engineers and write it. Ownership of the infrastructure is not the dividing line here, because Backenly is Apache-2.0 and self-hostable, so you can run it yourself and read all of it. The dividing line is the feature surface: what Backenly supports is a common shape covering a large fraction of software products, and a large fraction is not all of them.',
+        body: 'A hand-built backend has no capability limit, and that is not a small thing. If your backend is your product (you are building a database, an exchange, a protocol implementation, something with an unusual consistency model or a hard latency budget), a platform will be in your way, and the right answer is to hire engineers and write it. Ownership of the infrastructure is not the dividing line here, because Backenly is Apache-2.0 and self-hostable, so you can run it yourself and read all of it. The dividing line is the feature surface: what Backenly supports is a common shape covering a large fraction of software products, and a large fraction is not all of them.',
       },
       {
         heading: 'The part that is easy to leave out of the estimate',
@@ -776,7 +776,7 @@ const LIST: ComparisonData[] = [
       },
       {
         title: 'Operational checks that run whether or not anyone is free',
-        body: 'Reconciliation against declared invariants happens on a schedule. It catches a specific set of problems — unindexed relationship columns, tables carrying more dead rows than live ones, policies that silently match nothing, a REST surface that stopped answering — and reports or repairs them within a bounded set of safe actions.',
+        body: 'Reconciliation against declared invariants happens on a schedule. It catches a specific set of problems (unindexed relationship columns, tables carrying more dead rows than live ones, policies that silently match nothing, a REST surface that stopped answering) and reports or repairs them within a bounded set of safe actions.',
       },
       {
         title: 'A destination an engineer already understands',

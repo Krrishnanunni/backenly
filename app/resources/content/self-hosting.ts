@@ -12,7 +12,7 @@ export const article: ArticleData = {
   dateModified: '2026-08-29',
   dateDisplay: 'Updated August 29, 2026',
   intro:
-    'The repository is the whole platform — runtime, governance, and the complete self-healing engine, not a stripped community edition. The platform is Apache-2.0 and the client libraries are MIT. This is what running it involves, including the parts that are genuinely your problem afterwards.',
+    'The repository is the whole platform: runtime, governance, and the complete self-healing engine, not a stripped community edition. The platform is Apache-2.0 and the client libraries are MIT. This is what running it involves, including the parts that are genuinely your problem afterwards.',
   sections: [
     {
       heading: 'What runs',
@@ -31,7 +31,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'note',
-          text: 'The compose file does not start the application. `docker-compose.dev.yml` brings up the dependencies — PostgreSQL 15, Redis and PostgREST. You run the two Node processes yourself, with `npm run dev` or PM2. `npm run selfhost` does all of this for you on a first install.',
+          text: 'The compose file does not start the application. `docker-compose.dev.yml` brings up the dependencies: PostgreSQL 15, Redis and PostgREST. You run the two Node processes yourself, with `npm run dev` or PM2. `npm run selfhost` does all of this for you on a first install.',
         },
       ],
     },
@@ -58,7 +58,7 @@ npm run dev               # dashboard :3000 · runtime :3001`,
         },
         {
           kind: 'p',
-          text: 'Node 20 is what the Dockerfile and CI build against. Two variables are not optional: `JWT_SECRET` signs every platform session — generate one per deployment with `openssl rand -hex 32` — and `OPENAI_API_KEY` powers planning. The autonomy loop runs no model, so it does not consume that key; only planning and generation do.',
+          text: 'Node 20 is what the Dockerfile and CI build against. Two variables are not optional: `JWT_SECRET` signs every platform session (generate one per deployment with `openssl rand -hex 32`), and `OPENAI_API_KEY` powers planning. The autonomy loop runs no model, so it does not consume that key; only planning and generation do.',
         },
       ],
     },
@@ -67,7 +67,7 @@ npm run dev               # dashboard :3000 · runtime :3001`,
       blocks: [
         {
           kind: 'p',
-          text: '`pg_stat_statements` is the only source of measured query latency in the platform. Without it, Backenly can find missing indexes by shape — this column is a foreign key — but not by measurement, where Postgres is actually spending time filtering. It needs `shared_preload_libraries`, which needs a server restart, which is why it is set at the server rather than in a migration.',
+          text: '`pg_stat_statements` is the only source of measured query latency in the platform. Without it, Backenly can find missing indexes by shape (this column is a foreign key) but not by measurement, where Postgres is actually spending time filtering. It needs `shared_preload_libraries`, which needs a server restart, which is why it is set at the server rather than in a migration.',
         },
         {
           kind: 'code',
@@ -83,7 +83,7 @@ npm run dev               # dashboard :3000 · runtime :3001`,
         },
         {
           kind: 'p',
-          text: '`docker-compose.dev.yml` preloads the library and `docker/postgres-init/` creates the extension for you on a fresh data directory. On a volume that already exists, run the statements by hand — extensions are per-database, not per-cluster.',
+          text: '`docker-compose.dev.yml` preloads the library and `docker/postgres-init/` creates the extension for you on a fresh data directory. On a volume that already exists, run the statements by hand. Extensions are per-database, not per-cluster.',
         },
         {
           kind: 'p',
@@ -96,7 +96,7 @@ npm run dev               # dashboard :3000 · runtime :3001`,
       blocks: [
         {
           kind: 'p',
-          text: '`scripts/deploy.sh` is the single entry point. It pulls, syncs the Prisma schema when `prisma/schema.prisma` changed in the pulled range, builds, restarts only after the post-build step completes, and health-checks. Prefer it over running the steps by hand — the ordering constraints are the part people get wrong.',
+          text: '`scripts/deploy.sh` is the single entry point. It pulls, syncs the Prisma schema when `prisma/schema.prisma` changed in the pulled range, builds, restarts only after the post-build step completes, and health-checks. Prefer it over running the steps by hand: the ordering constraints are the part people get wrong.',
         },
         {
           kind: 'list',
@@ -118,7 +118,7 @@ npm run dev               # dashboard :3000 · runtime :3001`,
         {
           kind: 'responsibility',
           platform: [
-            'Ships the complete engine — governance, verification, and the autonomy loop — under Apache-2.0.',
+            'Ships the complete engine (governance, verification and the autonomy loop) under Apache-2.0.',
             'Keeps clients MIT, so the SDK, CLI, and MCP server impose nothing on what embeds them.',
             'Reports a probe it cannot run as UNCHECKED rather than passing.',
             'Moves data in either direction between self-hosted and Cloud with pg_dump.',
@@ -132,7 +132,7 @@ npm run dev               # dashboard :3000 · runtime :3001`,
         },
         {
           kind: 'p',
-          text: 'Supervision is worth calling out specifically. The runtime process serves every end-user API call, so if it dies unsupervised, every `/api/v1/*` request for every project fails until someone notices. Run it under something that restarts it — PM2 with `autorestart`, or a systemd unit with `Restart=always`.',
+          text: 'Supervision is worth calling out specifically. The runtime process serves every end-user API call, so if it dies unsupervised, every `/api/v1/*` request for every project fails until someone notices. Run it under something that restarts it: PM2 with `autorestart`, or a systemd unit with `Restart=always`.',
         },
         {
           kind: 'p',
@@ -145,7 +145,7 @@ npm run dev               # dashboard :3000 · runtime :3001`,
       blocks: [
         {
           kind: 'p',
-          text: 'Pull requests are open. Two things are worth knowing before you write code: tests run against a real PostgreSQL instance and the database is never mocked, because mocking it has caused production incidents here before. And every schema mutation goes through the governed kernel — a patch that writes DDL around it will be sent back regardless of how correct the SQL is.',
+          text: 'Pull requests are open. Two things are worth knowing before you write code: tests run against a real PostgreSQL instance and the database is never mocked, because mocking it has caused production incidents here before. And every schema mutation goes through the governed kernel. A patch that writes DDL around it will be sent back regardless of how correct the SQL is.',
         },
         {
           kind: 'code',

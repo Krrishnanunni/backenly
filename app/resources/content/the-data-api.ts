@@ -39,18 +39,18 @@ export const article: ArticleData = {
         },
         {
           kind: 'p',
-          text: 'Embedded resources are the reason to reach for v2. `?select=*,author(*)` returns a post and its author in one round trip, and the embed is subject to the same database privileges as a direct read — a `?select=*,users(*)` is refused by Postgres itself, not by a check somebody remembered to write.',
+          text: 'Embedded resources are the reason to reach for v2. `?select=*,author(*)` returns a post and its author in one round trip, and the embed is subject to the same database privileges as a direct read: a `?select=*,users(*)` is refused by Postgres itself, not by a check somebody remembered to write.',
         },
         {
           kind: 'p',
-          text: 'On the v1 surface, any query parameter that is not a control is read as an equality filter on that column. The controls are fixed, and anything with an unrecognised shape is dropped rather than passed through — so a typo cannot turn into a live predicate:',
+          text: 'On the v1 surface, any query parameter that is not a control is read as an equality filter on that column. The controls are fixed, and anything with an unrecognised shape is dropped rather than passed through, so a typo cannot turn into a live predicate:',
         },
         {
           kind: 'table',
           columns: ['Control', 'Effect'],
           rows: [
             ['limit, offset, page, cursor', 'Pagination. Limit defaults to 50 and caps at 1,000.'],
-            ['sort, order', 'Ordering — `?sort=createdAt&order=desc`. On v2 this is `?order=createdAt.desc` instead.'],
+            ['sort, order', 'Ordering: `?sort=createdAt&order=desc`. On v2 this is `?order=createdAt.desc` instead.'],
             ['select', 'Column projection.'],
             ['include', 'Related rows, followed from real foreign keys.'],
             ['include_deleted', 'Soft-deleted rows are hidden by default. Only `include_deleted=true` lifts that.'],
@@ -90,7 +90,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'note',
-          text: 'An unauthenticated request against an RLS-protected table returns an empty result set, not a 403. That is correct behaviour — the policy filters rows rather than rejecting the caller — but it means a missing `X-User-Token` looks exactly like "no data yet". If a list is unexpectedly empty, check the header before you check the data.',
+          text: 'An unauthenticated request against an RLS-protected table returns an empty result set, not a 403. That is correct behaviour (the policy filters rows rather than rejecting the caller), but it means a missing `X-User-Token` looks exactly like "no data yet". If a list is unexpectedly empty, check the header before you check the data.',
         },
       ],
     },
@@ -121,7 +121,7 @@ await backend.projects.list({ include: ['tasks'] })`,
         },
         {
           kind: 'p',
-          text: 'Relations are resolved from real foreign keys in your schema, never guessed from the string you pass, and every related load runs under the same user context as a direct query — a row you cannot read directly is not readable through an include either. Two ceilings apply: includes nest two levels deep, and a single relation loads at most 1,000 related rows per request, so a has-many on a large child table cannot quietly become an export.',
+          text: 'Relations are resolved from real foreign keys in your schema, never guessed from the string you pass, and every related load runs under the same user context as a direct query: a row you cannot read directly is not readable through an include either. Two ceilings apply: includes nest two levels deep, and a single relation loads at most 1,000 related rows per request, so a has-many on a large child table cannot quietly become an export.',
         },
         {
           kind: 'p',
@@ -147,7 +147,7 @@ const unsub = backend.realtime.subscribe('tasks', (event) => {
         },
         {
           kind: 'p',
-          text: 'There are CDN bundles at `backenly.com/backenly-sdk.js` and `backenly-sdk.esm.js`. Use them only for a plain HTML page with no build step — a CDN URL cannot be typechecked, lockfiled, or bundled, and it breaks under SSR.',
+          text: 'There are CDN bundles at `backenly.com/backenly-sdk.js` and `backenly-sdk.esm.js`. Use them only for a plain HTML page with no build step. A CDN URL cannot be typechecked, lockfiled, or bundled, and it breaks under SSR.',
         },
       ],
     },
@@ -156,7 +156,7 @@ const unsub = backend.realtime.subscribe('tasks', (event) => {
       blocks: [
         {
           kind: 'p',
-          text: 'Row types written by hand go stale on the next migration, silently. Generate them from the live catalog instead — from your agent with `generate_types`, or from the CLI:',
+          text: 'Row types written by hand go stale on the next migration, silently. Generate them from the live catalog instead, from your agent with `generate_types` or from the CLI:',
         },
         {
           kind: 'code',
@@ -185,7 +185,7 @@ npx @backenly/cli diff          # exits 1 when committed types drift from the li
         },
         {
           kind: 'p',
-          text: 'If you are not using the SDK, note that `EventSource` cannot send headers, so the credential has to travel in the URL. Request a short-lived single-use ticket rather than putting a JWT there — the ticket is valid for 30 seconds and one connection, so what lands in access logs is already spent:',
+          text: 'If you are not using the SDK, note that `EventSource` cannot send headers, so the credential has to travel in the URL. Request a short-lived single-use ticket rather than putting a JWT there. The ticket is valid for 30 seconds and one connection, so what lands in access logs is already spent:',
         },
         {
           kind: 'code',
@@ -205,7 +205,7 @@ GET  /api/v1/{projectId}/realtime/subscribe?table=tasks&ticket=<ticket>
         },
         {
           kind: 'note',
-          text: 'Realtime carries row change events. It is not a token stream — if you are showing progress for a slow job, make the job status a column and subscribe to changes on that row.',
+          text: 'Realtime carries row change events. It is not a token stream. If you are showing progress for a slow job, make the job status a column and subscribe to changes on that row.',
         },
       ],
     },
@@ -215,9 +215,9 @@ GET  /api/v1/{projectId}/realtime/subscribe?table=tasks&ticket=<ticket>
         {
           kind: 'list',
           items: [
-            '`/db/users` — that table holds password hashes and is reached only through `/auth/*`. A project whose only table is `users` correctly reports zero exposed resources.',
-            '`/search`, `/bulk`, and deeper nested paths — shapes PostgREST cannot model. They 404 rather than quietly degrading into something with different semantics.',
-            '`rpc()` — Backenly exposes no SQL functions by design. Custom logic runs as a function attached to an event, a schedule, or an HTTP endpoint.',
+            '`/db/users`: that table holds password hashes and is reached only through `/auth/*`. A project whose only table is `users` correctly reports zero exposed resources.',
+            '`/search`, `/bulk`, and deeper nested paths, shapes PostgREST cannot model. They 404 rather than quietly degrading into something with different semantics.',
+            '`rpc()`: Backenly exposes no SQL functions by design. Custom logic runs as a function attached to an event, a schedule, or an HTTP endpoint.',
           ],
         },
         {
@@ -231,7 +231,7 @@ GET  /api/v1/{projectId}/realtime/subscribe?table=tasks&ticket=<ticket>
           you: [
             'Send `X-User-Token` when a request should run as an end-user.',
             'Regenerate types after a schema change, or let `diff` fail your build.',
-            'Keep your project API key out of untrusted clients — use the public anon key in browsers.',
+            'Keep your project API key out of untrusted clients. Use the public anon key in browsers.',
             'Choose a grammar per call site and stay consistent within a codebase.',
           ],
         },
@@ -242,7 +242,7 @@ GET  /api/v1/{projectId}/realtime/subscribe?table=tasks&ticket=<ticket>
       blocks: [
         {
           kind: 'p',
-          text: 'A frontend written against supabase-js keeps working. `@backenly/sdk/supabase` is a compatibility entry point built directly on the v2 surface, so it emits PostgREST rather than translating to a narrower dialect — which means `.or()`, `select(\'*, author(*)\')` embeds, `.overlaps()`, `upsert(values, { onConflict })`, and `count: \'exact\'` all behave. Every operation resolves `{ data, error }` and never throws, and `channel().on(\'postgres_changes\', …)` maps onto Backenly realtime.',
+          text: 'A frontend written against supabase-js keeps working. `@backenly/sdk/supabase` is a compatibility entry point built directly on the v2 surface, so it emits PostgREST rather than translating to a narrower dialect, which means `.or()`, `select(\'*, author(*)\')` embeds, `.overlaps()`, `upsert(values, { onConflict })`, and `count: \'exact\'` all behave. Every operation resolves `{ data, error }` and never throws, and `channel().on(\'postgres_changes\', …)` maps onto Backenly realtime.',
         },
         {
           kind: 'p',
