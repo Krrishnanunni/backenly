@@ -11,7 +11,6 @@ import {
   RestApiDiagram,
   StorageDiagram,
 } from '@/components/landing/CapabilityDiagrams'
-import { AutonomyFilm } from '@/components/site/AutonomyFilm'
 import { ArrowLink, ButtonLink, HorizonClose, JsonLd, Page, PageHero, Section, withCode } from '@/components/site/kit'
 import { Reveal } from '@/components/site/Reveal'
 import { ScrollSpy } from '@/components/site/ScrollSpy'
@@ -205,11 +204,6 @@ function AtlasSection({ group, first }: { group: AtlasGroup; first: boolean }) {
         {group.visual === 'connect' && (
           <div className="mt-12">
             <ConnectTabs />
-          </div>
-        )}
-        {group.visual === 'autonomy' && (
-          <div className="mt-12">
-            <AutonomyFilm />
           </div>
         )}
       </Reveal>

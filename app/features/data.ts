@@ -359,7 +359,6 @@ export type AtlasVisual =
   | 'storage'
   | 'realtime'
   | 'functions'
-  | 'autonomy'
 
 export type AtlasGroup = {
   id: string
@@ -486,7 +485,6 @@ export const ATLAS: AtlasGroup[] = [
     id: 'autonomy',
     title: 'Autonomy and operations',
     lede: 'A resident loop checks every project every minute, fixes what is safe to fix, verifies the fix, and leaves you a receipt.',
-    visual: 'autonomy',
     deepDive: { slug: 'deployment-ready-backends', label: 'Operations and autonomy in depth' },
     items: [
       { icon: Timer, name: 'Every minute, every plan', body: 'The same loop on Free as on Enterprise, never metered.' },

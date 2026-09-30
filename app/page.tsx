@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import { ArrowRight, BookOpen, Calendar, GitBranch, Plug, Plus, ShieldCheck, Terminal, Users } from 'lucide-react'
 import { Icon } from '@iconify/react'
-import { AutonomyFilm } from '@/components/site/AutonomyFilm'
 import {
   AuthDiagram,
   DatabaseDiagram,
@@ -37,11 +36,12 @@ import { useUserSession } from '@/lib/hooks/useUserSession'
 
      Hero            what it is, and the real product on film
      Agent strip     it plugs into the agent you already use
-     Change path     THE centrepiece: one change, planned, gated, applied,
-                     verified, recorded (components/landing/ChangePath)
+     Change path     THE centrepiece: one day and night on production, with
+                     a key, a receipt and three time-keyed explanations
+                     (components/landing/ChangePath). It also carries what
+                     the separate autonomy section used to, which is gone.
      Primitives      what you get, as a bento with one lead cell
      Connect         how you point your agent at it, per host
-     Autonomy        what happens when nobody is at the keyboard
      FAQ             the trust questions, answered plainly
      Closing         one ask
 
@@ -129,7 +129,6 @@ export default function LandingPage() {
         <ChangeSection />
         <PrimitivesSection />
         <ConnectSection />
-        <AutonomySection />
         <FaqSection />
         <ClosingSection />
       </main>
@@ -299,8 +298,8 @@ function ChangeSection() {
       <div className={CONTAINER}>
         <Reveal>
           <SectionHead
-            title="Your agent builds it by day. Backenly keeps it healthy by night."
-            body="Every change your agent makes is planned, verified, and reversible, and anything destructive waits for you. When something degrades at 3am, Backenly fixes it, proves the fix, and tells you in the morning."
+            title="Every change tested and reversible, even at 3am"
+            body="One day on production. Your agent ships a feature and asks for something risky, then at 3am, with nobody online, Backenly fixes a slow query on its own."
           />
         </Reveal>
         <Reveal className="mt-[48px] md:mt-[64px]">
@@ -563,73 +562,6 @@ function ConnectSection() {
         </Reveal>
         <Reveal delay={0.08} className="lg:pt-2">
           <ConnectTabs />
-        </Reveal>
-      </div>
-    </section>
-  )
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Autonomy
-
-   The one centred section before the close, and the one place the ground
-   changes: a night band, because the claim is about what happens at 03:00.
-   The instrument is drawn, not filmed (components/site/AutonomyFilm), so it
-   cannot go stale behind the product.
-───────────────────────────────────────────────────────────── */
-
-const autonomyFacts = [
-  {
-    figure: 'Every minute',
-    body: 'The loop checks every project on every plan, Free included.',
-  },
-  {
-    figure: 'No model calls',
-    body: 'Healing is deterministic, so it never spends your AI credits.',
-  },
-  {
-    figure: 'Snapshot first',
-    body: 'Only reversible fixes apply on their own. Anything risky becomes a proposal for you.',
-  },
-]
-
-function AutonomySection() {
-  return (
-    // The band's lit top edge is a boundary of its own, so it needs clear
-    // ground above it: margin, then the section's usual top padding inside.
-    <section className={`${SECTION} mt-[88px] overflow-hidden md:mt-[144px]`}>
-      {/* Night: a deep violet dusk falling from the top edge. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[900px] bg-[radial-gradient(60%_60%_at_50%_0%,rgba(76,29,149,0.28),rgba(8,9,10,0))]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,transparent,rgba(196,181,253,0.35),transparent)]"
-      />
-
-      <div className={`${CONTAINER} relative`}>
-        <Reveal className="mx-auto max-w-[760px] text-center">
-          <h2 className={`text-[34px] text-white [text-wrap:balance] md:text-[56px] ${TITLE}`}>
-            It fixes problems while you sleep
-          </h2>
-          <p className={`mx-auto mt-5 max-w-[56ch] text-[17px] text-zinc-400 [text-wrap:pretty] md:text-[18px] ${LEDE}`}>
-            A resident loop watches every project: detect, fix safely, verify, and write down
-            what it did. No prompt, no session, nobody at the keyboard.
-          </p>
-        </Reveal>
-
-        <Reveal delay={0.06} className="mx-auto mt-[48px] w-full max-w-[1040px] md:mt-[64px]">
-          <AutonomyFilm />
-        </Reveal>
-
-        <Reveal className="mx-auto mt-[56px] grid max-w-[1040px] gap-px overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.07] md:grid-cols-3">
-          {autonomyFacts.map((fact) => (
-            <div key={fact.figure} className="bg-[#0a0b0d] p-6 md:p-8">
-              <p className="text-[24px] font-semibold tracking-[-0.03em] text-white md:text-[28px]">{fact.figure}</p>
-              <p className="mt-2 text-[15px] leading-[1.65] text-zinc-400">{fact.body}</p>
-            </div>
-          ))}
         </Reveal>
       </div>
     </section>

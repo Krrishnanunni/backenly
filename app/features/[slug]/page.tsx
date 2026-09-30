@@ -5,7 +5,7 @@ import { safeJsonLd } from '@/lib/security/safe-jsonld'
 import { SiteShell } from '@/components/site/SiteShell'
 import { CodeBlock } from '@/components/site/CodeBlock'
 import { AuthDiagram, DatabaseDiagram, RestApiDiagram } from '@/components/landing/CapabilityDiagrams'
-import { AutonomyFilm } from '@/components/site/AutonomyFilm'
+import { ChangePath } from '@/components/landing/ChangePath'
 import {
   ButtonLink,
   Facts,
@@ -147,9 +147,9 @@ export default async function FeatureSlugPage(props: { params: Promise<{ slug: s
         </Section>
 
         {isOperationsPage && (
-          <Section aria-label="The autonomy loop at work">
-            <Reveal className="mx-auto w-full max-w-[1040px]">
-              <AutonomyFilm />
+          <Section aria-label="One day and night on production">
+            <Reveal>
+              <ChangePath />
             </Reveal>
           </Section>
         )}
