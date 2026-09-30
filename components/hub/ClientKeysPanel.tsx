@@ -224,11 +224,11 @@ export function ClientKeysPanel() {
           <table className="w-full min-w-[760px] text-left">
             <thead>
               <tr className="border-b border-white/[0.06] text-[12px] text-zinc-500">
-                <th scope="col" className="h-[38px] px-4 font-medium">Name</th>
-                <th scope="col" className="h-[38px] px-4 font-medium">Key</th>
-                <th scope="col" className="h-[38px] px-4 font-medium">Rate limit</th>
-                <th scope="col" className="h-[38px] px-4 font-medium">Created</th>
-                <th scope="col" className="h-[38px] px-4 font-medium">Last used</th>
+                <th scope="col" className="h-[38px] whitespace-nowrap px-4 font-medium">Name</th>
+                <th scope="col" className="h-[38px] whitespace-nowrap px-4 font-medium">Key</th>
+                <th scope="col" className="h-[38px] whitespace-nowrap px-4 font-medium">Rate limit</th>
+                <th scope="col" className="h-[38px] whitespace-nowrap px-4 font-medium">Created</th>
+                <th scope="col" className="h-[38px] whitespace-nowrap px-4 font-medium">Last used</th>
                 <th scope="col" className="h-[38px] w-[56px] px-4 font-medium"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
