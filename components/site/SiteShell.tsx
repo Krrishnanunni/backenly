@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { registerSiteIcons } from '@/lib/icons/registry'
 import { BrandMark } from '@/components/site/BrandMark'
+import { LaunchBar } from '@/components/site/LaunchBar'
 import { SmoothScroll } from '@/components/site/SmoothScroll'
 import { useUserSession } from '@/lib/hooks/useUserSession'
 
@@ -39,8 +40,8 @@ export const ROUTES = {
    * Product Hunt.
    *
    * INTERIM AND DELIBERATE: this is Product Hunt's own home page, not a
-   * Backenly page. Founder's call, so the hero launch chip has somewhere
-   * valid to point while Backenly's upcoming page does not exist yet.
+   * Backenly page. Founder's call, so the launch bar above the navbar has
+   * somewhere valid to point while Backenly's upcoming page does not exist yet.
    * It is not a defect and does not block a release.
    *
    * Swap for Backenly's coming-soon URL once it exists
@@ -75,10 +76,15 @@ export const ROUTES = {
  */
 const SHOW_DISCORD = true
 
+/**
+ * One switch for the Product Hunt launch bar above the navbar (see
+ * components/site/LaunchBar.tsx). Flip to false to pull it from every
+ * marketing page at once.
+ */
+const SHOW_LAUNCH_BAR = true
+
 const NAV_LINKS = [
-  // The product page, not an anchor on the landing page: /features is the full
-  // catalog, and `activePath: '/'` used to light "Product" on the home page.
-  { label: 'Product', href: ROUTES.features, activePath: ROUTES.features },
+  { label: 'Product', href: '/#capabilities', activePath: '/' },
   { label: 'Resources', href: ROUTES.resources, activePath: ROUTES.resources },
   { label: 'Use cases', href: ROUTES.useCases, activePath: ROUTES.useCases },
   { label: 'Pricing', href: ROUTES.pricing, activePath: ROUTES.pricing },
@@ -137,6 +143,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           >
             Skip to content
           </a>
+          {SHOW_LAUNCH_BAR && <LaunchBar href={ROUTES.productHunt} />}
           <NavBar />
           {children}
           <SiteFooter />
