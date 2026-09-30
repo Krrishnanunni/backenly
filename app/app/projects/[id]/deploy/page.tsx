@@ -234,7 +234,7 @@ export default function PublishPage() {
 
   if (!project) {
     return (
-      <div className="min-h-screen bg-[#101116] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0c0d0f] flex items-center justify-center">
         <p className="text-zinc-500 text-[13px]">Project not found</p>
       </div>
     )
@@ -285,7 +285,7 @@ export default function PublishPage() {
   })()
 
   return (
-    <div className="min-h-screen bg-[#101116] flex flex-col">
+    <div className="min-h-screen bg-[#0c0d0f] flex flex-col">
       <InspectorPageHeader
         icon={Rocket}
         title="Publish"
@@ -323,7 +323,7 @@ export default function PublishPage() {
             {isLive && latestPublishedVersion && (
               <>
                 <span className="w-px h-3 bg-white/[0.08]" />
-                <span className="font-mono text-[12px] font-semibold text-zinc-300 tabular-nums">v{latestPublishedVersion.version}</span>
+                <span className="text-[12px] font-semibold text-zinc-300 tabular-nums">v{latestPublishedVersion.version}</span>
                 {project.deployedAt && (
                   <span className="text-[12px] text-zinc-500">deployed {formatTimeAgo(project.deployedAt)}</span>
                 )}
@@ -357,7 +357,7 @@ export default function PublishPage() {
         {isLive && hasRealBackend && (
           <>
             {/* Inline production counts — one dense mono rail. */}
-            <div className="mb-4 rounded-xl border border-white/[0.07] bg-[#16171d] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)]">
+            <div className="mb-4 rounded-xl border border-white/[0.07] bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)]">
               <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-white/[0.06]">
                 {[
                   { value: tableCount, label: 'tables live' },
@@ -366,8 +366,8 @@ export default function PublishPage() {
                   { value: publishedVersions.length, label: 'versions' },
                 ].map(({ value, label }) => (
                   <div key={label} className="flex items-baseline gap-2 px-4 py-3">
-                    <span className="font-mono text-[16px] font-medium tabular-nums leading-none text-white">{value}</span>
-                    <span className="text-[11px] text-zinc-500 leading-none">{label}</span>
+                    <span className="text-[16px] font-medium tabular-nums leading-none text-white">{value}</span>
+                    <span className="text-[12px] text-zinc-500 leading-none">{label}</span>
                   </div>
                 ))}
               </div>
@@ -405,26 +405,26 @@ export default function PublishPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <a
                     href={`/app/projects/${projectId}/connect`}
-                    className="flex items-center gap-3 px-4 py-3.5 bg-[#16171d] border border-white/[0.07] hover:border-white/[0.14] rounded-xl transition-colors group shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)]"
+                    className="flex items-center gap-3 px-4 py-3.5 bg-[#0f1012] border border-white/[0.07] hover:border-white/[0.14] rounded-xl transition-colors group shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)]"
                   >
                     <Code2 className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
                     <div className="min-w-0">
                       <p className="text-[12.5px] font-medium text-zinc-100">Connect your agent</p>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">MCP, keys, and direct database access</p>
+                      <p className="text-[12px] text-zinc-500 mt-0.5">MCP, keys, and direct database access</p>
                     </div>
                     <ArrowRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300 ml-auto flex-shrink-0 transition-all group-hover:translate-x-0.5" />
                   </a>
                   <button
                     onClick={handlePublish}
                     disabled={publishing}
-                    className="flex items-center gap-3 px-4 py-3.5 bg-[#16171d] border border-white/[0.07] hover:border-white/[0.14] rounded-xl transition-colors group disabled:opacity-40 disabled:cursor-not-allowed text-left shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)]"
+                    className="flex items-center gap-3 px-4 py-3.5 bg-[#0f1012] border border-white/[0.07] hover:border-white/[0.14] rounded-xl transition-colors group disabled:opacity-40 disabled:cursor-not-allowed text-left shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)]"
                   >
                     {publishing
                       ? <Loader2 className="w-3.5 h-3.5 text-violet-300 animate-spin flex-shrink-0" />
                       : <Rocket className="w-3.5 h-3.5 text-violet-300 flex-shrink-0" />}
                     <div className="min-w-0">
                       <p className="text-[12.5px] font-medium text-zinc-100">{publishing ? 'Publishing…' : 'Publish update'}</p>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">Push latest changes to production</p>
+                      <p className="text-[12px] text-zinc-500 mt-0.5">Push latest changes to production</p>
                     </div>
                   </button>
                 </div>
@@ -434,7 +434,7 @@ export default function PublishPage() {
                   <KitCard>
                     <KitCardHeader
                       title="Version history"
-                      actions={<span className="font-mono text-[11px] text-zinc-500 tabular-nums">{publishedVersions.length}</span>}
+                      actions={<span className="text-[12px] text-zinc-500 tabular-nums">{publishedVersions.length}</span>}
                     />
                     {/* A version is "active" only while its snapshot still equals
                         the live graph (see app/api/projects/[id]/rollback). Every
@@ -458,20 +458,20 @@ export default function PublishPage() {
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className={KIT.gridHead}>
-                          <th className="w-16 border-b border-white/[0.06] px-4 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                          <th className="w-16 border-b border-white/[0.06] px-4 py-2 text-left text-[12px] font-medium text-zinc-500">
                             Ver
                           </th>
-                          <th className="border-b border-white/[0.06] px-3 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                          <th className="border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500">
                             Change
                           </th>
                           {/* Both columns are sized for their widest real
                               content and set nowrap: at w-40/w-28 the date and
                               the Roll back label each broke onto two lines and
                               made the row twice as tall as it needed to be. */}
-                          <th className="w-44 whitespace-nowrap border-b border-white/[0.06] px-3 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                          <th className="w-44 whitespace-nowrap border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500">
                             Published
                           </th>
-                          <th className="w-36 whitespace-nowrap border-b border-white/[0.06] px-4 py-2 text-right text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                          <th className="w-36 whitespace-nowrap border-b border-white/[0.06] px-4 py-2 text-right text-[12px] font-medium text-zinc-500">
                             State
                           </th>
                         </tr>
@@ -483,7 +483,7 @@ export default function PublishPage() {
                             <tr key={version.id} className={`group/row transition-colors ${KIT.rowHoverOn}`}>
                               <td className="border-b border-white/[0.04] px-4 py-2.5">
                                 <span
-                                  className={`font-mono text-[11.5px] font-medium tabular-nums ${
+                                  className={`text-[12.5px] font-medium tabular-nums ${
                                     version.isActive ? 'text-violet-300' : 'text-zinc-500'
                                   }`}
                                 >
@@ -493,7 +493,7 @@ export default function PublishPage() {
                               <td className="border-b border-white/[0.04] px-3 py-2.5">
                                 <span className="text-[12.5px] text-zinc-200">{version.changeSummary}</span>
                               </td>
-                              <td className="whitespace-nowrap border-b border-white/[0.04] px-3 py-2.5 font-mono text-[10.5px] tabular-nums text-zinc-600">
+                              <td className="whitespace-nowrap border-b border-white/[0.04] px-3 py-2.5 text-[12px] tabular-nums text-zinc-600">
                                 {formatDate(version.publishedAt)}
                                 <span className="text-zinc-700"> · {formatTimeAgo(version.publishedAt)}</span>
                               </td>
@@ -512,7 +512,7 @@ export default function PublishPage() {
                                     {isRollingBack ? 'Rolling back…' : 'Roll back'}
                                   </KitButton>
                                 ) : (
-                                  <span className="font-mono text-[10.5px] text-zinc-700">archived</span>
+                                  <span className="font-mono text-[12px] text-zinc-700">archived</span>
                                 )}
                               </td>
                             </tr>
@@ -543,7 +543,7 @@ export default function PublishPage() {
                         <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${active ? 'text-zinc-400' : 'text-zinc-700'}`} />
                         <div className="flex-1 min-w-0">
                           <p className={`text-[12px] font-medium ${active ? 'text-zinc-200' : 'text-zinc-500'}`}>{label}</p>
-                          <p className="font-mono text-[10.5px] text-zinc-600 tabular-nums">{sub}</p>
+                          <p className="text-[12px] text-zinc-600 tabular-nums">{sub}</p>
                         </div>
                         {active && <Check className="w-3 h-3 text-emerald-400/70 flex-shrink-0" />}
                       </div>
@@ -559,14 +559,14 @@ export default function PublishPage() {
                         <SectionLabel>Runtime readiness</SectionLabel>
                       </div>
                       {blockingChecks.length === 0 ? (
-                        <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-emerald-300/90">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-emerald-300/90">
                           <span className="h-[5px] w-[5px] rounded-full bg-emerald-400" />
                           ready
                         </span>
                       ) : (
                         <a
                           href="/app"
-                          className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-amber-500 hover:text-amber-400"
+                          className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-amber-500 hover:text-amber-400"
                           title="A few things to clear. Open the dashboard"
                         >
                           <span className="h-[5px] w-[5px] rounded-full bg-amber-400" />
@@ -628,25 +628,25 @@ export default function PublishPage() {
                 {tableCount > 0 && (
                   <div className="flex items-center gap-1.5">
                     <Database className="w-3 h-3 text-zinc-600" />
-                    <span className="font-mono text-[11px] text-zinc-400 tabular-nums">{tableCount} tables</span>
+                    <span className="text-[12px] text-zinc-400 tabular-nums">{tableCount} tables</span>
                   </div>
                 )}
                 {endpointCount > 0 && (
                   <div className="flex items-center gap-1.5">
                     <Code2 className="w-3 h-3 text-zinc-600" />
-                    <span className="font-mono text-[11px] text-zinc-400 tabular-nums">{endpointCount} endpoints</span>
+                    <span className="text-[12px] text-zinc-400 tabular-nums">{endpointCount} endpoints</span>
                   </div>
                 )}
                 {hasAuth && (
                   <div className="flex items-center gap-1.5">
                     <Shield className="w-3 h-3 text-zinc-600" />
-                    <span className="font-mono text-[11px] text-zinc-400">auth</span>
+                    <span className="font-mono text-[12px] text-zinc-400">auth</span>
                   </div>
                 )}
                 {hasStorage && (
                   <div className="flex items-center gap-1.5">
                     <HardDrive className="w-3 h-3 text-zinc-600" />
-                    <span className="font-mono text-[11px] text-zinc-400">storage</span>
+                    <span className="font-mono text-[12px] text-zinc-400">storage</span>
                   </div>
                 )}
               </div>
@@ -660,12 +660,12 @@ export default function PublishPage() {
                     <SectionLabel>Pre-publish readiness</SectionLabel>
                   </div>
                   {blockingChecks.length === 0 ? (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-emerald-300/90">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-emerald-300/90">
                       <span className="h-[5px] w-[5px] rounded-full bg-emerald-400" />
                       cleared
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-amber-500">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-amber-500">
                       <span className="h-[5px] w-[5px] rounded-full bg-amber-400" />
                       {blockingChecks.length} to clear
                     </span>
@@ -710,13 +710,13 @@ export default function PublishPage() {
                           buried in a title attribute nobody hovers.
                         */}
                         {check.status !== 'pass' && check.message && (
-                          <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-500">{check.message}</p>
+                          <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-500">{check.message}</p>
                         )}
                       </div>
                     </div>
                   ))}
                   {hiddenCheckCount > 0 && (
-                    <p className="pt-0.5 text-[11.5px] text-zinc-600">
+                    <p className="pt-0.5 text-[12.5px] text-zinc-600">
                       +{hiddenCheckCount} more passing {hiddenCheckCount === 1 ? 'check' : 'checks'}
                     </p>
                   )}

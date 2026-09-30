@@ -152,7 +152,7 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
         )}
 
         {/* ── Enums ─────────────────────────────────────────────── */}
-        <h3 className="mt-6 text-[11px] font-medium uppercase tracking-wide text-zinc-500">Enums</h3>
+        <h3 className="mt-6 text-[12px] font-medium text-zinc-500">Enums</h3>
         {enums.length === 0 ? (
           <p className="mt-2 text-[12.5px] text-zinc-500">
             No enum types in this project yet.
@@ -166,7 +166,7 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
                     <p className="font-mono text-[12px] text-zinc-200">{t.name}</p>
                     <p className="mt-1 flex flex-wrap gap-1.5">
                       {t.values.map(v => (
-                        <span key={v} className="rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[11px] text-zinc-300">
+                        <span key={v} className="rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[12px] text-zinc-300">
                           {v}
                         </span>
                       ))}
@@ -194,7 +194,7 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
         )}
 
         {/* ── Domains ───────────────────────────────────────────── */}
-        <h3 className="mt-6 text-[11px] font-medium uppercase tracking-wide text-zinc-500">Domains</h3>
+        <h3 className="mt-6 text-[12px] font-medium text-zinc-500">Domains</h3>
         {domains.length === 0 ? (
           <p className="mt-2 text-[12.5px] text-zinc-500">No domains in this project yet.</p>
         ) : (
@@ -205,11 +205,11 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="font-mono text-[12px] text-zinc-200">
                       {d.name}
-                      <span className="ml-2 text-[11px] text-zinc-500">{d.baseType}</span>
+                      <span className="ml-2 text-[12px] text-zinc-500">{d.baseType}</span>
                       {d.notNull && <KitBadge tone="attention" className="ml-2">not null</KitBadge>}
                     </p>
                     {d.constraints.length > 0 && (
-                      <p className="mt-1 font-mono text-[11px] leading-snug text-zinc-500">
+                      <p className="mt-1 font-mono text-[12px] leading-snug text-zinc-500">
                         {d.constraints.join(' ')}
                       </p>
                     )}
@@ -230,7 +230,7 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
           </div>
         )}
 
-        <p className="mt-6 text-[11.5px] leading-relaxed text-zinc-500">
+        <p className="mt-6 text-[12.5px] leading-relaxed text-zinc-500">
           There is no &ldquo;remove value&rdquo; for an enum. PostgreSQL has no{' '}
           <span className="font-mono">ALTER TYPE &hellip; DROP VALUE</span> at any version;
           removing one means creating a replacement type, converting every column that uses it
@@ -299,10 +299,10 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
 /** The dependents of a type, which is what makes a change safe or not. */
 function UsedBy({ usedBy }: { usedBy: string[] }) {
   if (usedBy.length === 0) {
-    return <p className="mt-1.5 text-[11px] text-zinc-600">Not used by any column.</p>
+    return <p className="mt-1.5 text-[12px] text-zinc-600">Not used by any column.</p>
   }
   return (
-    <p className="mt-1.5 text-[11px] text-zinc-500">
+    <p className="mt-1.5 text-[12px] text-zinc-500">
       Used by <span className="font-mono text-zinc-400">{usedBy.join(', ')}</span>
     </p>
   )
@@ -348,7 +348,7 @@ function EnumForm({
             onChange={e => setRaw(e.target.value)}
             rows={6}
             placeholder={'draft\npublished\narchived'}
-            className="w-full rounded-md border border-white/10 bg-[#0f1015] px-3 py-2 font-mono text-[12px] text-zinc-50 placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
+            className="w-full rounded-md border border-white/10 bg-[#08090a] px-3 py-2 font-mono text-[12px] text-zinc-50 placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
           />
         </KitField>
       </div>
@@ -437,7 +437,7 @@ function DomainForm({
           <select
             value={baseType}
             onChange={e => setBaseType(e.target.value)}
-            className="h-8 w-full rounded-md border border-white/10 bg-[#0f1015] px-2 text-[12.5px] text-zinc-50 focus:border-violet-400/40 focus:outline-none"
+            className="h-8 w-full rounded-md border border-white/10 bg-[#08090a] px-2 text-[12.5px] text-zinc-50 focus:border-violet-400/40 focus:outline-none"
           >
             {baseTypes.map(t => <option key={t} value={t}>{t}</option>)}
           </select>

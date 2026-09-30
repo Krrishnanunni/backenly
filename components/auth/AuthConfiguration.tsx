@@ -115,14 +115,14 @@ function CopyValue({ value, mono = true }: { value: string; mono?: boolean }) {
     } catch { /* clipboard unavailable */ }
   }
   return (
-    <div className="flex items-center gap-2 bg-[#0f1015] border border-white/[0.07] rounded-lg pl-3 pr-1.5 py-1.5 min-w-0">
+    <div className="flex items-center gap-2 bg-[#08090a] border border-white/[0.07] rounded-lg pl-3 pr-1.5 py-1.5 min-w-0">
       <span className={`flex-1 min-w-0 truncate text-[12px] text-zinc-300 ${mono ? 'font-mono' : ''}`}>
         {value}
       </span>
       <button
         onClick={copy}
         title="Copy"
-        className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+        className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[12px] font-medium transition-colors ${
           copied
             ? 'text-emerald-300 bg-emerald-500/[0.10]'
             : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06]'
@@ -354,38 +354,38 @@ export function AuthConfiguration() {
 
       {/* Identity metrics — one dense rail of mono counters, matching the
           workspace home inventory rail. */}
-      <div className="mb-4 rounded-xl border border-white/[0.07] bg-[#16171d] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] overflow-hidden">
+      <div className="mb-4 rounded-xl border border-white/[0.07] bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] overflow-hidden">
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-white/[0.06]">
           <div className="flex items-baseline gap-2 px-3 sm:px-4 py-3">
-            <span className="font-mono text-[16px] font-medium tabular-nums leading-none text-white">
+            <span className="text-[16px] font-medium tabular-nums leading-none text-white">
               {statsLoading ? '—' : (stats?.totalUsers ?? 0).toLocaleString()}
             </span>
-            <span className="text-[11px] text-zinc-500 leading-none">identities</span>
+            <span className="text-[12px] text-zinc-500 leading-none">identities</span>
           </div>
           <div className="flex items-baseline gap-2 px-3 sm:px-4 py-3 border-l sm:border-l-0 border-white/[0.06]">
-            <span className="font-mono text-[16px] font-medium tabular-nums leading-none text-white">
+            <span className="text-[16px] font-medium tabular-nums leading-none text-white">
               {statsLoading ? '—' : (stats?.activeUsers ?? 0).toLocaleString()}
             </span>
-            <span className="text-[11px] text-zinc-500 leading-none">active · 30d</span>
+            <span className="text-[12px] text-zinc-500 leading-none">active · 30d</span>
             {!statsLoading && stats?.activeUsersDelta ? (
-              <span className={`font-mono text-[10.5px] font-medium tabular-nums leading-none ${stats.activeUsersDelta > 0 ? 'text-emerald-300/90' : 'text-rose-300'}`}>
+              <span className={`text-[12px] font-medium tabular-nums leading-none ${stats.activeUsersDelta > 0 ? 'text-emerald-300/90' : 'text-rose-300'}`}>
                 {stats.activeUsersDelta > 0 ? '+' : ''}{stats.activeUsersDelta}%
               </span>
             ) : null}
           </div>
           <div className="flex items-baseline gap-2 px-3 sm:px-4 py-3">
-            <span className="font-mono text-[16px] font-medium tabular-nums leading-none text-white">
+            <span className="text-[16px] font-medium tabular-nums leading-none text-white">
               {statsLoading ? '—' : (stats?.verifications ?? 0).toLocaleString()}
             </span>
-            <span className="text-[11px] text-zinc-500 leading-none">verified</span>
+            <span className="text-[12px] text-zinc-500 leading-none">verified</span>
           </div>
           <div className="flex items-baseline gap-2 px-3 sm:px-4 py-3 border-l sm:border-l-0 border-white/[0.06]">
-            <span className="font-mono text-[16px] font-medium tabular-nums leading-none text-white">
+            <span className="text-[16px] font-medium tabular-nums leading-none text-white">
               {statsLoading ? '—' : (stats?.signups24h ?? 0).toLocaleString()}
             </span>
-            <span className="text-[11px] text-zinc-500 leading-none">new · 24h</span>
+            <span className="text-[12px] text-zinc-500 leading-none">new · 24h</span>
             {!statsLoading && stats?.signupsDelta ? (
-              <span className={`font-mono text-[10.5px] font-medium tabular-nums leading-none ${stats.signupsDelta > 0 ? 'text-emerald-300/90' : 'text-rose-300'}`}>
+              <span className={`text-[12px] font-medium tabular-nums leading-none ${stats.signupsDelta > 0 ? 'text-emerald-300/90' : 'text-rose-300'}`}>
                 {stats.signupsDelta > 0 ? '+' : ''}{stats.signupsDelta}%
               </span>
             ) : null}
@@ -408,7 +408,7 @@ export function AuthConfiguration() {
                 <Mail className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <h4 className="text-[12.5px] font-medium text-zinc-200">Email &amp; password</h4>
-                  <p className="text-[11.5px] text-zinc-500 mt-0.5">Secure registration and login with JWT sessions.</p>
+                  <p className="text-[12.5px] text-zinc-500 mt-0.5">Secure registration and login with JWT sessions.</p>
                 </div>
                 {/* "active" only once auth is genuinely on: the agent enabled it,
                     OAuthConfig/policy configured, or real end-users exist. A bare
@@ -426,7 +426,7 @@ export function AuthConfiguration() {
             <div className="px-4 py-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
                 <SectionLabel>Social sign-in</SectionLabel>
-                <span className="text-[11px] text-zinc-600">Your own OAuth credentials, stored encrypted per project</span>
+                <span className="text-[12px] text-zinc-600">Your own OAuth credentials, stored encrypted per project</span>
               </div>
               <div className="grid gap-2">
                 {(['google', 'github'] as ProviderId[]).map((pid) => {
@@ -443,22 +443,22 @@ export function AuthConfiguration() {
                           : 'bg-white/[0.015] border-white/[0.07] hover:border-white/[0.14] hover:bg-white/[0.025]'
                       }`}
                     >
-                      <div className="w-8 h-8 rounded-lg border bg-[#0f1015] border-white/[0.07] flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 rounded-lg border bg-[#08090a] border-white/[0.07] flex items-center justify-center flex-shrink-0">
                         <Mark className={meta.markClass} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="text-[12.5px] font-medium text-zinc-200">{meta.name}</h4>
-                        <p className="text-[11.5px] text-zinc-500 mt-0.5">{meta.tagline}</p>
+                        <p className="text-[12.5px] text-zinc-500 mt-0.5">{meta.tagline}</p>
                       </div>
                       {enabled ? (
                         <span className="flex items-center gap-2.5">
                           <KitBadge tone="operational">connected</KitBadge>
-                          <span className="hidden group-hover:inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400">
+                          <span className="hidden group-hover:inline-flex items-center gap-1 text-[12px] font-medium text-zinc-400">
                             <Settings2 className="w-3 h-3" /> Manage
                           </span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-zinc-500 group-hover:text-zinc-200 transition-colors">
+                        <span className="inline-flex items-center gap-1 text-[12.5px] font-medium text-zinc-500 group-hover:text-zinc-200 transition-colors">
                           Set up <ArrowRight className="w-3 h-3" />
                         </span>
                       )}
@@ -508,12 +508,12 @@ export function AuthConfiguration() {
                 <div className="divide-y divide-white/[0.04]">
                   {recent.map((u) => (
                     <div key={u.id} className="flex items-center gap-3 px-4 py-[11px]">
-                      <div className={`w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0 text-[11px] font-semibold uppercase ${AVATAR_TONE}`}>
+                      <div className={`w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0 text-[12px] font-semibold uppercase ${AVATAR_TONE}`}>
                         {(u.email || '?').slice(0, 1)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[12.5px] font-medium text-zinc-200 truncate">{u.email}</p>
-                        <p className="font-mono text-[10.5px] text-zinc-600 mt-0.5 truncate tabular-nums">
+                        <p className="text-[12px] text-zinc-600 mt-0.5 truncate tabular-nums">
                           {(u.provider || 'email').toLowerCase()} · {timeAgo(u.createdAt)}
                         </p>
                       </div>
@@ -522,7 +522,7 @@ export function AuthConfiguration() {
                 </div>
                 <button
                   onClick={() => currentProjectId && router.push(`/app/projects/${currentProjectId}/auth?tab=users`)}
-                  className="group w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-t border-white/[0.06] text-[11.5px] font-medium text-zinc-500 hover:text-zinc-200 transition-colors focus:outline-none"
+                  className="group w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-t border-white/[0.06] text-[12.5px] font-medium text-zinc-500 hover:text-zinc-200 transition-colors focus:outline-none"
                 >
                   Manage all users
                   <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
@@ -555,10 +555,10 @@ export function AuthConfiguration() {
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.96, opacity: 0, y: 4 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-[#16171d] border border-white/[0.12] rounded-xl max-w-lg w-full shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] overflow-hidden"
+                className="bg-[#0f1012] border border-white/[0.12] rounded-xl max-w-lg w-full shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] overflow-hidden"
               >
                 <div className="px-6 pt-5 pb-4 border-b border-white/[0.06] flex items-center gap-3.5">
-                  <div className="w-9 h-9 rounded-lg bg-[#0f1015] border border-white/[0.08] flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-lg bg-[#08090a] border border-white/[0.08] flex items-center justify-center">
                     <Mark className="w-[18px] h-[18px]" />
                   </div>
                   <div className="min-w-0">
@@ -572,7 +572,7 @@ export function AuthConfiguration() {
                 <div className="px-6 py-5 space-y-5">
                   {/* Step 1 */}
                   <div className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.10] text-zinc-400 text-[11px] font-semibold flex items-center justify-center flex-shrink-0 mt-px">1</span>
+                    <span className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.10] text-zinc-400 text-[12px] font-semibold flex items-center justify-center flex-shrink-0 mt-px">1</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] text-zinc-200 font-medium">
                         Create an OAuth client in{' '}
@@ -586,7 +586,7 @@ export function AuthConfiguration() {
                   {/* Step 2 — the redirect URI is where most OAuth setups fail;
                       hand it over ready to paste. */}
                   <div className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.10] text-zinc-400 text-[11px] font-semibold flex items-center justify-center flex-shrink-0 mt-px">2</span>
+                    <span className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.10] text-zinc-400 text-[12px] font-semibold flex items-center justify-center flex-shrink-0 mt-px">2</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] text-zinc-200 font-medium mb-2">Add this authorized redirect URI</p>
                       <CopyValue value={callbackUrl(provider)} />
@@ -595,7 +595,7 @@ export function AuthConfiguration() {
 
                   {/* Step 3 */}
                   <div className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.10] text-zinc-400 text-[11px] font-semibold flex items-center justify-center flex-shrink-0 mt-px">3</span>
+                    <span className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.10] text-zinc-400 text-[12px] font-semibold flex items-center justify-center flex-shrink-0 mt-px">3</span>
                     <div className="min-w-0 flex-1 space-y-4">
                       <p className="text-[13px] text-zinc-200 font-medium">Paste the credentials {meta.name} gives you</p>
                       <KitField label="Client ID">
@@ -621,7 +621,7 @@ export function AuthConfiguration() {
                 </div>
 
                 <div className="px-6 py-4 border-t border-white/[0.06] flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-[11.5px] text-zinc-500">
+                  <span className="inline-flex items-center gap-1.5 text-[12.5px] text-zinc-500">
                     <KeyRound className="w-3 h-3" /> Encrypted at rest
                   </span>
                   <div className="flex gap-2">

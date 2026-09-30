@@ -71,21 +71,21 @@ export function AuthWorkbench({ projectId }: { projectId: string }) {
       {/* ── Command bar ───────────────────────────────────── */}
       <div className="flex h-11 flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-4">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-zinc-500">
             <Shield className="h-3 w-3" />
             Inspector
           </span>
           <span className="h-3 w-px bg-white/10" />
           <h1 className="text-[13px] font-semibold text-zinc-100">Auth &amp; Users</h1>
-          <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-zinc-400">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-zinc-400">
             <span className="h-[5px] w-[5px] rounded-full bg-zinc-500" />
             Governed
           </span>
           {users.length > 0 && (
-            <span className="font-mono text-[10.5px] tabular-nums text-zinc-500">{users.length}</span>
+            <span className="text-[12px] tabular-nums text-zinc-500">{users.length}</span>
           )}
         </div>
-        <span className="hidden flex-shrink-0 font-mono text-[10.5px] tabular-nums text-zinc-600 sm:inline">
+        <span className="hidden flex-shrink-0 text-[12px] tabular-nums text-zinc-600 sm:inline">
           {loading ? '—' : users.length} identit{users.length === 1 ? 'y' : 'ies'}
         </span>
       </div>
@@ -111,7 +111,7 @@ export function AuthWorkbench({ projectId }: { projectId: string }) {
             {label}
             {typeof count === 'number' && count > 0 && (
               <span
-                className={`font-mono text-[10.5px] font-medium tabular-nums ${
+                className={`text-[12px] font-medium tabular-nums ${
                   tab === key ? 'text-violet-300' : 'text-zinc-600'
                 }`}
               >
@@ -190,7 +190,7 @@ function UsersGrid({
         <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">
           <div className="flex min-w-0 items-baseline gap-2">
             <h2 className="truncate font-mono text-[13px] font-medium text-zinc-100">users</h2>
-            <span className="whitespace-nowrap font-mono text-[11px] tabular-nums text-zinc-500">
+            <span className="whitespace-nowrap text-[12px] tabular-nums text-zinc-500">
               {filtered.length.toLocaleString()} identit{filtered.length === 1 ? 'y' : 'ies'}
             </span>
           </div>
@@ -201,7 +201,7 @@ function UsersGrid({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search…"
-                className="h-7 w-32 sm:w-56 rounded-lg border border-white/[0.07] bg-[#0f1015] pl-7 pr-3 text-[11.5px] text-zinc-300 transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
+                className="h-7 w-32 sm:w-56 rounded-lg border border-white/[0.07] bg-[#08090a] pl-7 pr-3 text-[12.5px] text-zinc-300 transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
               />
             </div>
             <button
@@ -244,13 +244,13 @@ function UsersGrid({
               <table className="w-full min-w-[500px] border-collapse">
                 <thead className="sticky top-0 z-10">
                   <tr className={KIT.gridHead}>
-                    <th className={`sticky left-0 z-20 w-12 border-b border-r border-white/[0.06] ${KIT.gridHead} px-2 py-2 text-right text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-700`}>
+                    <th className={`sticky left-0 z-20 w-12 border-b border-r border-white/[0.06] ${KIT.gridHead} px-2 py-2 text-right text-[12px] font-semibold text-zinc-700`}>
                       #
                     </th>
                     {['Email', 'Provider', 'Signed up', 'Last active'].map((h) => (
                       <th
                         key={h}
-                        className="border-b border-white/[0.06] px-3 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600"
+                        className="border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500"
                       >
                         {h}
                       </th>
@@ -267,8 +267,8 @@ function UsersGrid({
                         className={`group/row cursor-pointer transition-colors ${isActive ? 'bg-white/[0.05]' : KIT.rowHoverOn}`}
                       >
                         <td
-                          className={`sticky left-0 z-10 border-b border-r border-white/[0.04] px-2 py-[9px] text-right font-mono text-[11px] tabular-nums text-zinc-700 transition-colors ${
-                            isActive ? 'bg-[#1a1b21]' : `${KIT.bg} ${KIT.rowHoverGroup}`
+                          className={`sticky left-0 z-10 border-b border-r border-white/[0.04] px-2 py-[9px] text-right text-[12px] tabular-nums text-zinc-700 transition-colors ${
+                            isActive ? 'bg-[#141518]' : `${KIT.bg} ${KIT.rowHoverGroup}`
                           }`}
                         >
                           {i + 1}
@@ -278,13 +278,13 @@ function UsersGrid({
                             {u.email}
                           </span>
                         </td>
-                        <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] text-zinc-500">
+                        <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] text-zinc-500">
                           {u.provider}
                         </td>
-                        <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] tabular-nums text-zinc-500">
+                        <td className="border-b border-white/[0.04] px-3 py-[9px] text-[12px] tabular-nums text-zinc-500">
                           {formatDate(u.createdAt)}
                         </td>
-                        <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] tabular-nums text-zinc-600">
+                        <td className="border-b border-white/[0.04] px-3 py-[9px] text-[12px] tabular-nums text-zinc-600">
                           {u.lastLogin ? formatDate(u.lastLogin) : '—'}
                         </td>
                       </tr>
@@ -298,7 +298,7 @@ function UsersGrid({
 
         {/* Footer */}
         <div className="flex h-10 flex-shrink-0 items-center gap-4 border-t border-white/[0.06] px-4">
-          <span className="font-mono text-[10.5px] tabular-nums text-zinc-600">
+          <span className="text-[12px] tabular-nums text-zinc-600">
             {filtered.length === 0 ? '0 identities' : `1-${filtered.length} of ${filtered.length}`}
             {query.trim() && users.length !== filtered.length && (
               <span className="text-zinc-700"> · filtered from {users.length}</span>
@@ -325,7 +325,7 @@ function UsersGrid({
             </div>
 
             <div className="flex h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Identity Details</span>
+              <span className="text-[12px] font-medium text-zinc-500">Identity Details</span>
               <button
                 onClick={() => setSelectedId(null)}
                 className="rounded-md p-1.5 text-zinc-600 transition-colors hover:bg-white/[0.04] hover:text-zinc-200"
@@ -346,19 +346,19 @@ function UsersGrid({
                   ['Last active', selected.lastLogin ? new Date(selected.lastLogin).toLocaleString() : '—'],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-baseline justify-between gap-3 px-3 py-2.5">
-                    <dt className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                    <dt className="flex-shrink-0 text-[12px] font-medium text-zinc-500">
                       {label}
                     </dt>
-                    <dd className="min-w-0 truncate text-right font-mono text-[11.5px] tabular-nums text-zinc-300" title={value}>
+                    <dd className="min-w-0 truncate text-right text-[12.5px] tabular-nums text-zinc-300" title={value}>
                       {value}
                     </dd>
                   </div>
                 ))}
               </dl>
               <div className="border-t border-white/[0.06] p-3">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">User ID</p>
+                <p className="mb-1.5 text-[12px] font-medium text-zinc-500">User ID</p>
                 <div className="flex items-center gap-1.5">
-                  <code className="min-w-0 flex-1 truncate rounded-md border border-white/[0.06] bg-[#0f1015] px-2 py-1.5 font-mono text-[10.5px] text-zinc-400">
+                  <code className="min-w-0 flex-1 truncate rounded-md border border-white/[0.06] bg-[#08090a] px-2 py-1.5 font-mono text-[12px] text-zinc-400">
                     {selected.id}
                   </code>
                   <button
@@ -369,7 +369,7 @@ function UsersGrid({
                     {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                 </div>
-                <p className="mt-1.5 text-[11px] leading-snug text-zinc-600">
+                <p className="mt-1.5 text-[12px] leading-snug text-zinc-600">
                   Use this in RLS policies and as the foreign key from your own tables.
                 </p>
               </div>

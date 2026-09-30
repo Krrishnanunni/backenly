@@ -221,7 +221,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2.5">
               <h1 className="text-2xl sm:text-[1.75rem] font-semibold tracking-tight text-white">Projects</h1>
               {projects.length > 0 && (
-                <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 font-mono text-[11px] tabular-nums text-zinc-400">
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[12px] tabular-nums text-zinc-400">
                   {projects.length}
                 </span>
               )}
@@ -239,7 +239,7 @@ export default function DashboardPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search project"
-                className="h-9 w-full rounded-lg border border-white/[0.07] bg-[#16171d] pl-9 pr-8 text-[16px] sm:text-[13px] text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 ring-1 ring-white/[0.05] sm:ring-0 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
+                className="h-9 w-full rounded-lg border border-white/[0.07] bg-[#0f1012] pl-9 pr-8 text-[16px] sm:text-[13px] text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 ring-1 ring-white/[0.05] sm:ring-0 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
               />
               {searchQuery && (
                 <button
@@ -273,7 +273,7 @@ export default function DashboardPage() {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="flex min-h-[160px] sm:min-h-[176px] flex-col rounded-xl border border-white/[0.07] bg-[#16171d] p-4 animate-pulse"
+                  className="flex min-h-[160px] sm:min-h-[176px] flex-col rounded-xl border border-white/[0.07] bg-[#0f1012] p-4 animate-pulse"
                 >
                   <div className="flex items-start gap-3">
                     <div className="h-10 w-10 shrink-0 rounded-lg bg-white/[0.05]" />
@@ -410,7 +410,7 @@ export default function DashboardPage() {
         busy={deleteBusy}
       >
         {deleteError && (
-          <p className="text-[11.5px] leading-5 text-rose-300">{deleteError}</p>
+          <p className="text-[12.5px] leading-5 text-rose-300">{deleteError}</p>
         )}
       </KitConfirmDialog>
 
@@ -431,7 +431,7 @@ export default function DashboardPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="relative w-full sm:max-w-md overflow-hidden rounded-t-2xl sm:rounded-xl border-t sm:border border-white/[0.07] bg-[#16171d] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] pb-safe sm:pb-0"
+              className="relative w-full sm:max-w-md overflow-hidden rounded-t-2xl sm:rounded-xl border-t sm:border border-white/[0.07] bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] pb-safe sm:pb-0"
             >
               {/* Mobile drag handle */}
               <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
@@ -441,7 +441,7 @@ export default function DashboardPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-[13px] font-semibold text-zinc-100">Project limit reached</h3>
-                    <p className="mt-1 text-[11.5px] text-zinc-500">Upgrade to create more backends.</p>
+                    <p className="mt-1 text-[12.5px] text-zinc-500">Upgrade to create more backends.</p>
                   </div>
                   <button
                     type="button"
@@ -512,7 +512,7 @@ function NewProjectModal({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: '100%', opacity: 0 }}
         transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border-t sm:border border-white/[0.07] bg-[#16171d] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] pb-safe sm:pb-0"
+        className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border-t sm:border border-white/[0.07] bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] pb-safe sm:pb-0"
       >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-300/40 to-transparent" />
         {/* Mobile drag handle */}
@@ -533,7 +533,7 @@ function NewProjectModal({
 
         <div className="space-y-4 p-5">
           <div>
-            <label className="mb-1.5 block text-[11px] font-medium tracking-tight text-zinc-400">Project name</label>
+            <label className="mb-1.5 block text-[12px] font-medium tracking-tight text-zinc-400">Project name</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -541,17 +541,17 @@ function NewProjectModal({
               autoFocus
               maxLength={100}
               onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onCreate(name.trim()) }}
-              className="h-10 sm:h-9 w-full rounded-lg border border-white/[0.07] bg-[#0f1015] px-3 text-[16px] sm:text-[13px] text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
+              className="h-10 sm:h-9 w-full rounded-lg border border-white/[0.07] bg-[#08090a] px-3 text-[16px] sm:text-[13px] text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
             />
           </div>
-          <p className="text-[11.5px] leading-5 text-zinc-500">
+          <p className="text-[12.5px] leading-5 text-zinc-500">
             Then wire your coding agent on the project&apos;s Connect page. Describe
             the backend in Claude Code or Cursor and it lands here.
           </p>
 
           {/* Honest region: one AWS region, no fake globe/selector */}
-          <div className="flex items-center gap-2 text-[11.5px] text-zinc-500">
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-1 font-mono text-[11px] text-zinc-400">
+          <div className="flex items-center gap-2 text-[12.5px] text-zinc-500">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-1 font-mono text-[12px] text-zinc-400">
               <span className="h-[5px] w-[5px] rounded-full bg-emerald-400" />
               AWS · ap-south-1
             </span>
@@ -559,7 +559,7 @@ function NewProjectModal({
           </div>
 
           {error && (
-            <p className="text-[11.5px] leading-5 text-rose-300">{error}</p>
+            <p className="text-[12.5px] leading-5 text-rose-300">{error}</p>
           )}
         </div>
 
@@ -647,7 +647,7 @@ function ProjectCard({
           onOpen()
         }
       }}
-      className="group relative flex min-h-[160px] sm:min-h-[176px] cursor-pointer flex-col rounded-xl border border-white/[0.07] bg-[#16171d] p-4 text-left shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] outline-none transition-colors hover:border-white/[0.14] focus-visible:border-violet-400/40 focus-visible:ring-2 focus-visible:ring-violet-400/20"
+      className="group relative flex min-h-[160px] sm:min-h-[176px] cursor-pointer flex-col rounded-xl border border-white/[0.07] bg-[#0f1012] p-4 text-left shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] outline-none transition-colors hover:border-white/[0.14] focus-visible:border-violet-400/40 focus-visible:ring-2 focus-visible:ring-violet-400/20"
     >
       {/* Subtle depth gradient — gives 3D lift on mobile where no hover effect exists */}
       <div aria-hidden className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-br from-white/[0.015] to-transparent" />
@@ -678,7 +678,7 @@ function ProjectCard({
           ) : (
             <h3 className="line-clamp-2 text-base font-semibold leading-snug text-white">{project.name}</h3>
           )}
-          <p className="mt-1 truncate font-mono text-[11px] text-zinc-500">
+          <p className="mt-1 truncate font-mono text-[12px] text-zinc-500">
             {project.environment || 'development'} workspace
           </p>
         </div>
@@ -708,7 +708,7 @@ function ProjectCard({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.95 }}
                 transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute right-0 top-full mt-1 z-50 min-w-[140px] overflow-hidden rounded-lg border border-white/[0.10] bg-[#1c1d23] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.9)]"
+                className="absolute right-0 top-full mt-1 z-50 min-w-[140px] overflow-hidden rounded-lg border border-white/[0.10] bg-[#141518] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.9)]"
               >
                 <button
                   type="button"
@@ -740,11 +740,11 @@ function ProjectCard({
       <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
         <div className="inline-flex items-center gap-2">
           <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
-          <span className={`font-mono text-[11px] font-medium ${status.text}`}>{status.label}</span>
+          <span className={`font-mono text-[12px] font-medium ${status.text}`}>{status.label}</span>
         </div>
         <div className="flex min-w-0 items-center gap-2 text-zinc-500">
           {updatedAt && (
-            <span className="inline-flex items-center gap-1 font-mono text-[11px] tabular-nums">
+            <span className="inline-flex items-center gap-1 text-[12px] tabular-nums">
               <Clock className="h-3.5 w-3.5" />
               {timeAgo(updatedAt)}
             </span>

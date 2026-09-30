@@ -1231,18 +1231,18 @@ export default function ProjectDatabasePage() {
           header, so page identity collapses into this single row. */}
       <div className="flex h-11 flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-4">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-zinc-500">
             <DatabaseIcon className="h-3 w-3" />
             Inspector
           </span>
           <span className="h-3 w-px bg-white/10" />
           <h1 className="text-[13px] font-semibold text-zinc-100">Tables</h1>
-          <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-zinc-400">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-zinc-400">
             <span className="h-[5px] w-[5px] rounded-full bg-zinc-500" />
             Managed
           </span>
           {tables.length > 0 && (
-            <span className="font-mono text-[10.5px] tabular-nums text-zinc-500">{tables.length}</span>
+            <span className="text-[12px] tabular-nums text-zinc-500">{tables.length}</span>
           )}
         </div>
 
@@ -1251,7 +1251,7 @@ export default function ProjectDatabasePage() {
           <div className="flex flex-shrink-0 items-center gap-0.5 rounded-lg border border-white/[0.07] bg-white/[0.02] p-0.5">
             <button
               onClick={() => setShowVisualization('tables')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'tables'
                   ? 'bg-white/[0.06] text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -1262,7 +1262,7 @@ export default function ProjectDatabasePage() {
             </button>
             <button
               onClick={() => setShowVisualization('visualization')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'visualization'
                   ? 'bg-white/[0.06] text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -1273,7 +1273,7 @@ export default function ProjectDatabasePage() {
             </button>
             <button
               onClick={() => setShowVisualization('sql')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'sql'
                   ? 'bg-white/[0.06] text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -1284,7 +1284,7 @@ export default function ProjectDatabasePage() {
             </button>
             <button
               onClick={() => setShowVisualization('history')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'history'
                   ? 'bg-white/[0.06] text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -1295,7 +1295,7 @@ export default function ProjectDatabasePage() {
             </button>
             <button
               onClick={() => setShowVisualization('types')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'types'
                   ? 'bg-white/[0.06] text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -1306,7 +1306,7 @@ export default function ProjectDatabasePage() {
             </button>
             <button
               onClick={() => setShowVisualization('extensions')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'extensions'
                   ? 'bg-white/[0.06] text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -1317,7 +1317,7 @@ export default function ProjectDatabasePage() {
             </button>
             <button
               onClick={() => setShowVisualization('snapshots')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                 showVisualization === 'snapshots'
                   ? 'bg-white/[0.06] text-zinc-100'
                   : 'text-zinc-500 hover:text-zinc-300'
@@ -1369,7 +1369,7 @@ export default function ProjectDatabasePage() {
             <div className="flex h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="h-[5px] w-[5px] flex-shrink-0 rounded-full bg-violet-300" />
-                <span className="truncate text-[11.5px] font-medium text-zinc-300">{displayProjectName || 'workspace'}</span>
+                <span className="truncate text-[12.5px] font-medium text-zinc-300">{displayProjectName || 'workspace'}</span>
               </div>
               <div className="flex flex-shrink-0 items-center gap-0.5">
                 <button
@@ -1399,14 +1399,14 @@ export default function ProjectDatabasePage() {
                     placeholder="Search tables…"
                     value={tableFilter}
                     onChange={(e) => setTableFilter(e.target.value)}
-                    className="h-7 w-full rounded-lg border border-white/[0.07] bg-[#0f1015] pl-7 pr-3 text-[11.5px] text-zinc-300 transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
+                    className="h-7 w-full rounded-lg border border-white/[0.07] bg-[#08090a] pl-7 pr-3 text-[12.5px] text-zinc-300 transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
                   />
                 </div>
               </div>
             )}
 
             {error && (
-              <div className="m-2 flex-shrink-0 rounded-md border border-rose-500/15 bg-rose-500/[0.06] p-2.5 text-[11px] leading-4 text-rose-300/90">
+              <div className="m-2 flex-shrink-0 rounded-md border border-rose-500/15 bg-rose-500/[0.06] p-2.5 text-[12px] leading-4 text-rose-300/90">
                 {error}
               </div>
             )}
@@ -1422,12 +1422,12 @@ export default function ProjectDatabasePage() {
                   <DatabaseIcon className="w-4 h-4 text-zinc-600 mx-auto" />
                   <div>
                     <p className="text-[12px] font-semibold text-zinc-200 mb-0.5">No tables yet</p>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed">Connect your coding agent and it builds your schema here.</p>
+                    <p className="text-[12px] text-zinc-500 leading-relaxed">Connect your coding agent and it builds your schema here.</p>
                   </div>
                   <button
                     onClick={checkAndSetupDatabase}
                     disabled={loading || setupSuccess}
-                    className="w-full h-7 px-3 border border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/20 hover:bg-white/[0.08] rounded-lg text-[11.5px] font-medium flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full h-7 px-3 border border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/20 hover:bg-white/[0.08] rounded-lg text-[12.5px] font-medium flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <><Loader2 className="w-3 h-3 animate-spin" /><span>Preparing…</span></>
@@ -1439,7 +1439,7 @@ export default function ProjectDatabasePage() {
                   </button>
                 </div>
               ) : visibleTables.length === 0 ? (
-                <p className="px-4 py-6 text-center text-[11.5px] leading-relaxed text-zinc-600">
+                <p className="px-4 py-6 text-center text-[12.5px] leading-relaxed text-zinc-600">
                   No table matches “{tableFilter}”.
                 </p>
               ) : (
@@ -1467,7 +1467,7 @@ export default function ProjectDatabasePage() {
                       </span>
 
                       {/* Row count — hidden on hover to show delete */}
-                      <span className={`font-mono text-[10.5px] tabular-nums flex-shrink-0 transition-all ${
+                      <span className={`text-[12px] tabular-nums flex-shrink-0 transition-all ${
                         selectedTable === table.name ? 'text-zinc-400' : 'text-zinc-600'
                       } group-hover:opacity-0`}>
                         {table.rows ?? 0}
@@ -1492,7 +1492,7 @@ export default function ProjectDatabasePage() {
             </div>
 
             {tables.length > 0 && (
-              <div className="flex h-7 flex-shrink-0 items-center border-t border-white/[0.06] px-3 font-mono text-[10.5px] tabular-nums text-zinc-600">
+              <div className="flex h-7 flex-shrink-0 items-center border-t border-white/[0.06] px-3 text-[12px] tabular-nums text-zinc-600">
                 {tableFilter.trim()
                   ? `${visibleTables.length} of ${tables.length}`
                   : `${tables.length} table${tables.length === 1 ? '' : 's'}`}
@@ -1529,7 +1529,7 @@ export default function ProjectDatabasePage() {
                   <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">
                     <div className="flex items-baseline gap-2 min-w-0">
                       <h2 className="text-[12.5px] font-semibold text-zinc-100">Schema graph</h2>
-                      <span className="truncate font-mono text-[11px] text-zinc-500">{selectedSchema}</span>
+                      <span className="truncate font-mono text-[12px] text-zinc-500">{selectedSchema}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -1564,14 +1564,14 @@ export default function ProjectDatabasePage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <button
                         onClick={() => setSelectedTable(null)}
-                        className="md:hidden inline-flex items-center gap-1 text-[11.5px] text-zinc-400 hover:text-zinc-100 mr-1 p-1 -ml-1 rounded hover:bg-white/[0.05] transition-colors"
+                        className="md:hidden inline-flex items-center gap-1 text-[12.5px] text-zinc-400 hover:text-zinc-100 mr-1 p-1 -ml-1 rounded hover:bg-white/[0.05] transition-colors"
                         aria-label="Back to tables"
                       >
                         <ChevronLeft className="w-3.5 h-3.5" />
-                        <span className="font-sans text-[11px]">Tables</span>
+                        <span className="font-sans text-[12px]">Tables</span>
                       </button>
                       <h2 className="truncate font-mono text-[13px] font-medium text-zinc-100">{selectedTable}</h2>
-                      <span className="hidden sm:inline whitespace-nowrap font-mono text-[11px] text-zinc-500 tabular-nums">
+                      <span className="hidden sm:inline whitespace-nowrap text-[12px] text-zinc-500 tabular-nums">
                         {totalRows.toLocaleString()} row{totalRows === 1 ? '' : 's'}
                       </span>
                     </div>
@@ -1580,7 +1580,7 @@ export default function ProjectDatabasePage() {
                       <div className="flex items-center gap-0.5 rounded-lg border border-white/[0.07] bg-white/[0.02] p-0.5">
                         <button
                           onClick={() => setViewMode('data')}
-                          className={`rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+                          className={`rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                             viewMode === 'data'
                               ? 'bg-white/[0.06] text-zinc-100'
                               : 'text-zinc-500 hover:text-zinc-300'
@@ -1590,7 +1590,7 @@ export default function ProjectDatabasePage() {
                         </button>
                         <button
                           onClick={() => setViewMode('structure')}
-                          className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors focus:outline-none ${
+                          className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors focus:outline-none ${
                             viewMode === 'structure'
                               ? 'bg-white/[0.06] text-zinc-100'
                               : 'text-zinc-500 hover:text-zinc-300'
@@ -1604,7 +1604,7 @@ export default function ProjectDatabasePage() {
                       {viewMode === 'data' && (
                         <button
                           onClick={handleAddRow}
-                          className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[11.5px] font-semibold text-black transition-colors hover:bg-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-400/50"
+                          className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12.5px] font-semibold text-black transition-colors hover:bg-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-400/50"
                         >
                           <Plus className="w-3 h-3" />
                           Insert row
@@ -1631,14 +1631,14 @@ export default function ProjectDatabasePage() {
                           placeholder="Search rows…"
                           value={searchTerm}
                           onChange={e => setSearchTerm(e.target.value)}
-                          className="w-full h-7 pl-7 pr-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-[11.5px] text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                          className="w-full h-7 pl-7 pr-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-[12.5px] text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                         />
                       </div>
                       {sortColumn && (
                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-white/[0.07] bg-white/[0.02]">
                           <ArrowUpDown className="w-3 h-3 text-zinc-500" />
-                          <span className="font-mono text-[10.5px] text-zinc-300">{sortColumn}</span>
-                          <span className="font-mono text-[10px] text-zinc-600">{sortDirection}</span>
+                          <span className="font-mono text-[12px] text-zinc-300">{sortColumn}</span>
+                          <span className="font-mono text-[12px] text-zinc-600">{sortDirection}</span>
                           <button onClick={() => setSortColumn(null)} className="text-zinc-600 hover:text-zinc-300 ml-0.5">
                             <X className="w-3 h-3" />
                           </button>
@@ -1647,7 +1647,7 @@ export default function ProjectDatabasePage() {
                       {filterColumn && (
                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-white/[0.07] bg-white/[0.02]">
                           <Filter className="w-3 h-3 text-zinc-500" />
-                          <span className="font-mono text-[10.5px] text-zinc-300">{filterColumn}</span>
+                          <span className="font-mono text-[12px] text-zinc-300">{filterColumn}</span>
                           <button onClick={() => { setFilterColumn(null); setFilterValue('') }} className="text-zinc-600 hover:text-zinc-300 ml-0.5">
                             <X className="w-3 h-3" />
                           </button>
@@ -1709,7 +1709,7 @@ export default function ProjectDatabasePage() {
                             <tr>
                               {/* Row-number gutter — pins left so the row you are
                                   reading stays identifiable when scrolled wide. */}
-                              <th className={`sticky left-0 z-30 w-[52px] border-b border-r border-white/[0.06] ${KIT.gridHead} px-3 py-2.5 text-right text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600`}>
+                              <th className={`sticky left-0 z-30 w-[52px] border-b border-r border-white/[0.06] ${KIT.gridHead} px-3 py-2.5 text-right text-[12px] font-medium text-zinc-500`}>
                                 #
                               </th>
                               {columns.map((col) => {
@@ -1722,12 +1722,12 @@ export default function ProjectDatabasePage() {
                                     title={isSorted ? (sortDirection === 'asc' ? 'Sorted ascending. Click for descending' : 'Sorted descending. Click to clear') : 'Click to sort'}
                                   >
                                     <div className="flex items-center gap-1.5">
-                                      <span className={`text-[9.5px] font-semibold uppercase tracking-[0.1em] ${isSorted ? 'text-zinc-200' : 'text-zinc-500'}`}>{col.name}</span>
+                                      <span className={`text-[12px] font-semibold ${isSorted ? 'text-zinc-200' : 'text-zinc-500'}`}>{col.name}</span>
                                       {col.primary && (
-                                        <span className="font-mono text-[9px] font-semibold uppercase text-amber-500/80">pk</span>
+                                        <span className="font-mono text-[12px] font-semibold uppercase text-amber-500/80">pk</span>
                                       )}
                                       {col.foreign && (
-                                        <span className="font-mono text-[9px] font-semibold uppercase text-violet-300/80">fk</span>
+                                        <span className="font-mono text-[12px] font-semibold uppercase text-violet-300/80">fk</span>
                                       )}
                                       {isSorted ? (
                                         sortDirection === 'asc'
@@ -1737,7 +1737,7 @@ export default function ProjectDatabasePage() {
                                         <ArrowUpDown className="w-3 h-3 text-zinc-700 opacity-0 group-hover/th:opacity-100 transition-opacity" />
                                       )}
                                     </div>
-                                    <div className="font-mono text-[9.5px] text-zinc-700 mt-0.5">{col.type}</div>
+                                    <div className="font-mono text-[12px] text-zinc-700 mt-0.5">{col.type}</div>
                                   </th>
                                 )
                               })}
@@ -1750,7 +1750,7 @@ export default function ProjectDatabasePage() {
                                 className={`group/row cursor-pointer transition-colors ${KIT.rowHoverOn}`}
                                 onClick={() => openRowEditor(row)}
                               >
-                                <td className={`sticky left-0 z-10 border-b border-r border-white/[0.04] ${KIT.bg} px-3 py-[9px] text-right font-mono text-[11px] tabular-nums text-zinc-700 transition-colors ${KIT.rowHoverGroup} group-hover/row:text-zinc-500`}>
+                                <td className={`sticky left-0 z-10 border-b border-r border-white/[0.04] ${KIT.bg} px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-700 transition-colors ${KIT.rowHoverGroup} group-hover/row:text-zinc-500`}>
                                   {(currentPage - 1) * PAGE_SIZE + idx + 1}
                                 </td>
                                 {columns.map((col) => {
@@ -1786,7 +1786,7 @@ export default function ProjectDatabasePage() {
                     {/* Pagination footer — only when there is at least one row */}
                     {totalRows > 0 && (
                       <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] px-4">
-                        <span className="font-mono text-[11px] text-zinc-500 tabular-nums">
+                        <span className="text-[12px] text-zinc-500 tabular-nums">
                           {`${((currentPage - 1) * PAGE_SIZE) + 1}–${Math.min(currentPage * PAGE_SIZE, totalRows)} of ${totalRows.toLocaleString()}`}
                           {committedSearch && <span className="ml-1.5 text-zinc-600">· filtered by “{committedSearch}”</span>}
                         </span>
@@ -1795,18 +1795,18 @@ export default function ProjectDatabasePage() {
                             <button
                               onClick={() => goToPage(currentPage - 1)}
                               disabled={currentPage <= 1 || loading}
-                              className="inline-flex h-7 items-center gap-1 rounded-md border border-white/[0.07] bg-white/[0.02] pl-1.5 pr-2.5 text-[11.5px] text-zinc-300 hover:bg-white/[0.05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              className="inline-flex h-7 items-center gap-1 rounded-md border border-white/[0.07] bg-white/[0.02] pl-1.5 pr-2.5 text-[12.5px] text-zinc-300 hover:bg-white/[0.05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
                               <ChevronLeft className="w-3.5 h-3.5" />
                               Prev
                             </button>
-                            <span className="px-2 font-mono text-[11px] text-zinc-500 tabular-nums">
+                            <span className="px-2 text-[12px] text-zinc-500 tabular-nums">
                               {currentPage} / {Math.max(1, totalPages)}
                             </span>
                             <button
                               onClick={() => goToPage(currentPage + 1)}
                               disabled={currentPage >= totalPages || loading}
-                              className="inline-flex h-7 items-center gap-1 rounded-md border border-white/[0.07] bg-white/[0.02] pl-2.5 pr-1.5 text-[11.5px] text-zinc-300 hover:bg-white/[0.05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              className="inline-flex h-7 items-center gap-1 rounded-md border border-white/[0.07] bg-white/[0.02] pl-2.5 pr-1.5 text-[12.5px] text-zinc-300 hover:bg-white/[0.05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
                               Next
                               <ChevronRight className="w-3.5 h-3.5" />
@@ -1823,11 +1823,11 @@ export default function ProjectDatabasePage() {
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="flex items-baseline gap-2">
                             <span className="text-[12.5px] font-semibold text-zinc-100">Columns</span>
-                            <span className="font-mono text-[11px] text-zinc-500 tabular-nums">{columns.length}</span>
+                            <span className="text-[12px] text-zinc-500 tabular-nums">{columns.length}</span>
                           </h3>
                           <button
                             onClick={() => setShowAddColumnModal(true)}
-                            className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-[11.5px] font-medium text-zinc-200 transition-colors hover:border-white/20 hover:bg-white/[0.08]"
+                            className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-[12.5px] font-medium text-zinc-200 transition-colors hover:border-white/20 hover:bg-white/[0.08]"
                           >
                             <Plus className="w-3 h-3" />
                             Add column
@@ -1837,12 +1837,12 @@ export default function ProjectDatabasePage() {
                           <table className="w-full">
                             <thead>
                               <tr className="border-b border-white/[0.06]">
-                                <th className="px-4 py-2 text-left text-[9.5px] font-semibold text-zinc-600 uppercase tracking-[0.1em]">Column</th>
-                                <th className="px-4 py-2 text-left text-[9.5px] font-semibold text-zinc-600 uppercase tracking-[0.1em]">Type</th>
-                                <th className="px-4 py-2 text-left text-[9.5px] font-semibold text-zinc-600 uppercase tracking-[0.1em]">Nullable</th>
-                                <th className="px-4 py-2 text-left text-[9.5px] font-semibold text-zinc-600 uppercase tracking-[0.1em]">Default</th>
-                                <th className="px-4 py-2 text-left text-[9.5px] font-semibold text-zinc-600 uppercase tracking-[0.1em]">Constraints</th>
-                                <th className="px-4 py-2 text-right text-[9.5px] font-semibold text-zinc-600 uppercase tracking-[0.1em] w-[88px]">Actions</th>
+                                <th className="px-4 py-2 text-left text-[12px] font-medium text-zinc-500">Column</th>
+                                <th className="px-4 py-2 text-left text-[12px] font-medium text-zinc-500">Type</th>
+                                <th className="px-4 py-2 text-left text-[12px] font-medium text-zinc-500">Nullable</th>
+                                <th className="px-4 py-2 text-left text-[12px] font-medium text-zinc-500">Default</th>
+                                <th className="px-4 py-2 text-left text-[12px] font-medium text-zinc-500">Constraints</th>
+                                <th className="px-4 py-2 text-right text-[12px] font-medium text-zinc-500 w-[88px]">Actions</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-white/[0.04]">
@@ -1866,7 +1866,7 @@ export default function ProjectDatabasePage() {
                                               if (e.key === 'Escape') { setRenamingColumn(null); setRenameColumnNewName('') }
                                             }}
                                             disabled={savingRename}
-                                            className="h-7 px-2 bg-[#0f1015] border border-violet-400/30 focus:border-violet-400/60 rounded-md text-[12px] font-mono text-zinc-50 outline-none w-40"
+                                            className="h-7 px-2 bg-[#08090a] border border-violet-400/30 focus:border-violet-400/60 rounded-md text-[12px] font-mono text-zinc-50 outline-none w-40"
                                           />
                                           <button
                                             onClick={handleRenameColumn}
@@ -1889,29 +1889,29 @@ export default function ProjectDatabasePage() {
                                         <>
                                           <span className="font-mono text-[12px] text-zinc-200">{col.name}</span>
                                           {col.primary && (
-                                            <span className="font-mono text-[9px] font-semibold uppercase text-amber-500/80">pk</span>
+                                            <span className="font-mono text-[12px] font-semibold uppercase text-amber-500/80">pk</span>
                                           )}
                                         </>
                                       )}
                                     </div>
                                   </td>
                                   <td className="px-4 py-2.5">
-                                    <span className={`font-mono text-[11.5px] ${getDataTypeColor(col.type)}`}>
+                                    <span className={`font-mono text-[12.5px] ${getDataTypeColor(col.type)}`}>
                                       {col.type}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2.5">
-                                    <span className={`font-mono text-[11px] ${col.nullable ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                                    <span className={`font-mono text-[12px] ${col.nullable ? 'text-zinc-600' : 'text-zinc-400'}`}>
                                       {col.nullable ? 'nullable' : 'not null'}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2.5">
-                                    <span className="font-mono text-[11px] text-zinc-600">
+                                    <span className="font-mono text-[12px] text-zinc-600">
                                       {col.default || <span className="text-zinc-700">—</span>}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2.5">
-                                    <div className="flex items-center gap-2 font-mono text-[10px] font-medium uppercase">
+                                    <div className="flex items-center gap-2 font-mono text-[12px] font-medium uppercase">
                                       {col.unique && <span className="text-zinc-400">unique</span>}
                                       {col.foreign && <span className="text-violet-300/80">fk</span>}
                                       {col.indexed && <span className="text-sky-300/80">indexed</span>}
@@ -1922,7 +1922,7 @@ export default function ProjectDatabasePage() {
                                   </td>
                                   <td className="px-4 py-2.5 text-right">
                                     {isReservedColumn(col.name) ? (
-                                      <span className="font-mono text-[10px] text-zinc-700" title="Reserved system column. Cannot be renamed or dropped">system</span>
+                                      <span className="font-mono text-[12px] text-zinc-700" title="Reserved system column. Cannot be renamed or dropped">system</span>
                                     ) : (
                                       <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
@@ -1977,11 +1977,11 @@ export default function ProjectDatabasePage() {
           >
             <div className="absolute inset-0 flex flex-col" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-[#16171d]">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-[#0f1012]">
                 <div className="flex items-baseline gap-2">
                   <Network className="w-3.5 h-3.5 text-zinc-500 self-center" />
                   <h2 className="text-[12.5px] font-semibold text-zinc-100">Schema graph</h2>
-                  <p className="font-mono text-[11px] text-zinc-500">{selectedSchema}</p>
+                  <p className="font-mono text-[12px] text-zinc-500">{selectedSchema}</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -2030,7 +2030,7 @@ export default function ProjectDatabasePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ duration: 0.15 }}
-              className="bg-[#16171d] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-lg max-h-[88vh] sm:max-h-[80vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
+              className="bg-[#0f1012] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-lg max-h-[88vh] sm:max-h-[80vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Mobile pull handle */}
@@ -2042,7 +2042,7 @@ export default function ProjectDatabasePage() {
               <div className="flex items-center justify-between px-5 py-3.5 sm:py-4 border-b border-white/[0.06]">
                 <div className="flex items-baseline gap-2">
                   <h2 className="text-[13px] font-semibold text-zinc-50">Insert row</h2>
-                  <p className="font-mono text-[11px] text-zinc-500">{selectedTable}</p>
+                  <p className="font-mono text-[12px] text-zinc-500">{selectedTable}</p>
                 </div>
                 <button
                   onClick={() => setShowAddRowModal(false)}
@@ -2064,9 +2064,9 @@ export default function ProjectDatabasePage() {
                   })
                   .map((col) => (
                     <div key={col.name}>
-                      <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">
+                      <label className="block text-[12px] font-medium text-zinc-400 mb-1.5">
                         <span className="font-mono text-zinc-300">{col.name}</span>
-                        <span className="ml-2 font-mono text-[10px] text-zinc-600">{col.type}</span>
+                        <span className="ml-2 font-mono text-[12px] text-zinc-600">{col.type}</span>
                         {!col.nullable && !col.default && (
                           <span className="ml-1 text-rose-300/70">*</span>
                         )}
@@ -2075,7 +2075,7 @@ export default function ProjectDatabasePage() {
                         <select
                           value={newRowData[col.name] ?? ''}
                           onChange={(e) => setNewRowData((prev) => ({ ...prev, [col.name]: e.target.value }))}
-                          className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                          className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                         >
                           <option value="">-- select --</option>
                           <option value="true">true</option>
@@ -2093,7 +2093,7 @@ export default function ProjectDatabasePage() {
                           placeholder={col.default ? `default: ${col.default}` : col.nullable ? 'null' : ''}
                           value={newRowData[col.name] ?? ''}
                           onChange={(e) => setNewRowData((prev) => ({ ...prev, [col.name]: e.target.value }))}
-                          className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                          className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                         />
                       )}
                     </div>
@@ -2103,7 +2103,7 @@ export default function ProjectDatabasePage() {
               {/* Footer */}
               <div className="px-5 py-4 border-t border-white/[0.06]">
                 {error && (
-                  <p className="mb-3 text-[11.5px] leading-5 text-rose-300">
+                  <p className="mb-3 text-[12.5px] leading-5 text-rose-300">
                     {error}
                   </p>
                 )}
@@ -2144,7 +2144,7 @@ export default function ProjectDatabasePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ duration: 0.15 }}
-              className="bg-[#16171d] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-lg max-h-[88vh] sm:max-h-[82vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
+              className="bg-[#0f1012] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-lg max-h-[88vh] sm:max-h-[82vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Mobile pull handle */}
@@ -2156,7 +2156,7 @@ export default function ProjectDatabasePage() {
               <div className="flex items-center justify-between px-5 py-3.5 sm:py-4 border-b border-white/[0.06]">
                 <div className="flex items-baseline gap-2 min-w-0">
                   <h2 className="text-[13px] font-semibold text-zinc-50">Edit row</h2>
-                  <p className="font-mono text-[11px] text-zinc-500 truncate">
+                  <p className="font-mono text-[12px] text-zinc-500 truncate">
                     {selectedTable}
                     {rowPkValue(editingRow) !== undefined && rowPkValue(editingRow) !== null && (
                       <span className="text-zinc-600"> · id {String(rowPkValue(editingRow))}</span>
@@ -2178,10 +2178,10 @@ export default function ProjectDatabasePage() {
                   const isBool = col.type.toLowerCase().includes('bool')
                   return (
                     <div key={col.name}>
-                      <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">
+                      <label className="block text-[12px] font-medium text-zinc-400 mb-1.5">
                         <span className="font-mono text-zinc-300">{col.name}</span>
-                        <span className="ml-2 font-mono text-[10px] text-zinc-600">{col.type}</span>
-                        {readOnly && <span className="ml-2 font-mono text-[10px] text-zinc-600">read-only</span>}
+                        <span className="ml-2 font-mono text-[12px] text-zinc-600">{col.type}</span>
+                        {readOnly && <span className="ml-2 font-mono text-[12px] text-zinc-600">read-only</span>}
                         {!col.nullable && !col.default && !readOnly && (
                           <span className="ml-1 text-rose-300/70">*</span>
                         )}
@@ -2196,7 +2196,7 @@ export default function ProjectDatabasePage() {
                         <select
                           value={editRowData[col.name] ?? ''}
                           onChange={(e) => setEditRowData((prev) => ({ ...prev, [col.name]: e.target.value }))}
-                          className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                          className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                         >
                           <option value="">-- null --</option>
                           <option value="true">true</option>
@@ -2212,7 +2212,7 @@ export default function ProjectDatabasePage() {
                           placeholder={col.nullable ? 'null' : ''}
                           value={editRowData[col.name] ?? ''}
                           onChange={(e) => setEditRowData((prev) => ({ ...prev, [col.name]: e.target.value }))}
-                          className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                          className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-200 text-[12px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                         />
                       )}
                     </div>
@@ -2220,7 +2220,7 @@ export default function ProjectDatabasePage() {
                 })}
 
                 {error && (
-                  <div className="px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[11px] text-rose-300/90">{error}</div>
+                  <div className="px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[12px] text-rose-300/90">{error}</div>
                 )}
               </div>
 
@@ -2272,7 +2272,7 @@ export default function ProjectDatabasePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ duration: 0.15 }}
-              className="bg-[#16171d] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-md max-h-[88vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
+              className="bg-[#0f1012] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-md max-h-[88vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Mobile pull handle */}
@@ -2283,7 +2283,7 @@ export default function ProjectDatabasePage() {
               <div className="flex items-center justify-between px-5 py-3.5 sm:py-4 border-b border-white/[0.06]">
                 <div className="flex items-baseline gap-2">
                   <h2 className="text-[13px] font-semibold text-zinc-50">Add column</h2>
-                  <p className="font-mono text-[11px] text-zinc-500">{selectedTable}</p>
+                  <p className="font-mono text-[12px] text-zinc-500">{selectedTable}</p>
                 </div>
                 <button
                   onClick={() => !addingColumn && setShowAddColumnModal(false)}
@@ -2295,25 +2295,25 @@ export default function ProjectDatabasePage() {
 
               <div className="p-5 space-y-4">
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-[0.12em] mb-1.5">Name</label>
+                  <label className="block text-[12px] font-medium text-zinc-500 mb-1.5">Name</label>
                   <input
                     autoFocus
                     value={newColumnName}
                     onChange={(e) => setNewColumnName(e.target.value)}
                     placeholder="e.g. email, price, is_active"
                     disabled={addingColumn}
-                    className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-50 text-[12.5px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                    className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-50 text-[12.5px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                   />
-                  <p className="text-[10.5px] text-zinc-600 mt-1.5">Letters, numbers, underscores. Must start with a letter or underscore.</p>
+                  <p className="text-[12px] text-zinc-600 mt-1.5">Letters, numbers, underscores. Must start with a letter or underscore.</p>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-[0.12em] mb-1.5">Type</label>
+                  <label className="block text-[12px] font-medium text-zinc-500 mb-1.5">Type</label>
                   <select
                     value={newColumnType}
                     onChange={(e) => setNewColumnType(e.target.value)}
                     disabled={addingColumn}
-                    className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12.5px] focus:outline-none focus:border-violet-400/40 transition-colors"
+                    className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-200 text-[12.5px] focus:outline-none focus:border-violet-400/40 transition-colors"
                   >
                     <option value="text">text (string)</option>
                     <option value="int">int (whole number)</option>
@@ -2338,7 +2338,7 @@ export default function ProjectDatabasePage() {
                 </label>
 
                 <div className="pt-1 border-t border-white/[0.06]">
-                  <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-[0.12em] mb-2 mt-3">Constraints</label>
+                  <label className="block text-[12px] font-medium text-zinc-500 mb-2 mt-3">Constraints</label>
 
                   <label className="flex items-center gap-2.5 cursor-pointer mb-3">
                     <input
@@ -2352,12 +2352,12 @@ export default function ProjectDatabasePage() {
                   </label>
 
                   <div className="mb-3">
-                    <label className="block text-[11px] text-zinc-400 mb-1.5">References</label>
+                    <label className="block text-[12px] text-zinc-400 mb-1.5">References</label>
                     <select
                       value={newColumnReferences}
                       onChange={(e) => setNewColumnReferences(e.target.value)}
                       disabled={addingColumn}
-                      className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12.5px] focus:outline-none focus:border-violet-400/40 transition-colors"
+                      className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-200 text-[12.5px] focus:outline-none focus:border-violet-400/40 transition-colors"
                     >
                       <option value="">No foreign key</option>
                       {tables
@@ -2366,11 +2366,11 @@ export default function ProjectDatabasePage() {
                           <option key={t.name} value={t.name}>{t.name}</option>
                         ))}
                     </select>
-                    <p className="text-[10.5px] text-zinc-600 mt-1.5">
+                    <p className="text-[12px] text-zinc-600 mt-1.5">
                       Points this column at the target table&apos;s primary key.
                     </p>
                     {newColumnReferences && !isForeignKeyShaped(newColumnName) && (
-                      <p className="text-[10.5px] text-amber-300/80 mt-1.5">
+                      <p className="text-[12px] text-amber-300/80 mt-1.5">
                         A foreign key needs a column named like <span className="font-mono">{suggestForeignKeyColumn(newColumnReferences)}</span>.
                         Rename the column, or the key will be refused.
                       </p>
@@ -2378,30 +2378,30 @@ export default function ProjectDatabasePage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-zinc-400 mb-1.5">Check</label>
+                    <label className="block text-[12px] text-zinc-400 mb-1.5">Check</label>
                     <input
                       value={newColumnCheck}
                       onChange={(e) => setNewColumnCheck(e.target.value)}
                       placeholder="e.g. price &gt; 0"
                       disabled={addingColumn}
-                      className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-50 text-[12.5px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                      className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-50 text-[12.5px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                     />
-                    <p className="text-[10.5px] text-zinc-600 mt-1.5">
+                    <p className="text-[12px] text-zinc-600 mt-1.5">
                       A boolean condition every row must satisfy. Validated server-side.
                     </p>
                   </div>
                 </div>
 
                 {constraintOutcome && (
-                  <div className="px-3 py-2 bg-amber-500/[0.06] border border-amber-500/20 rounded-lg text-[11px] text-amber-200/90 space-y-1">
+                  <div className="px-3 py-2 bg-amber-500/[0.06] border border-amber-500/20 rounded-lg text-[12px] text-amber-200/90 space-y-1">
                     {constraintOutcome.map((line, i) => (
-                      <p key={i} className={i === 0 ? 'font-medium' : 'font-mono text-[10.5px] text-amber-200/70'}>{line}</p>
+                      <p key={i} className={i === 0 ? 'font-medium' : 'font-mono text-[12px] text-amber-200/70'}>{line}</p>
                     ))}
                   </div>
                 )}
 
                 {error && (
-                  <div className="px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[11px] text-rose-300/90">{error}</div>
+                  <div className="px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[12px] text-rose-300/90">{error}</div>
                 )}
               </div>
 
@@ -2446,7 +2446,7 @@ export default function ProjectDatabasePage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.15 }}
-              className="bg-[#16171d] border border-rose-500/25 rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full max-w-md"
+              className="bg-[#0f1012] border border-rose-500/25 rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-5 py-4 border-b border-white/[0.06]">
@@ -2461,7 +2461,7 @@ export default function ProjectDatabasePage() {
                 </div>
               </div>
               {error && (
-                <div className="mx-5 mt-4 px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[11px] text-rose-300/90">{error}</div>
+                <div className="mx-5 mt-4 px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[12px] text-rose-300/90">{error}</div>
               )}
               <div className="flex items-center justify-end gap-2 px-5 py-4">
                 <button
@@ -2500,7 +2500,7 @@ export default function ProjectDatabasePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ duration: 0.15 }}
-              className="bg-[#16171d] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-md max-h-[88vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
+              className="bg-[#0f1012] border-t sm:border border-white/[0.12] rounded-t-2xl sm:rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full sm:max-w-md max-h-[88vh] flex flex-col pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-0"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Mobile pull handle */}
@@ -2520,7 +2520,7 @@ export default function ProjectDatabasePage() {
 
               <div className="p-5 space-y-4">
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-[0.12em] mb-1.5">Name</label>
+                  <label className="block text-[12px] font-medium text-zinc-500 mb-1.5">Name</label>
                   <input
                     autoFocus
                     value={newTableName}
@@ -2528,24 +2528,24 @@ export default function ProjectDatabasePage() {
                     onKeyDown={(e) => { if (e.key === 'Enter') handleCreateTable() }}
                     placeholder="e.g. posts, orders, comments"
                     disabled={creatingTable}
-                    className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-50 text-[12.5px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                    className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-50 text-[12.5px] font-mono placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                   />
-                  <p className="text-[10.5px] text-zinc-600 mt-1.5">Backenly adds id, createdAt and updatedAt automatically, plus REST endpoints with auth and rate limits.</p>
+                  <p className="text-[12px] text-zinc-600 mt-1.5">Backenly adds id, createdAt and updatedAt automatically, plus REST endpoints with auth and rate limits.</p>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-600 uppercase tracking-[0.12em] mb-1.5">Description <span className="normal-case tracking-normal text-zinc-700">(optional)</span></label>
+                  <label className="block text-[12px] font-medium text-zinc-500 mb-1.5">Description <span className="normal-case tracking-normal text-zinc-700">(optional)</span></label>
                   <input
                     value={newTableDescription}
                     onChange={(e) => setNewTableDescription(e.target.value)}
                     placeholder="What this table stores"
                     disabled={creatingTable}
-                    className="w-full h-8 px-3 bg-[#0f1015] border border-white/[0.07] rounded-lg text-zinc-200 text-[12.5px] placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
+                    className="w-full h-8 px-3 bg-[#08090a] border border-white/[0.07] rounded-lg text-zinc-200 text-[12.5px] placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15 transition-colors"
                   />
                 </div>
 
                 {error && (
-                  <div className="px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[11px] text-rose-300/90">{error}</div>
+                  <div className="px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[12px] text-rose-300/90">{error}</div>
                 )}
               </div>
 
@@ -2586,7 +2586,7 @@ export default function ProjectDatabasePage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.15 }}
-              className="bg-[#16171d] border border-rose-500/25 rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full max-w-md"
+              className="bg-[#0f1012] border border-rose-500/25 rounded-xl shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)] w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-5 py-4 border-b border-white/[0.06]">
@@ -2601,7 +2601,7 @@ export default function ProjectDatabasePage() {
                 </div>
               </div>
               {error && (
-                <div className="mx-5 mt-4 px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[11px] text-rose-300/90">{error}</div>
+                <div className="mx-5 mt-4 px-3 py-2 bg-rose-500/[0.06] border border-rose-500/15 rounded-lg text-[12px] text-rose-300/90">{error}</div>
               )}
               <div className="flex items-center justify-end gap-2 px-5 py-4">
                 <button

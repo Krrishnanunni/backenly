@@ -161,7 +161,7 @@ export function DatabaseSnapshots({ projectId }: { projectId: string }) {
                       <td className="px-1 py-2.5 text-zinc-300">
                         {new Date(snapshot.createdAt).toLocaleString()}
                         {snapshot.error && (
-                          <span className="ml-2 text-[11px] text-rose-400/80">{snapshot.error}</span>
+                          <span className="ml-2 text-[12px] text-rose-400/80">{snapshot.error}</span>
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono text-zinc-500">

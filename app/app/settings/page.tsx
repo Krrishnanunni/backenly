@@ -291,7 +291,7 @@ export default function SettingsPage() {
       {/* Toast */}
       {toast && (
         <div className="fixed top-16 right-6 z-50">
-          <div className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 bg-[#1c1d23] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${
+          <div className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 bg-[#141518] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${
             toast.kind === 'success' ? 'border-emerald-500/25' : 'border-rose-500/25'
           }`}>
             {toast.kind === 'success'
@@ -324,7 +324,7 @@ export default function SettingsPage() {
 
         {loading ? (
           <div className="space-y-4 animate-pulse">
-            <div className="h-44 rounded-xl border border-white/[0.07] bg-[#16171d] p-5 space-y-3">
+            <div className="h-44 rounded-xl border border-white/[0.07] bg-[#0f1012] p-5 space-y-3">
               <div className="h-4 w-32 rounded bg-white/[0.06]" />
               <div className="h-8 w-48 rounded bg-white/[0.04]" />
               <div className="h-3 w-64 rounded bg-white/[0.03]" />
@@ -436,8 +436,8 @@ export default function SettingsPage() {
                   <img src={twoFASetup.qrCodeUrl} alt="2FA QR code" className="h-44 w-44" />
                 </div>
                 <div className="mt-4">
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Or enter manually</p>
-                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-[#0f1015] px-3 py-2">
+                  <p className="mb-1.5 text-[12px] font-medium text-zinc-500">Or enter manually</p>
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-[#08090a] px-3 py-2">
                     <code className="flex-1 break-all font-mono text-[12px] text-violet-200/90">{twoFASetup.secret}</code>
                     <button
                       onClick={() => { navigator.clipboard.writeText(twoFASetup.secret); showToast('Secret copied') }}
@@ -456,7 +456,7 @@ export default function SettingsPage() {
                       onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, ''))}
                       placeholder="123456"
                       autoFocus
-                      className="w-full rounded-lg border border-white/[0.07] bg-[#0f1015] px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
+                      className="w-full rounded-lg border border-white/[0.07] bg-[#08090a] px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
                     />
                   </KitField>
                 </div>
@@ -477,7 +477,7 @@ export default function SettingsPage() {
                 <KitNote icon={AlertTriangle} tone="warn">
                   Store these somewhere safe. We won&apos;t show them again.
                 </KitNote>
-                <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-white/[0.07] bg-[#0f1015] p-4">
+                <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-white/[0.07] bg-[#08090a] p-4">
                   {twoFABackupCodes.map((code, i) => (
                     <div key={i} className="rounded-md border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-center font-mono text-[12.5px] text-violet-100/90">
                       {code}
@@ -634,7 +634,7 @@ function SecuritySection({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-zinc-100">{providerLabel(user?.provider)}</p>
-              <p className="mt-0.5 text-[11.5px] text-zinc-500">
+              <p className="mt-0.5 text-[12.5px] text-zinc-500">
                 {isEmailUser ? 'Signed in with email and password' : `Managed by ${providerLabel(user?.provider)}`}
               </p>
             </div>
@@ -661,7 +661,7 @@ function SecuritySection({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-zinc-100">Authenticator app</p>
-              <p className="mt-0.5 text-[11.5px] text-zinc-500">
+              <p className="mt-0.5 text-[12.5px] text-zinc-500">
                 {twoFAOn ? 'A code is required from your authenticator on every sign-in.' : 'Use Google Authenticator, 1Password, Authy or similar.'}
               </p>
             </div>
@@ -681,7 +681,7 @@ function SecuritySection({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium text-zinc-100">Send password reset link</p>
-                <p className="mt-0.5 text-[11.5px] text-zinc-500">We&apos;ll email a secure link to {user?.email}.</p>
+                <p className="mt-0.5 text-[12.5px] text-zinc-500">We&apos;ll email a secure link to {user?.email}.</p>
               </div>
               <KitButton variant="secondary" size="sm" icon={resetLoading ? undefined : Mail} onClick={onPasswordReset} disabled={resetLoading}>
                 {resetLoading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…</> : 'Send link'}
@@ -705,7 +705,7 @@ function SecuritySection({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-zinc-100">This browser</p>
-              <p className="mt-0.5 text-[11.5px] text-zinc-500">Last signed in {fmtRelative(user?.lastLogin)}.</p>
+              <p className="mt-0.5 text-[12.5px] text-zinc-500">Last signed in {fmtRelative(user?.lastLogin)}.</p>
             </div>
             <KitButton variant="secondary" size="sm" icon={LogOut} onClick={onLogout}>Sign out</KitButton>
           </div>
@@ -802,7 +802,7 @@ function NotificationsSection({ onToast }: { onToast: (msg: string, kind?: 'succ
           <p className="text-[12.5px] text-zinc-400">Preferences could not be loaded. Try again in a moment.</p>
         ) : (
           <div className="divide-y divide-white/[0.06]">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 pb-2 text-[10.5px] font-medium uppercase tracking-wide text-zinc-500">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 pb-2 text-[12px] font-medium text-zinc-500">
               <span />
               <span className="w-12 text-center">Email</span>
               <span className="w-12 text-center">In app</span>
@@ -813,7 +813,7 @@ function NotificationsSection({ onToast }: { onToast: (msg: string, kind?: 'succ
                 <div key={pref.type} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 py-3">
                   <div className="min-w-0">
                     <p className="text-[13px] font-medium text-zinc-100">{meta.label}</p>
-                    {meta.description && <p className="mt-0.5 text-[11.5px] text-zinc-500">{meta.description}</p>}
+                    {meta.description && <p className="mt-0.5 text-[12.5px] text-zinc-500">{meta.description}</p>}
                   </div>
                   {(['emailEnabled', 'inAppEnabled'] as const).map(channel => (
                     <label key={channel} className="flex w-12 justify-center">
@@ -908,7 +908,7 @@ function SupportSection({ userEmail }: { userEmail?: string }) {
                         <p className="text-[13px] font-medium text-zinc-100">{c.title}</p>
                         <ArrowUpRight className="h-3.5 w-3.5 text-zinc-600 transition-colors group-hover:text-zinc-300" />
                       </div>
-                      <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-500">{c.cardDesc}</p>
+                      <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-500">{c.cardDesc}</p>
                     </div>
                   </button>
                 )
@@ -990,7 +990,7 @@ function InlineForm({
         </div>
         <p className="mt-4 text-[14px] font-semibold text-white">{successTitle}</p>
         <p className="mt-1.5 max-w-[320px] text-[12.5px] leading-relaxed text-zinc-500">{successMsg}</p>
-        {userEmail && <p className="mt-3 text-[11.5px] text-zinc-600">Reply will be sent to <span className="text-zinc-400">{userEmail}</span></p>}
+        {userEmail && <p className="mt-3 text-[12.5px] text-zinc-600">Reply will be sent to <span className="text-zinc-400">{userEmail}</span></p>}
         <div className="mt-5 flex items-center gap-2">
           <KitButton variant="secondary" size="sm" onClick={() => setSent(false)}>Submit another</KitButton>
           <KitButton variant="ghost" size="sm" onClick={onBack}>Done</KitButton>
@@ -1007,7 +1007,7 @@ function InlineForm({
         </div>
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-zinc-100">{title}</p>
-          <p className="truncate text-[11.5px] text-zinc-500">{formDesc}</p>
+          <p className="truncate text-[12.5px] text-zinc-500">{formDesc}</p>
         </div>
       </div>
 
@@ -1015,16 +1015,16 @@ function InlineForm({
         {userEmail && (
           <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
             <Mail className="h-3.5 w-3.5 flex-shrink-0 text-zinc-600" />
-            <span className="text-[11.5px] text-zinc-500">Sending as</span>
-            <span className="truncate text-[11.5px] font-medium text-zinc-300">{userEmail}</span>
+            <span className="text-[12.5px] text-zinc-500">Sending as</span>
+            <span className="truncate text-[12.5px] font-medium text-zinc-300">{userEmail}</span>
           </div>
         )}
 
-        <KitField label={<span className="flex items-center justify-between"><span>{primaryLabel}</span><span className="font-mono text-[10.5px] tabular-nums text-zinc-600">{primary.length}/{PRIMARY_MAX}</span></span>} hint={primaryHint}>
+        <KitField label={<span className="flex items-center justify-between"><span>{primaryLabel}</span><span className="text-[12px] tabular-nums text-zinc-600">{primary.length}/{PRIMARY_MAX}</span></span>} hint={primaryHint}>
           <KitInput value={primary} onChange={(e) => setPrimary(e.target.value)} maxLength={PRIMARY_MAX} placeholder={primaryPlaceholder} disabled={busy} />
         </KitField>
 
-        <KitField label={<span className="flex items-center justify-between"><span>{secondaryLabel}</span><span className="font-mono text-[10.5px] tabular-nums text-zinc-600">{secondary.length}/{SECONDARY_MAX}</span></span>} hint={secondaryHint}>
+        <KitField label={<span className="flex items-center justify-between"><span>{secondaryLabel}</span><span className="text-[12px] tabular-nums text-zinc-600">{secondary.length}/{SECONDARY_MAX}</span></span>} hint={secondaryHint}>
           <textarea
             value={secondary}
             onChange={(e) => setSecondary(e.target.value)}
@@ -1032,7 +1032,7 @@ function InlineForm({
             placeholder={secondaryPlaceholder}
             disabled={busy}
             rows={6}
-            className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#0f1015] px-3 py-2.5 text-[12.5px] leading-relaxed text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
+            className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#08090a] px-3 py-2.5 text-[12.5px] leading-relaxed text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
           />
         </KitField>
 
@@ -1063,7 +1063,7 @@ function DangerSection({ onOpenDelete }: { onOpenDelete: () => void }) {
         <AlertTriangle className="h-4 w-4 text-rose-400" />
         <div>
           <h2 className="text-[13px] font-semibold text-white">Danger zone</h2>
-          <p className="text-[11.5px] text-zinc-500">Irreversible and destructive actions.</p>
+          <p className="text-[12.5px] text-zinc-500">Irreversible and destructive actions.</p>
         </div>
       </div>
       <KitCardBody>
@@ -1086,7 +1086,7 @@ function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: st
     <div className="px-4 py-3.5">
       <div className="flex items-center gap-1.5">
         <Icon className="h-3 w-3 text-zinc-600" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">{label}</p>
+        <p className="text-[12px] font-medium text-zinc-500">{label}</p>
       </div>
       <p className="mt-1.5 truncate text-[13px] font-medium text-zinc-200">{value}</p>
     </div>
@@ -1097,7 +1097,7 @@ function ModalShell({ children, onClose, accent = 'default' }: { children: React
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className={`relative w-full max-w-md overflow-hidden rounded-xl border bg-[#16171d] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${accent === 'danger' ? 'border-rose-500/20' : 'border-white/[0.07]'}`}>
+      <div className={`relative w-full max-w-md overflow-hidden rounded-xl border bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${accent === 'danger' ? 'border-rose-500/20' : 'border-white/[0.07]'}`}>
         {children}
       </div>
     </div>
@@ -1111,7 +1111,7 @@ function ModalHeader({ icon: Icon, title, subtitle, onClose }: { icon: React.Ele
         <Icon className="h-4 w-4 text-violet-300" />
         <div>
           <h3 className="text-base font-semibold leading-none text-white">{title}</h3>
-          {subtitle && <p className="mt-1 text-[11.5px] text-zinc-500">{subtitle}</p>}
+          {subtitle && <p className="mt-1 text-[12.5px] text-zinc-500">{subtitle}</p>}
         </div>
       </div>
       <button onClick={onClose} className="rounded-md p-1 text-zinc-500 transition hover:bg-white/[0.06] hover:text-white" aria-label="Close">

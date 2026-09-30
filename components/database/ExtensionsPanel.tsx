@@ -144,18 +144,18 @@ export function ExtensionsPanel({ projectId }: { projectId: string }) {
                 <p className="flex items-center gap-2 font-mono text-[12px] text-zinc-200">
                   {ext.name}
                   {ext.installed && (
-                    <span className="font-mono text-[10.5px] text-zinc-500">
+                    <span className="font-mono text-[12px] text-zinc-500">
                       {ext.installedVersion}
                       {ext.schema ? ` · ${ext.schema}` : ''}
                     </span>
                   )}
                 </p>
-                <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-500">{ext.purpose}</p>
+                <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-500">{ext.purpose}</p>
 
                 {/* Why it cannot be installed, where that is the case. An
                     unexplained disabled button is worse than no button. */}
                 {!ext.installed && ext.blockedReason && (
-                  <p className="mt-1.5 text-[11.5px] leading-snug text-amber-500/80">
+                  <p className="mt-1.5 text-[12.5px] leading-snug text-amber-500/80">
                     {ext.blockedReason}
                   </p>
                 )}
@@ -184,7 +184,7 @@ export function ExtensionsPanel({ projectId }: { projectId: string }) {
           ))}
         </div>
 
-        <p className="mt-6 text-[11.5px] leading-relaxed text-zinc-500">
+        <p className="mt-6 text-[12.5px] leading-relaxed text-zinc-500">
           There is no uninstall here. <span className="font-mono">DROP EXTENSION</span> cascades
           into the columns and indexes that depend on it, and this page cannot show what that
           would take with it. Removing one is a deliberate act at a psql prompt.

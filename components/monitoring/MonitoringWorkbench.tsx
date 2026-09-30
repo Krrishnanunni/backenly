@@ -156,13 +156,13 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
       {/* ── Command bar ───────────────────────────────────── */}
       <div className="flex h-11 flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-4">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-zinc-500">
             <Activity className="h-3 w-3" />
             Inspector
           </span>
           <span className="h-3 w-px bg-white/10" />
           <h1 className="text-[13px] font-semibold text-zinc-100">Monitoring</h1>
-          <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-emerald-300/90">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-emerald-300/90">
             <span className="h-[5px] w-[5px] rounded-full bg-emerald-400" />
             Live
           </span>
@@ -174,7 +174,7 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
-                className={`rounded-md px-2.5 py-1 font-mono text-[10.5px] font-medium tabular-nums transition-colors focus:outline-none ${
+                className={`rounded-md px-2.5 py-1 text-[12px] font-medium tabular-nums transition-colors focus:outline-none ${
                   timeRange === range ? 'bg-white/[0.06] text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
@@ -207,8 +207,8 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
               i < 2 ? 'border-b lg:border-b-0' : ''
             } border-white/[0.06]`}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">{m.label}</p>
-            <p className="mt-1.5 font-mono text-[17px] font-medium leading-none tabular-nums text-white">{m.value}</p>
+            <p className="text-[12px] font-medium text-zinc-500">{m.label}</p>
+            <p className="mt-1.5 text-[17px] font-medium leading-none tabular-nums text-white">{m.value}</p>
           </div>
         ))}
       </div>
@@ -284,11 +284,11 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
         <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">
           <div className="flex items-baseline gap-2">
             <h2 className="text-[13px] font-medium text-zinc-100">API performance</h2>
-            <span className="font-mono text-[11px] tabular-nums text-zinc-500">
+            <span className="text-[12px] tabular-nums text-zinc-500">
               {performanceBreakdowns.length} route{performanceBreakdowns.length === 1 ? '' : 's'}
             </span>
           </div>
-          <span className="font-mono text-[10.5px] tabular-nums text-zinc-700">per-endpoint · {timeRange}</span>
+          <span className="text-[12px] tabular-nums text-zinc-700">per-endpoint · {timeRange}</span>
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
           {performanceBreakdowns.length === 0 ? (
@@ -307,7 +307,7 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
                     {['API route', 'Traffic', 'Speed', 'Slowest', 'Health'].map((h, i) => (
                       <th
                         key={h}
-                        className={`border-b border-white/[0.06] px-3 py-2 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600 ${
+                        className={`border-b border-white/[0.06] px-3 py-2 text-[12px] font-medium text-zinc-500 ${
                           i === 0 ? 'text-left' : 'text-right'
                         }`}
                       >
@@ -322,18 +322,18 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
                       <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] text-zinc-300">
                         {b.endpoint || b.function || b.database}
                       </td>
-                      <td className="border-b border-white/[0.04] px-3 py-[9px] text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                      <td className="border-b border-white/[0.04] px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-500">
                         {b.requests.toLocaleString()}
                       </td>
-                      <td className="border-b border-white/[0.04] px-3 py-[9px] text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                      <td className="border-b border-white/[0.04] px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-500">
                         {b.avgResponseTime}ms
                       </td>
-                      <td className="border-b border-white/[0.04] px-3 py-[9px] text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                      <td className="border-b border-white/[0.04] px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-500">
                         {b.p95}ms
                       </td>
                       <td className="border-b border-white/[0.04] px-3 py-[9px] text-right">
                         <span
-                          className={`font-mono text-[11px] font-medium tabular-nums ${
+                          className={`text-[12px] font-medium tabular-nums ${
                             b.errorRate > 1 ? 'text-rose-300' : b.errorRate > 0.2 ? 'text-amber-500' : 'text-emerald-300/90'
                           }`}
                         >
@@ -384,11 +384,11 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
         <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-3 sm:px-4">
           <div className="flex items-baseline gap-2">
             <h2 className="text-[13px] font-medium text-zinc-100">API request log</h2>
-            <span className="font-mono text-[11px] tabular-nums text-zinc-500">
+            <span className="text-[12px] tabular-nums text-zinc-500">
               {requestLog.length} request{requestLog.length === 1 ? '' : 's'}
             </span>
           </div>
-          <span className="font-mono text-[10.5px] tabular-nums text-zinc-700">{timeRange}</span>
+          <span className="text-[12px] tabular-nums text-zinc-700">{timeRange}</span>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
@@ -408,7 +408,7 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
                     {['Method', 'Endpoint', 'Status', 'Latency', 'When'].map((h) => (
                       <th
                         key={h}
-                        className="border-b border-white/[0.06] px-3 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600"
+                        className="border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500"
                       >
                         {h}
                       </th>
@@ -436,20 +436,20 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
                     return (
                       <tr key={req.id} className={`transition-colors ${KIT.rowHoverOn}`}>
                         <td className="w-20 border-b border-white/[0.04] px-3 py-[7px]">
-                          <span className={`font-mono text-[11px] font-semibold tracking-wide ${methodColor}`}>
+                          <span className={`font-mono text-[12px] font-semibold tracking-wide ${methodColor}`}>
                             {req.method}
                           </span>
                         </td>
                         <td className="border-b border-white/[0.04] px-3 py-[7px] font-mono text-[12px] text-zinc-300">
                           {req.path}
                         </td>
-                        <td className={`w-16 border-b border-white/[0.04] px-3 py-[7px] font-mono text-[11px] tabular-nums ${statusColor}`}>
+                        <td className={`w-16 border-b border-white/[0.04] px-3 py-[7px] text-[12px] tabular-nums ${statusColor}`}>
                           {req.status}
                         </td>
-                        <td className="w-20 border-b border-white/[0.04] px-3 py-[7px] font-mono text-[11px] tabular-nums text-zinc-500">
+                        <td className="w-20 border-b border-white/[0.04] px-3 py-[7px] text-[12px] tabular-nums text-zinc-500">
                           {req.latency}ms
                         </td>
-                        <td className="w-36 border-b border-white/[0.04] px-3 py-[7px] font-mono text-[10.5px] tabular-nums text-zinc-600">
+                        <td className="w-36 border-b border-white/[0.04] px-3 py-[7px] text-[12px] tabular-nums text-zinc-600">
                           {new Date(req.timestamp).toLocaleString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -470,9 +470,9 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
       {/* Right rail — anomalies and system events stay visible beside the log */}
       <div className={`hidden w-[300px] flex-shrink-0 flex-col border-l border-white/[0.06] xl:flex ${KIT.rail}`}>
         <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-white/[0.06] px-3">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Signals</span>
+          <span className="text-[12px] font-medium text-zinc-500">Signals</span>
           {anomalies.length > 0 && (
-            <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium text-amber-500">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium text-amber-500">
               <span className="h-[5px] w-[5px] rounded-full bg-amber-400" />
               {anomalies.length}
             </span>
@@ -482,7 +482,7 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {anomalies.length > 0 && (
             <div className="border-b border-white/[0.06]">
-              <p className="px-3 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+              <p className="px-3 pb-1.5 pt-3 text-[12px] font-medium text-zinc-500">
                 Active anomalies
               </p>
               <div className={`divide-y ${KIT.divide}`}>
@@ -490,12 +490,12 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
                   <div key={anomaly.id} className="px-3 py-2.5">
                     <div className="mb-1 flex items-center gap-2">
                       <span className="truncate text-[12px] font-medium text-zinc-100">{anomaly.metric}</span>
-                      <span className="flex-shrink-0 font-mono text-[10.5px] font-medium tabular-nums text-amber-500">
+                      <span className="flex-shrink-0 text-[12px] font-medium tabular-nums text-amber-500">
                         {anomaly.type === 'spike' ? '↑' : '↓'} {Math.abs(anomaly.deviation).toFixed(0)}%
                       </span>
                     </div>
-                    <p className="mb-1.5 text-[11.5px] leading-5 text-zinc-500">{anomaly.explanation}</p>
-                    <div className="flex items-center gap-3 font-mono text-[10px] tabular-nums text-zinc-600">
+                    <p className="mb-1.5 text-[12.5px] leading-5 text-zinc-500">{anomaly.explanation}</p>
+                    <div className="flex items-center gap-3 text-[12px] tabular-nums text-zinc-600">
                       <span>
                         exp <span className="text-zinc-400">{anomaly.expectedValue}</span>
                       </span>
@@ -510,11 +510,11 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
             </div>
           )}
 
-          <p className="px-3 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+          <p className="px-3 pb-1.5 pt-3 text-[12px] font-medium text-zinc-500">
             System events
           </p>
           {systemEvents.length === 0 ? (
-            <p className="px-3 pb-4 text-[11.5px] leading-relaxed text-zinc-600">
+            <p className="px-3 pb-4 text-[12.5px] leading-relaxed text-zinc-600">
               Deploys, incidents, and significant changes land here as they happen.
             </p>
           ) : (
@@ -525,8 +525,8 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
                   <div key={event.id} className="flex items-start gap-2.5 px-3 py-2.5">
                     <Icon className="mt-0.5 h-3 w-3 flex-shrink-0 text-zinc-600" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11.5px] font-medium text-zinc-300">{event.message}</p>
-                      <p className="mt-0.5 font-mono text-[10px] tabular-nums text-zinc-600">
+                      <p className="truncate text-[12.5px] font-medium text-zinc-300">{event.message}</p>
+                      <p className="mt-0.5 text-[12px] tabular-nums text-zinc-600">
                         {new Date(event.timestamp).toLocaleString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -535,7 +535,7 @@ export function MonitoringWorkbench({ projectId }: { projectId: string }) {
                         })}
                       </p>
                     </div>
-                    <span className="flex-shrink-0 font-mono text-[10px] text-emerald-300/80">ok</span>
+                    <span className="flex-shrink-0 font-mono text-[12px] text-emerald-300/80">ok</span>
                   </div>
                 )
               })}
@@ -586,19 +586,19 @@ function Chart({
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-[12px] font-semibold text-zinc-100">{title}</h3>
-          <p className="mt-0.5 text-[11px] text-zinc-500">{subtitle}</p>
+          <p className="mt-0.5 text-[12px] text-zinc-500">{subtitle}</p>
         </div>
         {threshold ? (
           <div className="flex-shrink-0 text-right">
-            <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">{thresholdLabel}</p>
-            <p className="mt-0.5 font-mono text-[11px] tabular-nums text-zinc-400">
+            <p className="text-[12px] font-medium text-zinc-500">{thresholdLabel}</p>
+            <p className="mt-0.5 text-[12px] tabular-nums text-zinc-400">
               {threshold}
               {unit}
             </p>
           </div>
         ) : (
           !exceedsThreshold && (
-            <p className="flex flex-shrink-0 items-center gap-1.5 font-mono text-[10px] text-emerald-300/70">
+            <p className="flex flex-shrink-0 items-center gap-1.5 font-mono text-[12px] text-emerald-300/70">
               <CheckCircle2 className="h-3 w-3" />
               stable
             </p>
@@ -631,7 +631,7 @@ function Chart({
             vectorEffect="non-scaling-stroke"
           />
         </svg>
-        <div className="absolute bottom-0 left-0 top-0 -ml-1 flex flex-col justify-between font-mono text-[10px] text-zinc-600">
+        <div className="absolute bottom-0 left-0 top-0 -ml-1 flex flex-col justify-between font-mono text-[12px] text-zinc-600">
           <span>{maxValue.toFixed(0)}</span>
           <span>{minValue.toFixed(0)}</span>
         </div>

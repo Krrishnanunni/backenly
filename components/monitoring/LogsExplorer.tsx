@@ -139,7 +139,7 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
             onBlur={applySearch}
             placeholder="Search message, endpoint, service"
             aria-label="Search logs"
-            className="h-7 w-64 rounded-md border border-white/[0.07] bg-[#0f1015] pl-7 pr-2 text-[11.5px] text-zinc-100 placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none"
+            className="h-7 w-64 rounded-md border border-white/[0.07] bg-[#08090a] pl-7 pr-2 text-[12.5px] text-zinc-100 placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none"
           />
         </div>
 
@@ -147,7 +147,7 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
           value={type}
           onChange={(e) => { setPage(1); setType(e.target.value as typeof type) }}
           aria-label="Filter by type"
-          className="h-7 rounded-md border border-white/[0.07] bg-[#0f1015] px-2 text-[11.5px] text-zinc-200 focus:border-violet-400/40 focus:outline-none"
+          className="h-7 rounded-md border border-white/[0.07] bg-[#08090a] px-2 text-[12.5px] text-zinc-200 focus:border-violet-400/40 focus:outline-none"
         >
           {TYPES.map((t) => <option key={t} value={t}>{t === 'all' ? 'All types' : t}</option>)}
         </select>
@@ -156,7 +156,7 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
           value={severity}
           onChange={(e) => { setPage(1); setSeverity(e.target.value as typeof severity) }}
           aria-label="Filter by severity"
-          className="h-7 rounded-md border border-white/[0.07] bg-[#0f1015] px-2 text-[11.5px] text-zinc-200 focus:border-violet-400/40 focus:outline-none"
+          className="h-7 rounded-md border border-white/[0.07] bg-[#08090a] px-2 text-[12.5px] text-zinc-200 focus:border-violet-400/40 focus:outline-none"
         >
           {SEVERITIES.map((s) => <option key={s} value={s}>{s === 'all' ? 'All severities' : s}</option>)}
         </select>
@@ -164,7 +164,7 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
         {filtersActive && (
           <button
             onClick={clearFilters}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 focus:outline-none"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 focus:outline-none"
           >
             <X className="h-3 w-3" /> Clear
           </button>
@@ -172,7 +172,7 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
 
         <div className="ml-auto flex items-center gap-3">
           {stats && (
-            <div className="flex items-center gap-2.5 font-mono text-[10.5px] tabular-nums">
+            <div className="flex items-center gap-2.5 text-[12px] tabular-nums">
               {(['error', 'warning', 'info', 'debug'] as const).map((s) => (
                 <span key={s} className={SEVERITY_TONE[s]}>
                   {stats[s]} {s}
@@ -199,8 +199,8 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
                 <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-300" />
                 <div>
                   <p className="text-[12.5px] font-medium text-rose-200">Could not load logs</p>
-                  <p className="mt-1 font-mono text-[11px] text-rose-200/70">{error}</p>
-                  <p className="mt-2 text-[11px] text-zinc-400">
+                  <p className="mt-1 font-mono text-[12px] text-rose-200/70">{error}</p>
+                  <p className="mt-2 text-[12px] text-zinc-400">
                     Nothing is shown above because this query failed — not because the
                     system was quiet.
                   </p>
@@ -240,12 +240,12 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
           </div>
         ) : (
           <table className="w-full border-collapse">
-            <thead className="sticky top-0 z-10 bg-[#0e0f13]">
+            <thead className="sticky top-0 z-10 bg-[#0a0b0d]">
               <tr>
                 {['Time', 'Severity', 'Type', 'Message', 'Endpoint', 'Status', 'Duration'].map((h) => (
                   <th
                     key={h}
-                    className="border-b border-white/[0.06] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600"
+                    className="border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500"
                   >
                     {h}
                   </th>
@@ -255,21 +255,21 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-white/[0.02]">
-                  <td className="whitespace-nowrap border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] tabular-nums text-zinc-500">
+                  <td className="whitespace-nowrap border-b border-white/[0.04] px-3 py-[9px] text-[12px] tabular-nums text-zinc-500">
                     {new Date(r.timestamp).toLocaleString()}
                   </td>
-                  <td className={`border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] ${SEVERITY_TONE[r.severity] ?? 'text-zinc-400'}`}>
+                  <td className={`border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] ${SEVERITY_TONE[r.severity] ?? 'text-zinc-400'}`}>
                     {r.severity}
                   </td>
-                  <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] text-zinc-500">{r.type}</td>
-                  <td className="border-b border-white/[0.04] px-3 py-[9px] text-[11.5px] text-zinc-200">{r.message}</td>
-                  <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] text-zinc-500">
+                  <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] text-zinc-500">{r.type}</td>
+                  <td className="border-b border-white/[0.04] px-3 py-[9px] text-[12.5px] text-zinc-200">{r.message}</td>
+                  <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] text-zinc-500">
                     {r.method ? `${r.method} ` : ''}{r.endpoint ?? '—'}
                   </td>
-                  <td className="border-b border-white/[0.04] px-3 py-[9px] text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                  <td className="border-b border-white/[0.04] px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-500">
                     {r.statusCode ?? '—'}
                   </td>
-                  <td className="border-b border-white/[0.04] px-3 py-[9px] text-right font-mono text-[11px] tabular-nums text-zinc-500">
+                  <td className="border-b border-white/[0.04] px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-500">
                     {r.duration != null ? `${r.duration}ms` : '—'}
                   </td>
                 </tr>
@@ -282,21 +282,21 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
       {/* ── Paging ─────────────────────────────────────────── */}
       {pagination && pagination.totalPages > 1 && (
         <div className="flex h-9 flex-shrink-0 items-center justify-between border-t border-white/[0.06] px-3">
-          <span className="font-mono text-[10.5px] tabular-nums text-zinc-600">
+          <span className="text-[12px] tabular-nums text-zinc-600">
             {pagination.total} entries · page {pagination.page} of {pagination.totalPages}
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={pagination.page <= 1 || loading}
-              className="h-6 rounded px-2 text-[11.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
+              className="h-6 rounded px-2 text-[12.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => p + 1)}
               disabled={pagination.page >= pagination.totalPages || loading}
-              className="h-6 rounded px-2 text-[11.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
+              className="h-6 rounded px-2 text-[12.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
             >
               Next
             </button>

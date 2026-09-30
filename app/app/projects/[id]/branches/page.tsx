@@ -21,7 +21,7 @@ export default function BranchesPage() {
   if (!CLOUD_CONTROL_PLANE) notFound()
 
   return (
-    <div className="min-h-screen bg-[#101116] flex flex-col text-white">
+    <div className="min-h-screen bg-[#0c0d0f] flex flex-col text-white">
       <InspectorPageHeader
         icon={GitBranch}
         title="Branches"

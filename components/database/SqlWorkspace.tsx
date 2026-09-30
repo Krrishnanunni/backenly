@@ -151,12 +151,12 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
         <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">
           <div className="flex items-baseline gap-2">
             <h2 className="text-[12.5px] font-semibold text-zinc-100">SQL</h2>
-            <span className="font-mono text-[11px] text-zinc-500">read-only</span>
+            <span className="font-mono text-[12px] text-zinc-500">read-only</span>
           </div>
           <button
             onClick={() => void run()}
             disabled={running || !sql.trim()}
-            className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-3 text-[11.5px] font-semibold text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-3 text-[12.5px] font-semibold text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
             Run
@@ -164,13 +164,13 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
         </div>
 
         {/* Quick snippets horizontal scroll strip for mobile / tablet */}
-        <div className="flex lg:hidden items-center gap-2 overflow-x-auto border-b border-white/[0.06] bg-[#0c0d11] px-3 py-2 no-scrollbar">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600 flex-shrink-0">Snippets:</span>
+        <div className="flex lg:hidden items-center gap-2 overflow-x-auto border-b border-white/[0.06] bg-[#0a0b0d] px-3 py-2 no-scrollbar">
+          <span className="text-[12px] font-medium text-zinc-500 flex-shrink-0">Snippets:</span>
           {SNIPPETS.map(s => (
             <button
               key={s.label}
               onClick={() => { setSql(s.sql); editorRef.current?.focus() }}
-              className="flex-shrink-0 rounded-md bg-white/[0.05] hover:bg-white/[0.1] px-2.5 py-1 text-[11px] font-mono text-zinc-300 border border-white/[0.06] transition-colors"
+              className="flex-shrink-0 rounded-md bg-white/[0.05] hover:bg-white/[0.1] px-2.5 py-1 text-[12px] font-mono text-zinc-300 border border-white/[0.06] transition-colors"
             >
               {s.label}
             </button>
@@ -185,7 +185,7 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
           spellCheck={false}
           aria-label="SQL query"
           placeholder="SELECT * FROM your_table LIMIT 10"
-          className="h-36 sm:h-40 flex-shrink-0 resize-none border-b border-white/[0.06] bg-[#0f1015] px-4 py-3 font-mono text-base sm:text-[12.5px] leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+          className="h-36 sm:h-40 flex-shrink-0 resize-none border-b border-white/[0.06] bg-[#08090a] px-4 py-3 font-mono text-base sm:text-[12.5px] leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
         />
 
         <div className="min-h-0 flex-1 overflow-auto">
@@ -195,15 +195,15 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
                 <div className="flex items-start gap-2.5">
                   <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-300" />
                   <div className="min-w-0">
-                    <p className="font-mono text-[11.5px] text-rose-200">{failure.error}</p>
+                    <p className="font-mono text-[12.5px] text-rose-200">{failure.error}</p>
                     {failure.suggestion && (
                       // The guard turns a refused write into a pointer at the
                       // governed path. Showing it is the difference between a
                       // refusal and an answer.
-                      <p className="mt-2 text-[11.5px] text-zinc-300">{failure.suggestion}</p>
+                      <p className="mt-2 text-[12.5px] text-zinc-300">{failure.suggestion}</p>
                     )}
                     {failure.code && (
-                      <p className="mt-1.5 font-mono text-[10.5px] text-zinc-600">{failure.code}</p>
+                      <p className="mt-1.5 font-mono text-[12px] text-zinc-600">{failure.code}</p>
                     )}
                   </div>
                 </div>
@@ -217,7 +217,7 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
             <div className="flex h-full items-center justify-center px-8 text-center">
               <div>
                 <p className="text-[12.5px] text-zinc-400">Run a query to see results.</p>
-                <p className="mt-1 text-[11px] text-zinc-600">
+                <p className="mt-1 text-[12px] text-zinc-600">
                   SELECT, WITH and EXPLAIN. Writes and DDL are refused by the database, not by this page.
                 </p>
               </div>
@@ -226,37 +226,37 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
             <div className="flex h-full items-center justify-center px-8 text-center">
               <div>
                 <p className="text-[12.5px] text-zinc-400">No rows.</p>
-                <p className="mt-1 font-mono text-[11px] text-zinc-600">{result.ms}ms</p>
+                <p className="mt-1 font-mono text-[12px] text-zinc-600">{result.ms}ms</p>
               </div>
             </div>
           ) : (
             <div className="min-w-full overflow-x-auto">
               <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] px-4 py-2">
-                <span className="font-mono text-[10.5px] tabular-nums text-zinc-500">
+                <span className="text-[12px] tabular-nums text-zinc-500">
                   {result.rowCount} {result.rowCount === 1 ? 'row' : 'rows'} · {result.ms}ms
                 </span>
                 {result.truncated && (
                   // Not a cosmetic badge. Without it a capped page is
                   // indistinguishable from a complete answer.
-                  <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10.5px] text-amber-300">
+                  <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[12px] text-amber-300">
                     truncated at {result.limit}
                   </span>
                 )}
                 {result.redactedColumns.length > 0 && (
                   // A withheld value and a NULL look identical in a table cell
                   // and mean opposite things.
-                  <span className="rounded bg-zinc-500/10 px-1.5 py-0.5 font-mono text-[10.5px] text-zinc-400">
+                  <span className="rounded bg-zinc-500/10 px-1.5 py-0.5 font-mono text-[12px] text-zinc-400">
                     redacted: {result.redactedColumns.join(', ')}
                   </span>
                 )}
               </div>
               <table className="w-full min-w-[500px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#0e0f13]">
+                <thead className="sticky top-0 z-10 bg-[#0a0b0d]">
                   <tr>
                     {result.fields.map(f => (
                       <th
                         key={f.name}
-                        className="border-b border-white/[0.06] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600"
+                        className="border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500"
                       >
                         {f.name}
                       </th>
@@ -269,7 +269,7 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
                       {result.fields.map(f => (
                         <td
                           key={f.name}
-                          className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[11px] text-zinc-300"
+                          className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] text-zinc-300"
                         >
                           {row[f.name] === null || row[f.name] === undefined
                             ? <span className="text-zinc-600">null</span>
@@ -290,14 +290,14 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
       {/* ── Snippets and history (hidden on mobile, visible on desktop) ───────────────────────────── */}
       <aside className="hidden lg:flex w-56 flex-shrink-0 flex-col border-l border-white/[0.06]">
         <div className="flex h-10 flex-shrink-0 items-center border-b border-white/[0.06] px-3">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Snippets</span>
+          <span className="text-[12px] font-medium text-zinc-500">Snippets</span>
         </div>
         <div className="flex-shrink-0 border-b border-white/[0.06] p-2">
           {SNIPPETS.map(s => (
             <button
               key={s.label}
               onClick={() => { setSql(s.sql); editorRef.current?.focus() }}
-              className="block w-full rounded px-2 py-1.5 text-left text-[11.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 focus:outline-none"
+              className="block w-full rounded px-2 py-1.5 text-left text-[12.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 focus:outline-none"
             >
               {s.label}
             </button>
@@ -305,7 +305,7 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
         </div>
 
         <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-white/[0.06] px-3">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">History</span>
+          <span className="text-[12px] font-medium text-zinc-500">History</span>
           {history.length > 0 && (
             <button
               onClick={clearHistory}
@@ -318,14 +318,14 @@ export function SqlWorkspace({ projectId }: { projectId: string }) {
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-2">
           {history.length === 0 ? (
-            <p className="px-2 py-1 text-[11px] text-zinc-600">Queries you run appear here.</p>
+            <p className="px-2 py-1 text-[12px] text-zinc-600">Queries you run appear here.</p>
           ) : (
             history.map((h, i) => (
               <button
                 key={`${i}-${h.slice(0, 24)}`}
                 onClick={() => { setSql(h); editorRef.current?.focus() }}
                 title={h}
-                className="mb-0.5 flex w-full items-start gap-1.5 rounded px-2 py-1.5 text-left font-mono text-[10.5px] text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200 focus:outline-none"
+                className="mb-0.5 flex w-full items-start gap-1.5 rounded px-2 py-1.5 text-left font-mono text-[12px] text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200 focus:outline-none"
               >
                 <Clock className="mt-0.5 h-2.5 w-2.5 flex-shrink-0" />
                 <span className="truncate">{h.replace(/\s+/g, ' ')}</span>

@@ -377,7 +377,7 @@ export function EmailSettingsPanel({ projectId }: { projectId: string }) {
           <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
             Each email has a built-in version that already works. Editing one replaces it for
             this project; reverting removes the override. Available values:{' '}
-            {variables.map(v => <code key={v} className="mr-1.5 font-mono text-[11.5px] text-zinc-300">{`{{${v}}}`}</code>)}
+            {variables.map(v => <code key={v} className="mr-1.5 font-mono text-[12.5px] text-zinc-300">{`{{${v}}}`}</code>)}
           </p>
 
           <div className="mt-4 space-y-2">
@@ -385,7 +385,7 @@ export function EmailSettingsPanel({ projectId }: { projectId: string }) {
               <div key={t.kind} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3.5 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-[12px] text-zinc-200">{t.title}</p>
-                  <p className="mt-0.5 text-[11.5px] text-zinc-500">{t.sends}</p>
+                  <p className="mt-0.5 text-[12.5px] text-zinc-500">{t.sends}</p>
                 </div>
                 <KitBadge tone={t.customised ? 'operational' : 'neutral'}>
                   {t.customised ? 'customised' : 'built-in'}
@@ -529,7 +529,7 @@ function TemplateEditor({
             value={bodyHtml}
             onChange={e => setBodyHtml(e.target.value)}
             rows={12}
-            className="font-mono text-[11.5px]"
+            className="font-mono text-[12.5px]"
             placeholder={'<p>Hi {{email}}, <a href="{{ctaUrl}}">reset your password</a>. Expires in {{expiry}}.</p>'}
           />
         </KitField>
@@ -544,7 +544,7 @@ function TemplateEditor({
 
         {preview && (
           <div>
-            <p className="mb-1.5 text-[11px] font-medium text-zinc-400">
+            <p className="mb-1.5 text-[12px] font-medium text-zinc-400">
               Preview — subject: <span className="text-zinc-200">{preview.subject}</span>
             </p>
             {/* Sandboxed with NO tokens: no scripts, no same-origin. Operator

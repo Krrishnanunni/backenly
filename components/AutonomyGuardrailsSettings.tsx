@@ -117,7 +117,7 @@ function timeAgo(iso: string): string {
 
 function Shell({ level, shadow, children }: { level?: Level; shadow?: boolean; children: React.ReactNode }) {
   return (
-    <div className="h-full overflow-y-auto bg-[#101116] text-zinc-100">
+    <div className="h-full overflow-y-auto bg-[#0c0d0f] text-zinc-100">
       <InspectorPageHeader
         icon={Bot}
         title="Autonomy"
@@ -242,7 +242,7 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
             role="status"
             aria-live="polite"
             className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 text-[13px] shadow-[0_16px_44px_-30px_rgba(0,0,0,0.9)] ${
-              banner.tone === 'ok' ? 'border-white/[0.08] bg-[#16171d]' : 'border-violet-500/25 bg-[#16171d]'
+              banner.tone === 'ok' ? 'border-white/[0.08] bg-[#0f1012]' : 'border-violet-500/25 bg-[#0f1012]'
             }`}
           >
             <span
@@ -302,7 +302,7 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
                 <h3 className="text-[13px] font-semibold tracking-tight text-amber-100">
                   Watching, not repairing
                 </h3>
-                <p className="mt-1 text-[11.5px] leading-relaxed text-amber-200/80">
+                <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200/80">
                   {data.executionMode.explanation}
                 </p>
               </div>
@@ -332,7 +332,7 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
               <Gauge className="size-4 text-violet-300" />
               <h3 className="text-[14.5px] font-semibold tracking-tight text-zinc-50">Autonomy mode</h3>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-[11.5px] text-zinc-400">
+            <div className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-[12.5px] text-zinc-400">
               <span>Plan</span>
               <span className="font-semibold text-zinc-200">{data.plan}</span>
               <span className="text-zinc-600">·</span>
@@ -366,11 +366,11 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
                     {busy ? (
                       <Loader2 className="size-3.5 animate-spin text-violet-300" />
                     ) : active ? (
-                      <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-200">
+                      <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[12px] font-bold text-violet-200">
                         Active
                       </span>
                     ) : locked ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-zinc-500">
+                      <span className="inline-flex items-center gap-1 rounded bg-white/[0.05] px-1.5 py-0.5 text-[12px] font-bold text-zinc-500">
                         <Lock className="size-2.5" /> {next?.name ?? 'Upgrade'}
                       </span>
                     ) : null}
@@ -380,11 +380,11 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
                   }`}>
                     {l.label}
                   </div>
-                  <p className={`mt-1 text-[11.5px] leading-snug ${locked ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                  <p className={`mt-1 text-[12.5px] leading-snug ${locked ? 'text-zinc-600' : 'text-zinc-500'}`}>
                     {l.blurb}
                   </p>
                   {!active && !locked && (
-                    <span className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="mt-2 inline-flex items-center gap-0.5 text-[12px] font-medium text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100">
                       Switch to this <ArrowUpRight className="size-3" />
                     </span>
                   )}
@@ -423,10 +423,10 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
             ].map((m, i) => (
               <div key={m.label} className={`px-4 py-3 ${i < 2 ? 'border-r border-white/[0.06]' : ''}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">{m.label}</p>
+                  <p className="text-[12px] font-medium text-zinc-500">{m.label}</p>
                   <m.icon className="size-3 text-zinc-700" />
                 </div>
-                <p className={`mt-2 font-mono text-[19px] font-medium leading-none tabular-nums ${m.tone}`}>{m.value}</p>
+                <p className={`mt-2 text-[19px] font-medium leading-none tabular-nums ${m.tone}`}>{m.value}</p>
               </div>
             ))}
           </div>
@@ -453,10 +453,10 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
               <Activity className="size-3.5 text-zinc-400" />
               <h3 className="text-[13px] font-semibold tracking-tight text-zinc-100">Recent guardrail actions</h3>
               {data.recentActivity.length > 0 && (
-                <span className="font-mono text-[11px] tabular-nums text-zinc-600">{data.recentActivity.length}</span>
+                <span className="text-[12px] tabular-nums text-zinc-600">{data.recentActivity.length}</span>
               )}
             </div>
-            <span className="text-[11px] tabular-nums text-zinc-500">last {data.scoreboard.windowDays} days</span>
+            <span className="text-[12px] tabular-nums text-zinc-500">last {data.scoreboard.windowDays} days</span>
           </div>
           {data.recentActivity.length === 0 ? (
             <div className="px-5 py-10 text-center">
@@ -467,13 +467,13 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 z-10">
                   <tr className={KIT.gridHead}>
-                    <th className="w-24 border-b border-white/[0.06] px-4 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                    <th className="w-24 border-b border-white/[0.06] px-4 py-2 text-left text-[12px] font-medium text-zinc-500">
                       When
                     </th>
-                    <th className="w-32 border-b border-white/[0.06] px-3 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                    <th className="w-32 border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500">
                       Kind
                     </th>
-                    <th className="border-b border-white/[0.06] px-3 py-2 text-left text-[9.5px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                    <th className="border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500">
                       Action
                     </th>
                   </tr>
@@ -481,11 +481,11 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
                 <tbody>
                   {data.recentActivity.map((a, i) => (
                     <tr key={i} className={`transition-colors ${KIT.rowHoverOn}`}>
-                      <td className="border-b border-white/[0.04] px-4 py-2.5 align-top font-mono text-[10.5px] tabular-nums text-zinc-600">
+                      <td className="border-b border-white/[0.04] px-4 py-2.5 align-top text-[12px] tabular-nums text-zinc-600">
                         {timeAgo(a.at)}
                       </td>
                       <td className="border-b border-white/[0.04] px-3 py-2.5 align-top">
-                        <span className="font-mono text-[10.5px] text-zinc-500">{a.kind || a.action || '—'}</span>
+                        <span className="font-mono text-[12px] text-zinc-500">{a.kind || a.action || '—'}</span>
                       </td>
                       <td className="border-b border-white/[0.04] px-3 py-2.5 text-[12px] leading-5 text-zinc-300">
                         {a.summary}
@@ -494,7 +494,7 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
                             Folded server-side; the count is what makes the fold
                             honest rather than a truncation. */}
                         {(a.repeat ?? 1) > 1 && (
-                          <span className="ml-2 font-mono text-[10.5px] tabular-nums text-zinc-600">×{a.repeat}</span>
+                          <span className="ml-2 text-[12px] tabular-nums text-zinc-600">×{a.repeat}</span>
                         )}
                       </td>
                     </tr>
@@ -512,7 +512,7 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
               <Undo2 className="size-3.5 text-zinc-400" />
               <h3 className="text-[13px] font-semibold tracking-tight text-zinc-100">Restore points</h3>
             </div>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-zinc-500">
+            <p className="mt-1 text-[12.5px] leading-relaxed text-zinc-500">
               Roll the backend back to any saved version. Restores tables, columns, APIs, storage buckets, and base
               auth from that version. Resources added since are not deleted; OAuth providers and functions need to be
               reconnected manually.
@@ -528,7 +528,7 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
               guarantee, and a fix whose pre-fix snapshot capture failed is not
               reversible — the Changes panel now names each of those instead of
               the footer implying they cannot exist. */}
-          <span className="text-[11.5px] text-zinc-500">
+          <span className="text-[12.5px] text-zinc-500">
             Every autonomous action is written to the audit log and snapshotted before it runs.
             Changes that captured a snapshot can be undone above.
           </span>
@@ -564,7 +564,7 @@ function SectionLabel({ icon: Icon, children }: { icon: React.ComponentType<{ cl
   return (
     <div className="mb-4 flex items-center gap-2">
       <Icon className="size-3.5 text-zinc-500" />
-      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">{children}</span>
+      <span className="text-[12px] font-semibold text-zinc-500">{children}</span>
     </div>
   )
 }

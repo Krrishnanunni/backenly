@@ -241,12 +241,12 @@ function InvocationsTab({ projectId, functionId }: { projectId: string; function
               ) : (
                 <AlertCircle className="h-3 w-3 flex-shrink-0 text-rose-300" />
               )}
-              <span className={`font-mono text-[11px] font-medium ${log.success ? 'text-zinc-300' : 'text-rose-300'}`}>
+              <span className={`font-mono text-[12px] font-medium ${log.success ? 'text-zinc-300' : 'text-rose-300'}`}>
                 {log.success ? 'success' : 'failed'}
               </span>
-              <span className="font-mono text-[10px] text-zinc-600">{log.triggerType}</span>
+              <span className="font-mono text-[12px] text-zinc-600">{log.triggerType}</span>
             </div>
-            <div className="flex flex-shrink-0 items-center gap-3 font-mono text-[10.5px] tabular-nums text-zinc-600">
+            <div className="flex flex-shrink-0 items-center gap-3 text-[12px] tabular-nums text-zinc-600">
               <span>{log.durationMs}ms</span>
               <span>{new Date(log.createdAt).toLocaleString()}</span>
             </div>
@@ -255,7 +255,7 @@ function InvocationsTab({ projectId, functionId }: { projectId: string; function
           {log.logs.length > 0 && (
             <div className="space-y-0.5">
               {log.logs.map((line, i) => (
-                <div key={i} className="font-mono text-[11px] leading-5 text-zinc-500">
+                <div key={i} className="font-mono text-[12px] leading-5 text-zinc-500">
                   <span className="mr-2 text-zinc-700">›</span>
                   {line}
                 </div>
@@ -263,14 +263,14 @@ function InvocationsTab({ projectId, functionId }: { projectId: string; function
             </div>
           )}
 
-          {log.error && <div className="mt-1 font-mono text-[11px] text-rose-300">{log.error}</div>}
+          {log.error && <div className="mt-1 font-mono text-[12px] text-rose-300">{log.error}</div>}
         </div>
       ))}
 
       {logs.length >= limit && (
         <button
           onClick={() => setLimit((l) => l + 50)}
-          className="w-full py-2.5 text-[11.5px] text-zinc-500 transition-colors hover:text-zinc-300"
+          className="w-full py-2.5 text-[12.5px] text-zinc-500 transition-colors hover:text-zinc-300"
         >
           Load more
         </button>
@@ -294,21 +294,21 @@ function RunResult({ result, onClose }: { result: TestRunResult; onClose: () => 
     return (
       <div className="rounded-lg border border-white/[0.07] bg-black/25 p-3.5">
         <div className="mb-2 flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-300">
+          <span className="flex items-center gap-1.5 text-[12px] font-semibold text-violet-300">
             <AlertTriangle className="h-3 w-3" />
             Plan limit reached
           </span>
-          <button onClick={onClose} className="text-[10.5px] text-zinc-600 transition-colors hover:text-zinc-400">
+          <button onClick={onClose} className="text-[12px] text-zinc-600 transition-colors hover:text-zinc-400">
             close
           </button>
         </div>
-        <p className="mb-2.5 text-[11.5px] leading-relaxed text-zinc-400">
+        <p className="mb-2.5 text-[12.5px] leading-relaxed text-zinc-400">
           {result.error} Your function code is fine. It wasn&apos;t run because the monthly invocation
           quota is used up. It resets on the 1st.
         </p>
         <a
           href="/app/settings?tab=billing"
-          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-violet-300 transition-colors hover:text-violet-200"
+          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-violet-300 transition-colors hover:text-violet-200"
         >
           Upgrade for a higher quota →
         </a>
@@ -337,7 +337,7 @@ function RunResult({ result, onClose }: { result: TestRunResult; onClose: () => 
   return (
     <div className="rounded-lg border border-white/[0.07] bg-black/25 p-3.5">
       <div className="mb-2.5 flex items-center justify-between">
-        <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${headColor}`}>
+        <span className={`flex items-center gap-1.5 text-[12px] font-semibold ${headColor}`}>
           {!result.success ? (
             <AlertCircle className="h-3 w-3" />
           ) : client4xx ? (
@@ -347,13 +347,13 @@ function RunResult({ result, onClose }: { result: TestRunResult; onClose: () => 
           )}
           {headText}
         </span>
-        <button onClick={onClose} className="text-[10.5px] text-zinc-600 transition-colors hover:text-zinc-400">
+        <button onClick={onClose} className="text-[12px] text-zinc-600 transition-colors hover:text-zinc-400">
           close
         </button>
       </div>
 
       {client4xx && (
-        <p className="mb-2 text-[10.5px] leading-relaxed text-violet-300/70">
+        <p className="mb-2 text-[12px] leading-relaxed text-violet-300/70">
           {httpStatus === 400
             ? 'The endpoint ran and validated its input. It needs required parameters this test run didn’t send, and will work when your app calls it with a real payload.'
             : httpStatus === 401 || httpStatus === 403
@@ -367,7 +367,7 @@ function RunResult({ result, onClose }: { result: TestRunResult; onClose: () => 
       {result.logs.length > 0 && (
         <div className="space-y-0.5">
           {result.logs.map((log, i) => (
-            <div key={i} className="font-mono text-[11px] leading-5 text-zinc-400">
+            <div key={i} className="font-mono text-[12px] leading-5 text-zinc-400">
               <span className="mr-2 text-zinc-700">›</span>
               {log}
             </div>
@@ -376,13 +376,13 @@ function RunResult({ result, onClose }: { result: TestRunResult; onClose: () => 
       )}
 
       {bodyStr && (
-        <pre className="mt-2 max-h-48 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-white/[0.08] bg-black/30 px-3 py-2 font-mono text-[11px] text-zinc-400">
+        <pre className="mt-2 max-h-48 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-white/[0.08] bg-black/30 px-3 py-2 font-mono text-[12px] text-zinc-400">
           {bodyStr.slice(0, 2000)}
           {bodyStr.length > 2000 ? '\n…(truncated)' : ''}
         </pre>
       )}
 
-      {result.error && <div className="mt-1 font-mono text-[11px] text-rose-300">{result.error}</div>}
+      {result.error && <div className="mt-1 font-mono text-[12px] text-rose-300">{result.error}</div>}
     </div>
   )
 }
@@ -591,14 +591,14 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
       {/* ── Command bar ───────────────────────────────────── */}
       <div className="flex h-11 flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-4">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-zinc-500">
             <Zap className="h-3 w-3" />
             Inspector
           </span>
           <span className="h-3 w-px bg-white/10" />
           <h1 className="text-[13px] font-semibold text-zinc-100">Functions</h1>
           <span
-            className={`inline-flex items-center gap-1.5 font-mono text-[10.5px] font-medium ${
+            className={`inline-flex items-center gap-1.5 font-mono text-[12px] font-medium ${
               errorFns.length > 0 ? 'text-rose-300' : activeFns.length > 0 ? 'text-emerald-300/90' : 'text-zinc-400'
             }`}
           >
@@ -610,18 +610,18 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
             {errorFns.length > 0 ? `${errorFns.length} errored` : activeFns.length > 0 ? 'operational' : 'idle'}
           </span>
           {functions.length > 0 && (
-            <span className="font-mono text-[10.5px] tabular-nums text-zinc-500">{functions.length}</span>
+            <span className="text-[12px] tabular-nums text-zinc-500">{functions.length}</span>
           )}
         </div>
 
         <div className="flex flex-shrink-0 items-center gap-3">
-          <span className="hidden font-mono text-[10.5px] tabular-nums text-zinc-600 sm:inline">
+          <span className="hidden text-[12px] tabular-nums text-zinc-600 sm:inline">
             {activeFns.length} active<span className="text-zinc-700"> · </span>
             {totalRuns.toLocaleString()} run{totalRuns === 1 ? '' : 's'}
           </span>
           <button
             onClick={() => router.push(`/app/projects/${projectId}/connect`)}
-            className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[11.5px] font-semibold text-black transition-colors hover:bg-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-400/50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12.5px] font-semibold text-black transition-colors hover:bg-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-400/50"
           >
             <Plug2 className="h-3 w-3" />
             New function
@@ -633,7 +633,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
       {schemaFns.length > 0 && (
         <div className="flex h-9 flex-shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-4">
           <Info className="h-3.5 w-3.5 flex-shrink-0 text-zinc-600" />
-          <p className="min-w-0 flex-1 truncate text-[11.5px] text-zinc-500">
+          <p className="min-w-0 flex-1 truncate text-[12.5px] text-zinc-500">
             <span className="font-medium text-zinc-300">
               {schemaFns.length} auto-generated validation-schema endpoint{schemaFns.length !== 1 ? 's' : ''}
             </span>
@@ -642,7 +642,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
           <button
             onClick={() => setConfirmCleanup(true)}
             disabled={cleaningUp}
-            className="flex flex-shrink-0 items-center gap-1 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] font-medium text-zinc-400 transition-colors hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-zinc-200 disabled:opacity-50"
+            className="flex flex-shrink-0 items-center gap-1 rounded-md border border-white/[0.08] px-2.5 py-1 text-[12px] font-medium text-zinc-400 transition-colors hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-zinc-200 disabled:opacity-50"
           >
             {cleaningUp ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
             {cleaningUp ? 'Deleting…' : 'Delete all'}
@@ -653,7 +653,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
       {untestedActiveFns.length > 0 && (
         <div className="flex h-9 flex-shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-4">
           <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 text-violet-300" />
-          <p className="min-w-0 flex-1 truncate text-[11.5px] text-zinc-400">
+          <p className="min-w-0 flex-1 truncate text-[12.5px] text-zinc-400">
             <span className="font-semibold text-zinc-200">
               {untestedActiveFns.length} active function{untestedActiveFns.length !== 1 ? 's' : ''} never tested
             </span>
@@ -662,7 +662,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
           <button
             onClick={handleRunAllUntested}
             disabled={runningAll}
-            className="flex flex-shrink-0 items-center gap-1 rounded-md border border-white/[0.14] bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-zinc-100 transition-colors hover:bg-white/[0.10] disabled:opacity-50"
+            className="flex flex-shrink-0 items-center gap-1 rounded-md border border-white/[0.14] bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-zinc-100 transition-colors hover:bg-white/[0.10] disabled:opacity-50"
           >
             {runningAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
             {runningAll ? 'Running…' : 'Run all'}
@@ -677,7 +677,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
           {/* ── Rail ───────────────────────────────────── */}
           <div className={`w-full md:w-[280px] flex-shrink-0 flex-col border-r border-white/[0.06] ${KIT.rail} ${mobilePane === 'list' ? 'flex' : 'hidden md:flex'}`}>
             <div className="flex h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Functions</span>
+              <span className="text-[12px] font-medium text-zinc-500">Functions</span>
               <button
                 onClick={() => { setLoading(true); fetchFunctions() }}
                 className="rounded-md p-1.5 text-zinc-600 transition-colors hover:bg-white/[0.04] hover:text-zinc-200"
@@ -696,7 +696,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                     placeholder="Search functions…"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="h-7 w-full rounded-lg border border-white/[0.07] bg-[#0f1015] pl-7 pr-3 text-[11.5px] text-zinc-300 transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
+                    className="h-7 w-full rounded-lg border border-white/[0.07] bg-[#08090a] pl-7 pr-3 text-[12.5px] text-zinc-300 transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-400/15"
                   />
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
@@ -708,7 +708,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                       <button
                         key={f.key}
                         onClick={() => setFilter(f.key)}
-                        className={`rounded-md border px-2 py-0.5 text-[10.5px] font-medium transition-colors ${
+                        className={`rounded-md border px-2 py-0.5 text-[12px] font-medium transition-colors ${
                           active
                             ? 'border-white/[0.14] bg-white/[0.08] text-zinc-100'
                             : 'border-white/[0.07] text-zinc-500 hover:border-white/[0.10] hover:text-zinc-300'
@@ -732,13 +732,13 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                   <Zap className="mx-auto h-4 w-4 text-zinc-600" />
                   <div>
                     <p className="mb-0.5 text-[12px] font-semibold text-zinc-200">No functions yet</p>
-                    <p className="text-[11px] leading-relaxed text-zinc-500">
+                    <p className="text-[12px] leading-relaxed text-zinc-500">
                       Tell your coding agent what should happen and Backenly wires it up.
                     </p>
                   </div>
                 </div>
               ) : visibleFunctions.length === 0 ? (
-                <p className="px-4 py-6 text-center text-[11.5px] leading-relaxed text-zinc-600">
+                <p className="px-4 py-6 text-center text-[12.5px] leading-relaxed text-zinc-600">
                   No function matches{query.trim() ? ` “${query.trim()}”` : ' this filter'}.
                 </p>
               ) : (
@@ -771,7 +771,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                             {fn.name}
                           </div>
                           <div
-                            className={`mt-0.5 flex items-center gap-1 truncate font-mono text-[10px] ${getTriggerStyle(kind)}`}
+                            className={`mt-0.5 flex items-center gap-1 truncate font-mono text-[12px] ${getTriggerStyle(kind)}`}
                           >
                             <TriggerIcon kind={kind} className="h-2.5 w-2.5 flex-shrink-0" />
                             <span className="truncate">{getTriggerLabel(fn)}</span>
@@ -790,7 +790,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
             </div>
 
             {functions.length > 0 && (
-              <div className="flex h-7 flex-shrink-0 items-center border-t border-white/[0.06] px-3 font-mono text-[10.5px] tabular-nums text-zinc-600">
+              <div className="flex h-7 flex-shrink-0 items-center border-t border-white/[0.06] px-3 text-[12px] tabular-nums text-zinc-600">
                 {query.trim() || filter !== 'all'
                   ? `${visibleFunctions.length} of ${functions.length}`
                   : `${functions.length} function${functions.length === 1 ? '' : 's'}`}
@@ -830,7 +830,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                   <div className="flex min-w-0 items-center gap-2">
                     <button
                       onClick={() => setMobilePane('list')}
-                      className="flex md:hidden items-center gap-1 -ml-1 text-[11.5px] font-medium text-violet-400 hover:text-violet-300 py-1.5 px-2 rounded-lg bg-white/[0.04] transition-colors"
+                      className="flex md:hidden items-center gap-1 -ml-1 text-[12.5px] font-medium text-violet-400 hover:text-violet-300 py-1.5 px-2 rounded-lg bg-white/[0.04] transition-colors"
                       aria-label="Back to functions"
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
@@ -838,7 +838,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                     </button>
                     <div className="flex min-w-0 items-baseline gap-2">
                       <h2 className="truncate font-mono text-[13px] font-medium text-zinc-100">{selected.name}</h2>
-                      <span className="hidden sm:inline whitespace-nowrap font-mono text-[11px] tabular-nums text-zinc-500">
+                      <span className="hidden sm:inline whitespace-nowrap text-[12px] tabular-nums text-zinc-500">
                         {selected.runCount.toLocaleString()} run{selected.runCount === 1 ? '' : 's'}
                       </span>
                     </div>
@@ -892,7 +892,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                     <button
                       onClick={() => handleRun(selected)}
                       disabled={running || selected.status === 'inactive'}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[11.5px] font-semibold text-black transition-colors hover:bg-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-400/50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12.5px] font-semibold text-black transition-colors hover:bg-zinc-200 focus:outline-none focus:ring-2 focus:ring-violet-400/50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {running ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                       {running ? 'Running…' : 'Test run'}
@@ -929,7 +929,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                       )}
 
                       {selected.status === 'error' && selected.lastError && (
-                        <div className="rounded-lg border border-rose-500/15 bg-rose-500/[0.05] px-3 py-2.5 font-mono text-[11px] leading-5 text-rose-300/90">
+                        <div className="rounded-lg border border-rose-500/15 bg-rose-500/[0.05] px-3 py-2.5 font-mono text-[12px] leading-5 text-rose-300/90">
                           {selected.lastError}
                         </div>
                       )}
@@ -946,11 +946,11 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                           ['Created', new Date(selected.createdAt).toLocaleString()],
                         ].map(([label, value]) => (
                           <div key={label} className="flex items-baseline justify-between gap-4 px-3.5 py-2.5">
-                            <dt className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                            <dt className="flex-shrink-0 text-[12px] font-medium text-zinc-500">
                               {label}
                             </dt>
                             <dd
-                              className={`min-w-0 truncate text-right font-mono text-[11.5px] tabular-nums ${
+                              className={`min-w-0 truncate text-right text-[12.5px] tabular-nums ${
                                 label === 'Status'
                                   ? selected.status === 'active'
                                     ? 'text-emerald-300/90'
@@ -969,11 +969,11 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                       {/* Endpoint */}
                       {endpointUrl && (
                         <div>
-                          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                          <p className="mb-1.5 text-[12px] font-medium text-zinc-500">
                             Endpoint
                           </p>
                           <div className="flex items-center gap-1.5">
-                            <code className="min-w-0 flex-1 truncate rounded-md border border-white/[0.06] bg-[#0f1015] px-2.5 py-2 font-mono text-[11px] text-zinc-400">
+                            <code className="min-w-0 flex-1 truncate rounded-md border border-white/[0.06] bg-[#08090a] px-2.5 py-2 font-mono text-[12px] text-zinc-400">
                               <span className="text-sky-300/90">
                                 {(selected.triggerTable || '').split(/\s+/)[0].toUpperCase()}
                               </span>{' '}
@@ -992,7 +992,7 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
                             </button>
                           </div>
                           {isAdminGated(selected) && (
-                            <p className="mt-1.5 text-[11px] leading-snug text-zinc-600">
+                            <p className="mt-1.5 text-[12px] leading-snug text-zinc-600">
                               Admin-gated. Send the project admin key as an <code className="font-mono text-zinc-500">x-admin-key</code> header.
                             </p>
                           )}

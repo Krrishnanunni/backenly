@@ -166,7 +166,7 @@ export function BranchesPanel({ projectId }: { projectId: string }) {
           <KitButton variant="primary" icon={creating ? Loader2 : Plus} onClick={create} disabled={creating || !newName.trim()}>
             {creating ? 'Cloning…' : 'Create branch'}
           </KitButton>
-          <span className="text-[11px] text-zinc-600">{active.length}/5 active</span>
+          <span className="text-[12px] text-zinc-600">{active.length}/5 active</span>
         </KitCardBody>
       </KitCard>
 
@@ -229,7 +229,7 @@ export function BranchesPanel({ projectId }: { projectId: string }) {
                     </div>
                   </div>
                 )}
-                <p className="text-[11px] text-zinc-600 pt-1 leading-relaxed">
+                <p className="text-[12px] text-zinc-600 pt-1 leading-relaxed">
                   New tables merge automatically through the governed kernel. Column and type changes come back as review items in the approval path, never silent DDL.
                 </p>
               </div>
