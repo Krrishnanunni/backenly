@@ -1,19 +1,14 @@
-import { Metadata } from 'next'
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { ArrowRight, BadgeCheck, ListChecks, Shield, Timer } from 'lucide-react'
 import { safeJsonLd } from '@/lib/security/safe-jsonld'
 import { SiteShell } from '@/components/site/SiteShell'
-import { useCaseCards } from './data'
-import {
-  InlineArrow,
-  PageHero,
-  PrimaryButton,
-  SecondaryButton,
-  Section,
-  SectionIntro,
-  SectionHeading,
-  LinkCard,
-  FaqList,
-  CtaSection,
-} from '@/components/site/kit'
+import { ButtonLink, Facts, HorizonClose, JsonLd, Page, PageHero, Section, SectionHead } from '@/components/site/kit'
+import { Faq } from '@/components/site/Faq'
+import { Reveal } from '@/components/site/Reveal'
+import { StartButton } from '@/components/site/StartButton'
+import { TITLE } from '@/components/site/tokens'
+import { USE_CASE_LIST } from './data'
 
 const APP_URL = 'https://backenly.com'
 
@@ -44,7 +39,7 @@ export const metadata: Metadata = {
 }
 
 /**
- * FAQ answers here are the boundary questions — what it does not do, and who
+ * FAQ answers here are the boundary questions: what it does not do, and who
  * should not use it. A FAQ whose answers all say yes is not answering anything.
  */
 const FAQ = [
@@ -54,7 +49,7 @@ const FAQ = [
   },
   {
     q: 'How is this different from asking my agent to generate backend code?',
-    a: 'An agent can write backend code well. What it cannot do is persist: the session ends and its model of your schema ends with it, and it is not watching when error rates move at 2 a.m. It also has no structural limit, nothing stops a bad turn from dropping a table. Backenly keeps the schema, the change ledger, and the verification evidence, and destructive operations are absent from the agent-facing surface entirely.',
+    a: 'An agent can write backend code well. What it cannot do is persist: the session ends and its model of your schema ends with it, and it is not watching when error rates move at 2 a.m. It also has no structural limit; nothing stops a bad turn from dropping a table. Backenly keeps the schema, the change ledger and the verification evidence, and destructive operations are absent from the agent-facing surface entirely.',
   },
   {
     q: 'When is Backenly the wrong choice?',
@@ -62,7 +57,7 @@ const FAQ = [
   },
   {
     q: 'Do I have to build through an agent?',
-    a: 'For creating backend resources, yes, MCP is the build door and there is no in-product chat builder. The dashboard is where you inspect, approve, and operate. Everything else is standard: the runtime is REST over PostgREST, and you can take a direct PostgreSQL connection string for psql, an ORM, or a BI tool.',
+    a: 'For creating backend resources, yes. MCP is the build door and there is no in-product chat builder. The dashboard is where you inspect, approve and operate. Everything else is standard: the runtime is REST over PostgREST, and you can take a direct PostgreSQL connection string for psql, an ORM or a BI tool.',
   },
 ]
 
@@ -79,104 +74,141 @@ const faqSchema = {
 /** The through-line, stated once here rather than repeated on every use case. */
 const SHARED = [
   {
+    icon: <ListChecks aria-hidden className="h-5 w-5" strokeWidth={1.75} />,
     title: 'One governed path for every change',
-    body: 'Whether a change comes from you, your agent, or an automated repair, it goes through the same typed kernel: validated, audited, and applied all-or-nothing. There is deliberately no raw-SQL route around it.',
+    body: 'Whether a change comes from you, your agent or an automated repair, it goes through the same typed kernel: validated, audited and applied all-or-nothing. There is deliberately no raw-SQL route around it.',
   },
   {
+    icon: <Shield aria-hidden className="h-5 w-5" strokeWidth={1.75} />,
     title: 'Authorization the database enforces',
     body: 'Each project has its own PostgreSQL schema, and row access is decided by row-level security rather than by application filtering. A rule you cannot forget on one screen.',
   },
   {
+    icon: <BadgeCheck aria-hidden className="h-5 w-5" strokeWidth={1.75} />,
     title: 'Evidence instead of success messages',
-    body: 'After a build, checks run against the live runtime over real HTTP, including signing in as a second user to confirm isolation holds, and each returns its assertions. Checks that cannot run report as skipped, never as passed.',
+    body: 'After a build, checks run against the live runtime over real HTTP, including signing in as a second user to confirm isolation holds. Checks that cannot run report as skipped, never as passed.',
   },
   {
+    icon: <Timer aria-hidden className="h-5 w-5" strokeWidth={1.75} />,
     title: 'A loop that keeps going after you stop',
-    body: 'One-minute cadence on every plan, applying only reversible snapshotted changes on its own. Auth, credentials, and anything destructive wait for a human at every autonomy level.',
+    body: 'One-minute cadence on every plan, applying only reversible, snapshotted changes on its own. Auth, credentials and anything destructive wait for a human at every autonomy level.',
   },
 ]
+
+/* ─────────────────────────────────────────────────────────────
+   /use-cases: the workflow index.
+
+   Each use case is a row, not a card: who it is for, the promise, and then the
+   one thing that makes these pages worth reading, the actual sequence Backenly
+   runs, drawn as a rail of its verbs (Connect, Read, Write...). The trade-off
+   is on the row too, so the boundary is visible before the click.
+───────────────────────────────────────────────────────────── */
 
 export default function UseCasesPage() {
   return (
     <SiteShell>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(faqSchema) }}
-      />
-      <main className="relative z-20">
+      <JsonLd json={safeJsonLd(faqSchema)} />
+      <Page>
         <PageHero
-          eyebrow="Use Cases"
+          trail={[{ label: 'Home', href: '/' }, { label: 'Use cases' }]}
           title="Five workflows, and where each one stops"
-          subtitle="Each page below states the problem, what you would normally build, the sequence Backenly actually runs, what stays your responsibility, and the known limitations. If a page cannot name what it does not do, it is not a use case, it is a brochure."
+          lede="Each names the problem, the sequence Backenly actually runs, what stays yours, and its known limits. A use case that cannot say where it stops is a brochure."
           actions={
             <>
-              <PrimaryButton href="/auth/signup">
-                Start free
-                <InlineArrow />
-              </PrimaryButton>
-              <SecondaryButton href="/resources">Read the docs</SecondaryButton>
+              <StartButton />
+              <ButtonLink href="/resources" variant="secondary">
+                Read the docs
+              </ButtonLink>
             </>
           }
         />
 
-        <Section aria-label="Use cases" width="wide-prose" className="!pt-0">
-          <div className="grid gap-5 md:grid-cols-2">
-            {useCaseCards.map((uc) => (
-              <LinkCard key={uc.slug} href={`/use-cases/${uc.slug}`}>
-                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-neutral-500">
-                  {uc.who}
-                </p>
-                <h2 className="mt-3 text-lg font-semibold leading-tight tracking-tight text-white">
-                  {uc.headline}
-                </h2>
-                <p className="mt-3 flex-1 text-sm font-light leading-relaxed text-neutral-400">
-                  {uc.summary}
-                </p>
-                <p className="mt-5 border-t border-white/[0.07] pt-4 text-xs font-light leading-6 text-neutral-500">
-                  <span className="font-medium text-neutral-400">Trade-off: </span>
-                  {uc.firstLimitation}
-                </p>
-                <p className="mt-4 text-sm font-semibold text-zinc-200 transition-colors group-hover:text-white">
-                  Read the workflow
-                </p>
-              </LinkCard>
+        <Section flush aria-label="Use cases">
+          <ul>
+            {USE_CASE_LIST.map((uc, index) => (
+              <Reveal as="li" key={uc.slug} delay={index === 0 ? 0 : 0.04}>
+                <Link
+                  href={`/use-cases/${uc.slug}`}
+                  className={`group grid gap-8 py-10 transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300 md:py-14 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16 ${
+                    index === 0 ? '' : 'border-t border-white/[0.08]'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[14px] text-zinc-500">{uc.who}</p>
+                    <h2
+                      className={`mt-3 max-w-[22ch] text-[26px] text-white [text-wrap:balance] transition-colors duration-200 md:text-[34px] ${TITLE}`}
+                    >
+                      {uc.headline}
+                    </h2>
+                  </div>
+                  <div className="min-w-0 lg:pt-8">
+                    <p className="max-w-[62ch] text-[16px] leading-[1.7] text-zinc-400 [text-wrap:pretty] md:text-[17px]">
+                      {uc.subheadline}
+                    </p>
+
+                    <ol aria-label="The sequence Backenly runs" className="mt-7 flex flex-wrap items-center gap-y-2">
+                      {uc.workflow.map((step, i) => (
+                        <li key={step.label} className="flex items-center">
+                          <span className="rounded-md border border-white/[0.10] bg-white/[0.03] px-2.5 py-1 text-[13px] text-zinc-300 transition-colors duration-300 group-hover:border-violet-300/25">
+                            {step.label}
+                          </span>
+                          {i < uc.workflow.length - 1 && (
+                            <span aria-hidden className="mx-1.5 h-px w-4 bg-white/[0.16]" />
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+
+                    <p className="mt-7 max-w-[62ch] text-[14px] leading-[1.65] text-zinc-500">
+                      <span className="text-zinc-300">Where it stops. </span>
+                      {uc.limitations[0]}
+                    </p>
+
+                    <span className="mt-7 inline-flex items-center gap-1.5 text-[15px] font-medium text-zinc-300 transition-colors duration-200 group-hover:text-white">
+                      Read the workflow
+                      <ArrowRight aria-hidden className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
+                </Link>
+              </Reveal>
             ))}
+          </ul>
+        </Section>
+
+        <Section aria-labelledby="common-ground">
+          <Reveal>
+            <SectionHead
+              id="common-ground"
+              title="What holds across all five"
+              lede="The workflows differ. These four properties do not, and they are why the workflows are possible."
+            />
+          </Reveal>
+          <Reveal delay={0.06}>
+            <Facts className="mt-14" items={SHARED} />
+          </Reveal>
+        </Section>
+
+        <Section aria-labelledby="use-case-faq">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-16">
+            <Reveal className="lg:sticky lg:top-28 lg:self-start">
+              <SectionHead id="use-case-faq" title="Before you pick one" />
+            </Reveal>
+            <Reveal delay={0.06}>
+              <Faq items={FAQ} />
+            </Reveal>
           </div>
         </Section>
 
-        <Section aria-label="What every use case shares" width="wide-prose">
-          <SectionIntro
-            eyebrow="Common ground"
-            title="What holds across all five"
-            body="The workflows differ. These four properties do not, and they are the reason the workflows are possible."
-          />
-          <div className="grid gap-5 md:grid-cols-2">
-            {SHARED.map((item) => (
-              <div
-                key={item.title}
-                className="rounded-lg border border-white/10 bg-white/[0.02] p-6"
-              >
-                <h3 className="text-base font-medium text-white">{item.title}</h3>
-                <p className="mt-2.5 text-sm font-light leading-relaxed text-neutral-400">
-                  {item.body}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        <Section aria-label="Frequently asked questions" width="prose">
-          <SectionHeading className="mb-8">Before you pick one</SectionHeading>
-          <FaqList items={FAQ} />
-        </Section>
-
-        <CtaSection
+        <HorizonClose
           title="One free project, no credit card"
-          body="Connect your agent, build something small, and read the verification evidence."
+          lede="Connect your agent, build something small, and read the verification evidence yourself."
         >
-          <PrimaryButton href="/auth/signup">Start free</PrimaryButton>
-        </CtaSection>
-      </main>
+          <StartButton />
+          <ButtonLink href="/comparisons" variant="secondary">
+            See comparisons
+          </ButtonLink>
+        </HorizonClose>
+      </Page>
     </SiteShell>
   )
 }

@@ -1,7 +1,8 @@
-import { Metadata } from 'next'
-import { safeJsonLd } from '@/lib/security/safe-jsonld'
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { safeJsonLd } from '@/lib/security/safe-jsonld'
 import { SiteShell } from '@/components/site/SiteShell'
 import { CodeBlock } from '@/components/site/CodeBlock'
 import { articles } from '../data'
@@ -14,20 +15,14 @@ import {
   type ArticleBlock,
   type ArticleLane,
 } from '../content'
-import {
-  Breadcrumb,
-  InlineArrow,
-  PageHero,
-  Section,
-  Lead,
-  Card,
-  Tag,
-  PrimaryButton,
-} from '@/components/site/kit'
+import { DataTable, GlyphList, JsonLd, NextLinks, Page, Steps, Trail, withCode } from '@/components/site/kit'
+import { ScrollSpy } from '@/components/site/ScrollSpy'
+import { StartButton } from '@/components/site/StartButton'
+import { CONTAINER, DISPLAY, HEADING, PANEL, TITLE } from '@/components/site/tokens'
 
 const APP_URL = 'https://backenly.com'
 
-/** Shelf label for the hero, resolved from the same LANES the index renders. */
+/** Shelf label for the meta line, resolved from the same LANES the index renders. */
 const LANE_TITLES: Record<ArticleLane, string> = Object.fromEntries(
   LANES.map((l) => [l.id, l.title])
 ) as Record<ArticleLane, string>
@@ -61,7 +56,7 @@ export async function generateMetadata(props: {
 
 /**
  * Slugify a heading for its anchor. Kept in this file rather than a util so the
- * in-page nav and the heading ids can never disagree — they call the same
+ * in-page nav and the heading ids can never disagree: they call the same
  * function on the same string.
  */
 function anchorFor(heading: string): string {
@@ -71,21 +66,23 @@ function anchorFor(heading: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+/** Long-form reading copy: a step up from marketing body, and a step brighter. */
+const READ = 'text-[16px] leading-[1.8] tracking-[-0.006em] text-zinc-300 [text-wrap:pretty]'
+
 function BlockRenderer({ block }: { block: ArticleBlock }) {
   switch (block.kind) {
     case 'p':
-      return <Lead>{block.text}</Lead>
+      return <p className={READ}>{withCode(block.text)}</p>
 
     case 'code':
       return <CodeBlock code={block.code} label={block.label} language={block.language} />
 
     case 'list':
       return (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex list-disc flex-col gap-2.5 pl-5 marker:text-zinc-600">
           {block.items.map((item) => (
-            <li key={item} className="flex gap-3 text-[15px] leading-7 text-neutral-300 font-light">
-              <span aria-hidden className="mt-3 h-1 w-1 shrink-0 rounded-full bg-violet-300/70" />
-              <span>{item}</span>
+            <li key={item} className={`pl-1.5 ${READ}`}>
+              {withCode(item)}
             </li>
           ))}
         </ul>
@@ -93,37 +90,17 @@ function BlockRenderer({ block }: { block: ArticleBlock }) {
 
     case 'note':
       return (
-        <aside className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] px-5 py-4">
-          <p className="text-sm leading-7 text-neutral-300 font-light">{block.text}</p>
+        <aside className="rounded-r-lg border-l-2 border-violet-300/60 bg-white/[0.025] px-5 py-4">
+          <p className="text-[15px] leading-[1.75] text-zinc-300 [text-wrap:pretty]">{withCode(block.text)}</p>
         </aside>
       )
 
     /**
-     * A mechanism, not decoration: input → what the platform does → result. The
-     * rail is a single hairline so it reads as one sequence rather than a stack
-     * of cards, and the whole thing is an ordered list so it is a sequence to a
-     * screen reader too.
+     * A mechanism, not decoration: input, what the platform does, result. An
+     * ordered list, so it is a sequence to a screen reader too.
      */
     case 'steps':
-      return (
-        <ol className="relative flex flex-col gap-6 border-l border-white/10 pl-6">
-          {block.steps.map((step) => (
-            <li key={step.title} className="relative">
-              <span
-                aria-hidden
-                className="absolute -left-[27px] top-1.5 h-2 w-2 rounded-full border border-white/25 bg-black"
-              />
-              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-neutral-500">
-                {step.label}
-              </p>
-              <p className="mt-1 text-[15px] font-medium text-white">{step.title}</p>
-              <p className="mt-1.5 text-[15px] leading-7 text-neutral-400 font-light">
-                {step.body}
-              </p>
-            </li>
-          ))}
-        </ol>
-      )
+      return <Steps steps={block.steps} />
 
     /**
      * Wide content scrolls inside its own container. The page body must never
@@ -132,76 +109,43 @@ function BlockRenderer({ block }: { block: ArticleBlock }) {
      */
     case 'table':
       return (
-        <figure className="flex flex-col gap-2">
-          <div className="-mx-1 overflow-x-auto rounded-lg border border-white/10">
-            <table className="w-full min-w-[34rem] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/[0.03]">
-                  {block.columns.map((col) => (
-                    <th
-                      key={col}
-                      scope="col"
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-neutral-400"
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {block.rows.map((row) => (
-                  <tr key={row.join('|')} className="border-b border-white/[0.06] last:border-0">
-                    {row.map((cell, i) => (
-                      <td
-                        key={i}
-                        className={`px-4 py-3 align-top text-sm leading-6 ${
-                          i === 0 ? 'font-medium text-zinc-200' : 'text-neutral-400 font-light'
-                        }`}
-                      >
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <figure className="flex flex-col gap-3">
+          <DataTable
+            caption={block.caption ?? block.columns.join(', ')}
+            columns={block.columns}
+            rows={block.rows.map((row) => row.map((cell) => withCode(cell)))}
+          />
           {block.caption && (
-            <figcaption className="text-xs leading-6 text-neutral-500">{block.caption}</figcaption>
+            <figcaption className="text-[13px] leading-[1.6] text-zinc-500">{withCode(block.caption)}</figcaption>
           )}
         </figure>
       )
 
     case 'responsibility':
       return (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {(
-            [
-              { title: 'Backenly does', items: block.platform, dot: 'bg-violet-300/70' },
-              { title: 'You own', items: block.you, dot: 'bg-zinc-500' },
-            ] as const
-          ).map((col) => (
-            <div key={col.title} className="rounded-lg border border-white/10 bg-white/[0.02] p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-neutral-400">
-                {col.title}
-              </p>
-              <ul className="mt-4 flex flex-col gap-3">
-                {col.items.map((item) => (
-                  <li
-                    key={item}
-                    className="flex gap-2.5 text-sm leading-6 text-neutral-300 font-light"
-                  >
-                    <span aria-hidden className={`mt-2 h-1 w-1 shrink-0 rounded-full ${col.dot}`} />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className={`p-5 ${PANEL}`}>
+            <p className={`text-[15px] text-white ${HEADING}`}>Backenly does</p>
+            <GlyphList className="mt-4" glyph="check" items={block.platform.map((item) => withCode(item))} />
+          </div>
+          <div className={`p-5 ${PANEL}`}>
+            <p className={`text-[15px] text-white ${HEADING}`}>You own</p>
+            <GlyphList className="mt-4" glyph="dash" items={block.you.map((item) => withCode(item))} />
+          </div>
         </div>
       )
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   A guide, read like documentation rather than a landing page.
+
+   Three columns at xl: every guide on the left (so the next one is always a
+   click away), the article at a reading measure in the middle, and an
+   "On this page" index on the right that follows the scroll. At lg the right
+   column folds away; below lg the article stands alone and the guide list
+   moves to the foot of the page as previous and next.
+───────────────────────────────────────────────────────────── */
 
 export default async function ResourceSlugPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params
@@ -209,6 +153,7 @@ export default async function ResourceSlugPage(props: { params: Promise<{ slug: 
   if (!a) notFound()
 
   const readMinutes = READ_MINUTES[a.slug]
+  const updated = a.dateDisplay.replace('Updated ', '')
 
   const articleSchema = {
     '@context': 'https://schema.org',
@@ -247,157 +192,204 @@ export default async function ResourceSlugPage(props: { params: Promise<{ slug: 
     .map((s) => articles.find((x) => x.slug === s))
     .filter(Boolean) as typeof articles
 
+  const order = ALL_ARTICLES.findIndex((x) => x.slug === a.slug)
+  const previous = order > 0 ? ALL_ARTICLES[order - 1] : undefined
+  const next = order < ALL_ARTICLES.length - 1 ? ALL_ARTICLES[order + 1] : undefined
+
+  const toc = a.sections.map((section) => ({ id: anchorFor(section.heading), label: section.heading }))
+
   return (
     <SiteShell>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSchema) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbSchema) }}
-      />
-      <main className="relative z-20">
-        <Breadcrumb
-          items={[
-            { label: 'Home', href: '/' },
-            { label: 'Resources', href: '/resources' },
-            { label: a.title },
-          ]}
+      <JsonLd json={safeJsonLd(articleSchema)} />
+      <JsonLd json={safeJsonLd(breadcrumbSchema)} />
+      <Page>
+        {/* Key light, as on every page, behind the title. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-[260px] left-[-12%] h-[820px] w-[1100px] max-w-none bg-[radial-gradient(closest-side,rgba(255,255,255,0.06),transparent)]"
         />
 
-        {/*
-          The proof row is a three-up grid of small tiles, so its values have to
-          stay short, a full sentence wraps to four lines and leaves the other
-          two tiles half empty. The question this guide answers is the index
-          card's job; by the time someone is on the page they have chosen it,
-          and the intro below does the orienting.
-        */}
-        <PageHero
-          eyebrow={a.category}
-          title={a.title}
-          subtitle={a.intro}
-          proof={[
-            { label: 'Section', value: LANE_TITLES[a.lane] },
-            { label: 'Reading time', value: `${readMinutes} min` },
-            { label: 'Last updated', value: a.dateDisplay.replace('Updated ', '') },
-          ]}
-        />
-
-        {/*
-          The article shares the hero's container (max-w-4xl) at every width, so
-          the title and the first heading always start at the same x. From 2xl
-          up, the in-page nav hangs in the right margin that a 1536px+ viewport
-          leaves over, using empty space rather than reflowing the text. Below
-          2xl nothing moves: phones, tablets and 13"/14" laptops render exactly
-          the single column they always did.
-        */}
-        <div className="relative mx-auto w-full max-w-4xl px-6 pb-16">
-          <article className="min-w-0">
-            <div className="flex flex-col gap-12">
-              {a.sections.map((section) => (
-                <section
-                  key={section.heading}
-                  id={anchorFor(section.heading)}
-                  className="scroll-mt-28"
-                >
-                  <h2 className="mb-5 text-xl font-normal tracking-tight text-white">
-                    {section.heading}
-                  </h2>
-                  <div className="flex flex-col gap-5">
-                    {section.blocks.map((block, i) => (
-                      <BlockRenderer key={i} block={block} />
-                    ))}
+        <div className={`${CONTAINER} relative pb-[120px] pt-[40px] md:pt-[64px]`}>
+          <div className="grid gap-12 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-14 xl:grid-cols-[200px_minmax(0,1fr)_200px] xl:gap-16">
+            {/* Every guide, grouped by shelf. */}
+            <aside className="hidden lg:block">
+              <nav aria-label="Guides" className="sticky top-[100px]">
+                {LANES.map((lane) => (
+                  <div key={lane.id} className="mb-8">
+                    <p className="mb-3 text-[13px] font-medium text-zinc-500">{lane.title}</p>
+                    <ul className="flex flex-col border-l border-white/[0.08]">
+                      {ALL_ARTICLES.filter((x) => x.lane === lane.id).map((x) => {
+                        const current = x.slug === a.slug
+                        return (
+                          <li key={x.slug}>
+                            <Link
+                              href={`/resources/${x.slug}`}
+                              aria-current={current ? 'page' : undefined}
+                              className={`-ml-px block border-l py-[7px] pl-4 text-[14px] leading-[1.45] tracking-[-0.006em] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300 ${
+                                current
+                                  ? 'border-violet-300 text-white'
+                                  : 'border-transparent text-zinc-500 hover:border-white/25 hover:text-zinc-200'
+                              }`}
+                            >
+                              {x.title}
+                            </Link>
+                          </li>
+                        )
+                      })}
+                    </ul>
                   </div>
-                </section>
-              ))}
-            </div>
-
-            <div className="mt-12 border-t border-white/[0.07] pt-8">
-              <h2 className="mb-3 text-lg font-normal text-white">In short</h2>
-              <Lead>{a.conclusion}</Lead>
-            </div>
-
-            <div className="mt-10 rounded-lg border border-white/[0.07] bg-white/[0.02] px-5 py-4">
-              <p className="text-sm font-normal text-white">{ARTICLE_AUTHOR.name}</p>
-              <p className="text-xs text-neutral-500">
-                {ARTICLE_AUTHOR.role} · Updated {a.dateDisplay.replace('Updated ', '')}
-              </p>
-            </div>
-
-            <Card className="mt-12 !border-violet-400/20 !p-8">
-              <h2 className="mb-2 text-lg font-normal text-white">Try it on a live project</h2>
-              <p className="mb-6 text-sm font-light leading-relaxed text-neutral-400">
-                One free project, no credit card. Connect your agent over MCP and read the
-                verification evidence yourself.
-              </p>
-              <PrimaryButton href="/auth/signup">
-                Create a project
-                <InlineArrow />
-              </PrimaryButton>
-            </Card>
-          </article>
-
-          {/*
-            In-page nav, 2xl and up only.
-
-            It hangs in the right margin rather than sitting in a grid column,
-            because the article has to share the hero's container to line up
-            with it. A grid wide enough to hold both centred its first column at
-            a different x than the hero above, and the ~100px step between the
-            title and the first heading read as a broken layout on a 16" screen.
-            `left-full` pins it just outside that shared container, so the two
-            can never drift apart again.
-          */}
-          <aside className="absolute inset-y-0 left-full ml-10 hidden w-56 2xl:block">
-            <nav aria-label="On this page" className="sticky top-28">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-neutral-500">
-                On this page
-              </p>
-              <ul className="mt-4 flex flex-col gap-2.5 border-l border-white/10 pl-4">
-                {a.sections.map((section) => (
-                  <li key={section.heading}>
-                    <a
-                      href={`#${anchorFor(section.heading)}`}
-                      className="block text-sm leading-6 text-neutral-500 transition-colors hover:text-white focus-visible:text-white focus-visible:outline-none"
-                    >
-                      {section.heading}
-                    </a>
-                  </li>
                 ))}
-              </ul>
-            </nav>
-          </aside>
-        </div>
+              </nav>
+            </aside>
 
-        {related.length > 0 && (
-          <Section aria-label="Related guides" className="!pt-0">
-            <h2 className="mb-6 text-lg font-normal text-white">Next</h2>
-            <div className="flex flex-col gap-4">
-              {related.map((r) => (
-                <Link key={r.slug} href={`/resources/${r.slug}`} className="group block">
-                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 transition-colors group-hover:border-white/20 group-hover:bg-white/[0.04]">
-                    <div className="mb-1.5 flex items-center gap-2.5">
-                      <Tag>{r.category}</Tag>
-                      <span className="text-xs text-neutral-500">{r.readMinutes} min</span>
-                    </div>
-                    <p className="text-sm font-normal text-white">{r.title}</p>
-                    <p className="mt-1 text-sm font-light text-neutral-500">{r.answers}</p>
+            <article className="min-w-0 max-w-[740px]">
+              <header className="hero-enter">
+                <Trail
+                  items={[
+                    { label: 'Home', href: '/' },
+                    { label: 'Documentation', href: '/resources' },
+                    { label: a.title },
+                  ]}
+                />
+                <h1
+                  className={`mt-7 bg-gradient-to-b from-white from-40% to-zinc-400 bg-clip-text pb-2 text-[36px] text-transparent [text-wrap:balance] sm:text-[44px] md:text-[50px] ${DISPLAY}`}
+                >
+                  {a.title}
+                </h1>
+                <p className="mt-5 text-[18px] leading-[1.65] tracking-[-0.012em] text-zinc-400 [text-wrap:pretty]">
+                  {withCode(a.intro)}
+                </p>
+                <p className="mt-7 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-zinc-500">
+                  <span>{LANE_TITLES[a.lane]}</span>
+                  <span aria-hidden className="h-3 w-px bg-white/[0.12]" />
+                  <span>{readMinutes} min read</span>
+                  <span aria-hidden className="h-3 w-px bg-white/[0.12]" />
+                  <span>Updated {updated}</span>
+                </p>
+              </header>
+
+              <div
+                aria-hidden
+                className="mt-10 h-px bg-[linear-gradient(to_right,rgba(196,181,253,0.45),rgba(255,255,255,0.10)_45%,transparent)]"
+              />
+
+              <div className="mt-12 flex flex-col gap-16">
+                {a.sections.map((section) => {
+                  const id = anchorFor(section.heading)
+                  return (
+                    <section key={section.heading} id={id} className="scroll-mt-[100px]">
+                      <h2 className={`group text-[24px] text-white md:text-[28px] ${TITLE}`}>
+                        <a
+                          href={`#${id}`}
+                          className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                        >
+                          {withCode(section.heading)}
+                          <span
+                            aria-hidden
+                            className="ml-2 text-zinc-600 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                          >
+                            #
+                          </span>
+                        </a>
+                      </h2>
+                      <div className="mt-6 flex flex-col gap-6">
+                        {section.blocks.map((block, i) => (
+                          <BlockRenderer key={i} block={block} />
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })}
+              </div>
+
+              <div className={`mt-16 p-6 md:p-8 ${PANEL}`}>
+                <h2 className={`text-[19px] text-white ${HEADING}`}>In short</h2>
+                <p className={`mt-3 ${READ}`}>{withCode(a.conclusion)}</p>
+                <p className="mt-6 border-t border-white/[0.08] pt-5 text-[13px] text-zinc-500">
+                  Written by <span className="text-zinc-300">{ARTICLE_AUTHOR.name}</span>, {ARTICLE_AUTHOR.role}. Updated{' '}
+                  {updated}.
+                </p>
+              </div>
+
+              <div className="relative mt-6 overflow-hidden rounded-2xl border border-violet-300/[0.18] bg-[#0a0b0d] p-6 md:p-8">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,transparent,rgba(167,139,250,0.6),transparent)]"
+                />
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_80%_at_20%_0%,rgba(139,92,246,0.10),transparent)]"
+                />
+                <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className={`text-[19px] text-white ${HEADING}`}>Try it on a live project</h2>
+                    <p className="mt-2 max-w-[46ch] text-[15px] leading-[1.65] text-zinc-400">
+                      One free project, no credit card. Connect your agent over MCP and read the
+                      verification evidence yourself.
+                    </p>
                   </div>
-                </Link>
-              ))}
-            </div>
-            <div className="mt-6">
-              <Link
-                href="/resources"
-                className="text-sm text-violet-300 transition-colors hover:text-white"
-              >
-                All guides
-              </Link>
-            </div>
-          </Section>
-        )}
-      </main>
+                  <div className="shrink-0">
+                    <StartButton />
+                  </div>
+                </div>
+              </div>
+
+              {(previous || next) && (
+                <nav aria-label="Previous and next guide" className="mt-16 grid gap-3 sm:grid-cols-2">
+                  {previous ? (
+                    <Link
+                      href={`/resources/${previous.slug}`}
+                      className={`group flex flex-col gap-2 p-5 transition-colors duration-200 hover:border-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${PANEL}`}
+                    >
+                      <span className="inline-flex items-center gap-1.5 text-[13px] text-zinc-500">
+                        <ArrowLeft aria-hidden className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5" />
+                        Previous
+                      </span>
+                      <span className={`text-[16px] text-white ${HEADING}`}>{previous.title}</span>
+                    </Link>
+                  ) : (
+                    <span className="hidden sm:block" />
+                  )}
+                  {next && (
+                    <Link
+                      href={`/resources/${next.slug}`}
+                      className={`group flex flex-col items-end gap-2 p-5 text-right transition-colors duration-200 hover:border-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${PANEL}`}
+                    >
+                      <span className="inline-flex items-center gap-1.5 text-[13px] text-zinc-500">
+                        Next
+                        <ArrowRight aria-hidden className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                      </span>
+                      <span className={`text-[16px] text-white ${HEADING}`}>{next.title}</span>
+                    </Link>
+                  )}
+                </nav>
+              )}
+
+              {related.length > 0 && (
+                <div className="mt-16">
+                  <h2 className={`text-[19px] text-white ${HEADING}`}>Related guides</h2>
+                  <NextLinks
+                    className="mt-5"
+                    items={related.map((r) => ({
+                      href: `/resources/${r.slug}`,
+                      meta: `${r.category}, ${r.readMinutes} min`,
+                      title: r.title,
+                    }))}
+                  />
+                </div>
+              )}
+            </article>
+
+            {/* On this page, following the scroll. */}
+            <aside className="hidden xl:block">
+              <div className="sticky top-[100px]">
+                <p className="mb-3 text-[13px] font-medium text-zinc-500">On this page</p>
+                <ScrollSpy label="On this page" items={toc} />
+              </div>
+            </aside>
+          </div>
+        </div>
+      </Page>
     </SiteShell>
   )
 }

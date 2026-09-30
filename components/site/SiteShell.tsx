@@ -76,7 +76,9 @@ export const ROUTES = {
 const SHOW_DISCORD = true
 
 const NAV_LINKS = [
-  { label: 'Product', href: '/#capabilities', activePath: '/' },
+  // The product page, not an anchor on the landing page: /features is the full
+  // catalog, and `activePath: '/'` used to light "Product" on the home page.
+  { label: 'Product', href: ROUTES.features, activePath: ROUTES.features },
   { label: 'Resources', href: ROUTES.resources, activePath: ROUTES.resources },
   { label: 'Use cases', href: ROUTES.useCases, activePath: ROUTES.useCases },
   { label: 'Pricing', href: ROUTES.pricing, activePath: ROUTES.pricing },

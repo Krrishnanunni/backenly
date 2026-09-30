@@ -96,3 +96,47 @@ export const MEASURE_TIGHT = 'max-w-[44ch]'
  */
 export const SITE_CONTAINER = 'max-w-[100rem]'
 export const SITE_CONTAINER_2XL = '2xl:max-w-[100rem]'
+
+/* ── Page frame, shared with the landing page ────────────────────────────── */
+
+/** The page ground: a cool near-black, not #000, so panels can sit above it. */
+export const GROUND = 'bg-[#08090a]'
+
+/** THE container, with the navbar's own gutters, so every edge lines up. */
+export const CONTAINER = 'mx-auto w-full max-w-[100rem] px-5 sm:px-6'
+
+/**
+ * Vertical rhythm for a marketing section. Sections own their TOP padding
+ * only, so a boundary is one gap rather than two stacked into a well of black.
+ * The closing section owns the bottom of the page.
+ */
+export const SECTION_TOP = 'relative pt-[88px] md:pt-[128px]'
+
+/* ── Actions, identical to the landing page's ────────────────────────────── */
+
+const FOCUS =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#08090a]'
+
+export const PRIMARY_CTA = `group inline-flex h-[46px] cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-white px-5 text-[15px] font-semibold tracking-[-0.01em] text-black shadow-[0_0_0_1px_rgba(255,255,255,0.1),0_8px_30px_-8px_rgba(255,255,255,0.35)] transition-[background-color,transform,box-shadow] duration-200 hover:bg-zinc-200 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_10px_40px_-8px_rgba(255,255,255,0.45)] active:scale-[0.98] ${FOCUS}`
+
+export const SECONDARY_CTA = `group inline-flex h-[46px] cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-white/[0.12] bg-white/[0.03] px-5 text-[15px] font-medium tracking-[-0.01em] text-zinc-200 transition-[background-color,border-color,color,transform] duration-200 hover:border-white/25 hover:bg-white/[0.07] hover:text-white active:scale-[0.98] ${FOCUS}`
+
+export const TEXT_LINK = `group inline-flex items-center gap-1.5 text-[15px] font-medium tracking-[-0.006em] text-zinc-300 transition-colors duration-200 hover:text-white ${FOCUS} rounded-sm`
+
+/** Inline link inside running prose. */
+export const PROSE_LINK = `text-zinc-200 underline decoration-white/25 underline-offset-4 transition-colors duration-200 hover:text-white hover:decoration-white/60 ${FOCUS} rounded-sm`
+
+/** Keyboard focus for any other interactive surface. */
+export const FOCUS_RING = FOCUS
+
+/* ── Surfaces ────────────────────────────────────────────────────────────── */
+
+/**
+ * A raised panel: the landing bento's surface. One radius for panels (16px),
+ * one for controls (8px), one for chips (6px). Nothing else.
+ */
+export const PANEL =
+  'rounded-2xl border border-white/[0.07] bg-[linear-gradient(180deg,rgba(255,255,255,0.028),rgba(255,255,255,0.008))]'
+
+/** Solid ink for anything that must occlude what is behind it. */
+export const INK = 'bg-[#0a0b0d]'
