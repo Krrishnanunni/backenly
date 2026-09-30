@@ -107,12 +107,34 @@ COPY --from=build /src/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=build /src/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /src/prisma/schema.prisma ./prisma/schema.prisma
 
+# esbuild, and the platform binary it drives. Route-module functions are
+# TypeScript compiled on every invocation (executeRouteModuleFunction in
+# lib/services/ai-functions/route-module-runner.ts), through a require the
+# bundler deliberately leaves unresolved because esbuild is a native binary.
+# The bundle therefore cannot carry it; without these two directories every
+# invocation of an agent-written function failed with "Cannot find module
+# 'esbuild'". Measured on AWS staging 2026-09-26: the v7 and v8 images both
+# lacked it.
+COPY --from=build /src/node_modules/esbuild ./node_modules/esbuild
+COPY --from=build /src/node_modules/@esbuild ./node_modules/@esbuild
+
+# Asserted, not assumed: the build fails unless this image can compile
+# TypeScript the way the function runner does.
+RUN node -e "const e=require('esbuild');const o=e.transformSync('export const n: number = 1',{loader:'ts',format:'cjs'});if(!o.code.includes('exports'))process.exit(1);console.log('esbuild '+e.version+' compiles TypeScript in this image')"
+
 # overlay-allowlist.json and, when composed, lib/cloud/** — read from disk by
 # the startup edition assertion. Without these a Cloud Runtime refuses to boot.
 COPY --from=build /src/edition-files/ ./
 
+# Trust the Amazon RDS root CAs for every Node TLS connection. The runtime's
+# pg connections (realtime LISTEN/NOTIFY among them) hit the same pg 8.13+
+# verify-full behaviour as the web app; see docker/web.Dockerfile for the full
+# account. Additive, verification stays on, inert against non-RDS servers.
+COPY docker/certs/rds-ca-ap-south-1.pem /app/certs/rds-ca-ap-south-1.pem
+
 ENV NODE_ENV=production \
-    RUNTIME_PORT=3001
+    RUNTIME_PORT=3001 \
+    NODE_EXTRA_CA_CERTS=/app/certs/rds-ca-ap-south-1.pem
 
 EXPOSE 3001
 

@@ -50,8 +50,10 @@ COPY . .
 # defaults, so a different deployment can set its own.
 ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
-ARG NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=""
-ARG NEXT_PUBLIC_PADDLE_ENVIRONMENT=production
+# Usage pricing on the public pricing page (lib/pricing/catalog.ts). Nothing is
+# advertised unless a release passes `published`, and then only the rates the
+# catalog publishes. The default is an explicit non-publishing value, not empty.
+ARG NEXT_PUBLIC_USAGE_PRICING=unpublished
 ARG NEXT_PUBLIC_SENTRY_DSN=""
 ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY=""
 ARG NEXT_PUBLIC_ENABLE_PHASE_10_BUILD_HISTORY=true
@@ -60,8 +62,7 @@ ARG BACKENLY_EDITION=cloud
 
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
     NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-    NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=$NEXT_PUBLIC_PADDLE_CLIENT_TOKEN \
-    NEXT_PUBLIC_PADDLE_ENVIRONMENT=$NEXT_PUBLIC_PADDLE_ENVIRONMENT \
+    NEXT_PUBLIC_USAGE_PRICING=$NEXT_PUBLIC_USAGE_PRICING \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
     NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY \
     NEXT_PUBLIC_ENABLE_PHASE_10_BUILD_HISTORY=$NEXT_PUBLIC_ENABLE_PHASE_10_BUILD_HISTORY \
@@ -94,9 +95,30 @@ RUN npx tsx scripts/verify-public-build-inputs.ts --artifact
 # ── Runtime ─────────────────────────────────────────────────────────────────
 FROM node:20-slim AS runtime
 
+# pg_dump and psql for project database backups and restores
+# (lib/services/workspace-backup.ts), which the web process runs every day.
+# The image carried neither: every scheduled backup failed with
+# "spawn pg_dump ENOENT" in staging and production alike. The server is
+# PostgreSQL 16, and pg_dump refuses a server newer than itself, so Debian's own
+# client (15 on bookworm) cannot back it up either. The client comes from the
+# PostgreSQL project's apt repository; its signing key is accepted only if the
+# fingerprint matches, and the build asserts the installed version below.
+ARG PG_CLIENT_MAJOR=16
+ARG PGDG_KEY_FINGERPRINT=B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && apt-get install -y --no-install-recommends openssl ca-certificates curl gnupg \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+ && test "$(gpg --show-keys --with-colons /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc | awk -F: '/^fpr/ {print $10; exit}')" = "$PGDG_KEY_FINGERPRINT" \
+ && . /etc/os-release \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends "postgresql-client-${PG_CLIENT_MAJOR}" \
+ && apt-get purge -y curl gnupg \
+ && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
+RUN pg_dump --version | grep -E "^pg_dump \(PostgreSQL\) ${PG_CLIENT_MAJOR}\." \
+ && psql --version | grep -E "^psql \(PostgreSQL\) ${PG_CLIENT_MAJOR}\."
 
 WORKDIR /app
 
@@ -104,6 +126,20 @@ WORKDIR /app
 # engine, and — for a Cloud build — lib/cloud and overlay-allowlist.json.
 # postbuild has already copied .next/static and public/ into it.
 COPY --from=build /src/.next/standalone ./
+
+# esbuild, and the platform binary it drives. Deploying a route-module function
+# validates it by compiling its TypeScript here (validateRouteModule in
+# lib/services/ai-functions/route-module-runner.ts), through a require that
+# output tracing cannot see: esbuild is a native binary and is loaded that way
+# on purpose, so the standalone tree never contained it. Every deploy_code on
+# the AWS images failed with "Cannot find module 'esbuild'" (measured on
+# staging 2026-09-26; the production v7 image lacked it as well).
+COPY --from=build /src/node_modules/esbuild ./node_modules/esbuild
+COPY --from=build /src/node_modules/@esbuild ./node_modules/@esbuild
+
+# Asserted, not assumed: the build fails unless this image can compile
+# TypeScript the way the function runner does.
+RUN node -e "const e=require('esbuild');const o=e.transformSync('export const n: number = 1',{loader:'ts',format:'cjs'});if(!o.code.includes('exports'))process.exit(1);console.log('esbuild '+e.version+' compiles TypeScript in this image')"
 
 # ── Containment at the boundary that can actually assert it ─────────────────
 #
@@ -141,11 +177,29 @@ RUN mkdir -p /app/workspace /app/backups && chown -R node:node /app/workspace /a
 # so the server comes up, logs "Ready", listens on a name nothing else can
 # reach, and every request times out. It looks like a hung app rather than a
 # binding mistake.
+# Trust the Amazon RDS root CAs for every Node TLS connection.
+#
+# node-postgres treats `sslmode=require` as full verification (pg 8.13+), and
+# the RDS certificate chain is not in Node's default roots. So every `pg.Pool`
+# in the app - the workspace pool behind every autonomy catalog probe among
+# them - failed with "self-signed certificate in certificate chain" against
+# RDS, while Prisma, which ships its own trust store, connected fine. Measured
+# on AWS staging 2026-09-22: fourteen invariants reported as errors, so the
+# reconciler saw no gaps and healed nothing, and every health check was green.
+#
+# NODE_EXTRA_CA_CERTS ADDS these roots; public CAs stay trusted and chain
+# verification stays on. The bundle is the pinned ap-south-1 set already used
+# by tools/migration-lineage (a test asserts the two copies are identical).
+# Inert against any server not signed by RDS, so it is safe in every image; an
+# operator on another RDS region overrides the variable with that bundle.
+COPY docker/certs/rds-ca-ap-south-1.pem /app/certs/rds-ca-ap-south-1.pem
+
 ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     WORKSPACE_DIR=/app/workspace \
-    BACKUP_DIR=/app/backups
+    BACKUP_DIR=/app/backups \
+    NODE_EXTRA_CA_CERTS=/app/certs/rds-ca-ap-south-1.pem
 
 EXPOSE 3000
 
@@ -154,4 +208,14 @@ USER node
 # server.js calls process.chdir(__dirname) on startup, which is why .env has to
 # live beside it on the Hetzner host. In a container there is no .env at all:
 # configuration arrives as real environment variables.
-CMD ["node", "server.js"]
+#
+# HOSTNAME is set HERE, at exec, as well as in ENV above, because the ENV value
+# does not survive every platform. ECS Fargate replaces it with the task's own
+# hostname: measured on AWS staging 2026-09-25, Next logged
+# "Local: http://ip-10-20-10-179.ap-south-1.compute.internal:3000", so nothing
+# listened on loopback. The ALB still worked (it targets that address), which
+# is why it looked healthy, while everything in the task that calls
+# 127.0.0.1:3000 failed. The contract sweep reported "ingress_unreachable" every
+# minute and never verified a single project. `exec` keeps node as PID 1 so
+# SIGTERM still reaches it.
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]

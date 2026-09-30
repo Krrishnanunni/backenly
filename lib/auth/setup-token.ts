@@ -77,6 +77,44 @@ export async function deploymentIsClaimed(): Promise<boolean> {
 }
 
 /**
+ * Whether a signup made right now must present the token.
+ *
+ * The signup page asks this before it renders, so its token field appears
+ * exactly when the register route would refuse a signup without one. The gate
+ * shipped without that question: the route demanded a token that no page could
+ * send, so every browser signup on a fresh install was refused and only a
+ * hand-written request could claim the deployment the README said to claim
+ * "at signup".
+ *
+ * Answers yes or no and nothing else. The token itself never leaves `.env`, and
+ * that a claim is pending is already what the register route tells anyone who
+ * tries without one.
+ */
+export async function claimAwaitsToken(): Promise<boolean> {
+  if (!setupTokenRequired()) return false
+  return !(await deploymentIsClaimed())
+}
+
+/**
+ * Whether an OAuth sign-in may create a NEW account right now.
+ *
+ * No, while a token-gated deployment is unclaimed. An OAuth round trip carries
+ * no setup token, so it cannot be how the operator claims their install - and
+ * the Google and GitHub callbacks used to create the first account anyway,
+ * without ever asking. On a self-hosted install with OAuth configured, the
+ * single administrator slot then went to whichever stranger clicked "Sign up
+ * with Google" first, which is exactly what the token exists to prevent. In
+ * single-tenant that account is treated as the deployment's operator.
+ *
+ * Signing IN to an account that already exists is unaffected, and so is a
+ * deployment with no token configured, where a provider-verified address is
+ * the same proof an emailed code would be.
+ */
+export async function oauthMayCreateAccount(): Promise<boolean> {
+  return !(await claimAwaitsToken())
+}
+
+/**
  * Compare without leaking where two values start to differ.
  *
  * Lengths are compared first and separately, because timingSafeEqual throws on

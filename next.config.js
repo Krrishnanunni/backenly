@@ -17,6 +17,18 @@ const enforcedScriptSrc = [
 
 const nextConfig = {
   reactStrictMode: true,
+  allowedDevOrigins: [
+    '192.168.*',
+    '10.*',
+    '*.local',
+    'localhost',
+    '127.0.0.1',
+    '*.trycloudflare.com',
+    '*.loca.lt',
+    '*.ngrok-free.app',
+    '*.ngrok.io',
+    '*.pinggy.link',
+  ],
 
   // ── IA restructure route migration (IA restructure §14) ────────
   // Every section that moved to the single project workspace keeps a permanent
@@ -148,8 +160,11 @@ const nextConfig = {
         destination: '/api/mcp/oauth/authorization-server',
       },
     ]
-    // Only proxy /api/v1/* when RUNTIME_API_URL is set. In production the
-    // Next.js route handlers in app/api/v1/ serve these requests directly.
+    // Only when RUNTIME_API_URL is set. This rarely fires: a rewrite in this
+    // position runs only when no route matches, and under /api/v1/{projectId}/
+    // the [...unmatched] catch-all matches everything, so that route is what
+    // forwards the runtime's paths (lib/runtime/forward-to-runtime.ts). This
+    // still covers /api/v1/* paths outside a project.
     if (process.env.RUNTIME_API_URL) {
       rules.push({
         source: '/api/v1/:path*',
@@ -177,6 +192,15 @@ const nextConfig = {
   // experimental.instrumentationHook flag that used to enable it is gone. It
   // was not a no-op to leave in place: Next 16 rejects unrecognised keys under
   // `experimental`.
+  experimental: {
+    // With middleware present Next buffers every request body up to this size
+    // and silently truncates the rest, so its 10 MB default turned the 100 MB
+    // upload ceiling into 10 MB and answered bigger uploads with 500. It equals
+    // MAX_UPLOAD_REQUEST_BYTES in lib/storage/body-limits.ts (a unit test holds
+    // them equal); the middleware refuses any other route's body over 10 MB,
+    // so only the upload routes can use the larger buffer.
+    proxyClientMaxBodySize: 101 * 1024 * 1024,
+  },
   outputFileTracingIncludes: {
     '/api/**/*': ['./node_modules/.prisma/**/*'],
     // Cloud composition, named explicitly because it is read at RUNTIME by
@@ -272,6 +296,17 @@ const nextConfig = {
           { key: 'Cache-Control', value: 'public, max-age=3600, stale-while-revalidate=86400' },
         ],
       },
+      {
+        // The hero film and its poster (components/landing/HeroFilm). Every
+        // file here carries its version in its name, so a re-render ships
+        // under a new name and these can be cached for good. Never replace a
+        // file under public/media in place: browsers that already hold it
+        // would keep the old one for a year.
+        source: '/media/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
       // /api/v1/* CORS is decided dynamically in middleware.ts so we can
       // (a) per-project allowedOrigins and (b) avoid wildcard+credentials
       // mismatch. We intentionally do NOT set Access-Control-Allow-Origin
@@ -288,7 +323,9 @@ const nextConfig = {
         source: '/:path*',
         headers: [
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
-          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+          ...(!isDevelopment
+            ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }]
+            : []),
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           // X-XSS-Protection removed — the legacy header is deprecated and
@@ -311,14 +348,14 @@ const nextConfig = {
               "img-src 'self' data: https: blob:",
               // Tighten connect-src — we explicitly allow Sentry, Paddle, and
               // the project's own backend. Wildcard `https:` / `wss:` removed.
-              "connect-src 'self' https://api.backenly.com https://*.backenly.com https://*.ingest.sentry.io https://*.sentry.io https://api.paddle.com https://sandbox-api.paddle.com https://buy.paddle.com https://sandbox-buy.paddle.com https://api.openai.com https://*.amplitude.com wss://*.backenly.com https://challenges.cloudflare.com",
+              `connect-src 'self' ${isDevelopment ? 'ws: wss:' : ''} https://api.backenly.com https://*.backenly.com https://*.ingest.sentry.io https://*.sentry.io https://api.paddle.com https://sandbox-api.paddle.com https://buy.paddle.com https://sandbox-buy.paddle.com https://api.openai.com https://*.amplitude.com wss://*.backenly.com https://challenges.cloudflare.com`,
               "frame-src 'self' https://buy.paddle.com https://sandbox-buy.paddle.com https://app.supademo.com https://challenges.cloudflare.com",
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",
               "object-src 'none'",
-              "upgrade-insecure-requests",
-            ].join('; '),
+              !isDevelopment ? "upgrade-insecure-requests" : null,
+            ].filter(Boolean).join('; '),
           },
           {
             // Report-only strict CSP — does NOT block anything. Browsers send

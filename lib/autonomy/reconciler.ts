@@ -23,6 +23,7 @@
  *   execution path bolted on here.
  */
 
+import { isWatchableProject } from '@/lib/projects/backend-presence'
 import { prisma } from '@/lib/db/prisma'
 import { computeDesiredStateDiff, summarizeDesiredState, gapIdentity } from './desired-state'
 import type { DesiredStateGap, DesiredStateReport } from './desired-state'
@@ -38,6 +39,7 @@ import { computeHealthSignal } from './telemetry'
 import { LOOP_TICK_ACTIONS } from './loop-tick'
 import { runAutoFix } from '@/lib/core/auto-fix-engine'
 import { FLAGS } from '@/lib/config/flags'
+import { loopPrincipals, principalsToMetadata } from '@/lib/principal'
 
 export type ReconcileAction =
   | 'WOULD_AUTO_APPLY'     // tier within dial + breaker budget available
@@ -185,6 +187,9 @@ export async function runReconcilerShadow(projectId: string): Promise<Reconcilia
         projectId,
         action: 'AUTONOMY_SHADOW_DECISION',
         type: 'autonomy',
+        metadata: principalsToMetadata(
+          await loopPrincipals(prisma, projectId, 'reconciler'),
+        ) as any,
         details: JSON.stringify({
           mode: 'shadow',
           level: plan.level,
@@ -648,6 +653,9 @@ export async function ensureFinding(
             projectId,
             action: 'AUTONOMY_RECURRENCE_ESCALATED',
             type: 'autonomy',
+            metadata: principalsToMetadata(
+              await loopPrincipals(prisma, projectId, 'reconciler'),
+            ) as any,
             details: JSON.stringify({
               findingId: created.id,
               findingType: gap.type,
@@ -739,6 +747,29 @@ export async function runReconcilerLive(projectId: string): Promise<LiveReconcil
 
     const toApply = plan.decisions.filter(d => d.action === 'WOULD_AUTO_APPLY')
     if (toApply.length === 0) {
+      // Why nothing will happen this tick.
+      //
+      // The shadow path prints its counts; the live path printed nothing, so a
+      // deployment where the loop evaluated every project and repaired none was
+      // indistinguishable from one with nothing to repair. Measured on staging
+      // 2026-09-22: a table with RLS disabled sat through 28 ticks and the only
+      // available signal was "0 fixes applied".
+      //
+      // An UNCHECKED invariant is the case worth shouting about: a probe that
+      // errored or was gated reports no violation, which reads exactly like a
+      // healthy backend.
+      const report = plan.report as unknown as {
+        errors?: string[]
+        disabled?: Array<{ invariantId?: string; id?: string }>
+        violations?: Array<{ type: string; tier: number }>
+      }
+      console.log(
+        `[Reconciler:live] project=${projectId} nothing to apply — ` +
+          `counts=${JSON.stringify(plan.counts)} ` +
+          `violations=${JSON.stringify((report.violations ?? []).map(v => `${v.type}:t${v.tier}`))} ` +
+          `errors=${JSON.stringify(report.errors ?? [])} ` +
+          `disabled=${JSON.stringify((report.disabled ?? []).map(d => d.invariantId ?? d.id ?? 'unknown'))}`,
+      )
       return { ...base, frozen: false, attempted: 0, applied: 0, escalated: 0, deferred: 0 }
     }
 
@@ -750,6 +781,9 @@ export async function runReconcilerLive(projectId: string): Promise<LiveReconcil
           projectId,
           action: 'AUTONOMY_CHANGE_FREEZE',
           type: 'autonomy',
+          metadata: principalsToMetadata(
+            await loopPrincipals(prisma, projectId, 'reconciler'),
+          ) as any,
           details: JSON.stringify({
             reason: 'project is mid-incident — autonomous changes frozen this tick',
             health: health.reasons,
@@ -768,6 +802,11 @@ export async function runReconcilerLive(projectId: string): Promise<LiveReconcil
     let applied = 0
     let escalated = 0
     let deferred = 0
+    // Mutations whose result nobody could confirm. Tallied separately from
+    // `applied` on purpose: folding them in would make the ledger claim work
+    // the loop cannot vouch for, which is the bug this counter exists to make
+    // visible rather than to hide.
+    let unverified = 0
     let attempted = 0
 
     // Why each un-attempted gap was skipped, tallied by reason. This is what
@@ -823,9 +862,30 @@ export async function runReconcilerLive(projectId: string): Promise<LiveReconcil
       // every safety property is preserved — classifier gate, pre-fix snapshot,
       // post-fix re-probe, regression check, change-freeze — while a backend
       // converges in a tick or two instead of an afternoon.
-      const res = await runAutoFix(findingId, projectId, { skipCooldown: true })
+      const res = await runAutoFix(findingId, projectId, {
+        skipCooldown: true,
+        actor: { kind: 'autonomous', loop: 'reconciler' },
+      })
       if (res.outcome === 'auto_fixed') {
         applied++
+      } else if (res.outcome === 'applied_unverified') {
+        // STOP THE TICK. The backend was mutated and the acceptance probe
+        // could not say whether it worked, so everything this pass would do
+        // next rests on state nobody has confirmed.
+        //
+        // This is the second half of the fail-open fix and the half that is
+        // easy to miss: recording the outcome honestly is not enough if the
+        // controller then carries on as though the repair succeeded. Gap B's
+        // repair may assume Gap A's is in place, and a probe that could not
+        // read the database a moment ago is unlikely to adjudicate the next
+        // one either.
+        //
+        // Not counted in `applied`. The remaining gaps stay open and the next
+        // tick re-probes from scratch, which is also how an unverified fix
+        // that actually worked gets closed: `reapInvariantFindings` clears it
+        // once the gap is genuinely gone.
+        unverified++
+        break
       } else if (res.outcome === 'deferred') {
         deferred++
         // Still a real stop condition: what remains after the budget is removed
@@ -843,12 +903,16 @@ export async function runReconcilerLive(projectId: string): Promise<LiveReconcil
         projectId,
         action: 'AUTONOMY_LIVE_RUN',
         type: 'autonomy',
+        metadata: principalsToMetadata(
+          await loopPrincipals(prisma, projectId, 'reconciler'),
+        ) as any,
         details: JSON.stringify({
           level: plan.level,
           attempted,
           applied,
           escalated,
           deferred,
+          unverified,
           autoBudget: plan.autoBudget,
           // The gaps this tick declined to act on, by reason. Persisted (not
           // just logged) because diagnosing the thirteen-day stall required
@@ -945,6 +1009,12 @@ export async function runReconciler(
   projectId: string,
 ): Promise<ReconciliationPlan | LiveReconcileResult | null> {
   if (!FLAGS.ENABLE_AUTONOMY_RECONCILER) return null
+
+  // Every way in — the fleet schedulers, the post-mutation kick, the HTTP cron
+  // route — arrives here, so this is where "is there a backend to watch?" is
+  // asked. The schedulers already filtered on it; the kick did not, and
+  // neither did anything that calls this directly.
+  if (!(await isWatchableProject(projectId))) return null
 
   // Plan-driven cadence gate. The "tick" is any prior reconciler audit row
   // — live, shadow, change-freeze, or the dispatcher-written TICK marker. The

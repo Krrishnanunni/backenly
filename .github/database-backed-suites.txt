@@ -244,6 +244,32 @@ __tests__/database/app-role-separation.test.ts
 # first. Covers the race, the replay, and adoption itself.
 __tests__/auth/deployment-claim.test.ts
 
+# Emailed six-digit codes for platform signup and password reset. The code is
+# only safe short because it can be guessed a few times, online, and used once:
+# the attempt budget is one conditional UPDATE and single use is one conditional
+# DELETE, so both are asserted under real concurrency against Postgres.
+#
+# The routes suite drives signup and reset end to end against a real STARTTLS
+# SMTP sink, reading each code out of the mail that actually arrived, and
+# includes the production failure where the provider rejected the sending
+# domain while every page still said "sent".
+__tests__/auth/email-code.test.ts
+__tests__/auth/email-code-routes.test.ts
+
+# Signing out ends this browser's sessions from any state: live, access expired
+# with a live refresh cookie, cookie-only, Bearer and cookie drifted apart, or
+# already signed out. It ends only what the request presents, refuses
+# cross-site browser requests, and logout-all still needs a live session. The
+# refresh route is driven afterwards to prove the token cannot be replayed.
+# Fails 12/12 without a database, passes 12/12 with one.
+__tests__/auth/session-lifecycle-routes.test.ts
+
+# An OAuth sign-in carries no setup token, so it must not be able to claim a
+# self-hosted deployment - and the Google and GitHub callbacks used to create
+# the first account without asking. Needs a users table with ZERO rows, which a
+# shared database cannot guarantee, so it runs against a database of its own.
+__tests__/auth/oauth-claim-gate.test.ts
+
 # The read-only SQL workspace. /api/database/query used to run queryRaw on the
 # APPLICATION connection with a deny-list regex as its only tenant boundary -
 # and before the credential split that connection was a superuser. Its sibling
@@ -252,6 +278,14 @@ __tests__/auth/deployment-claim.test.ts
 # suite bypasses the parser deliberately and asserts POSTGRES refuses, with
 # positive reads present so the refusals cannot pass because nothing works.
 __tests__/database/sql-workspace-isolation.test.ts
+
+# Function SQL ran on the app's own connection, whose role owns every platform
+# table and workspace schema, so generated function code could read public.users
+# or another tenant's tables; claims filter rows, not schemas. It now logs in as
+# the project's own role. The suite runs the real runner and asserts POSTGRES
+# refuses, including after RESET ROLE, with positive reads and writes present
+# so the refusals cannot pass because nothing works.
+__tests__/database/function-sql-isolation.test.ts
 
 # Cross-tenant schema history. The route called verifyToken and stopped, so any
 # authenticated account could read another tenant's schema snapshots and roll
@@ -392,6 +426,16 @@ tests/integration/dependency-failure-webhook-receiver.spec.ts
 # vacuous: "nothing was lost" is trivially true when there was nothing to lose.
 tests/integration/selfhost-failed-migration.spec.ts
 
+# ── Managed migration runner: ownership and failed-migration recovery ─────────
+#
+# The 2026-09-24 staging incident, rebuilt: a non-superuser admin builds the
+# chain, the tables move to the app role, the enums stay behind, and the pause
+# migration fails with 42501. Proves the ownership preflight refuses before
+# Prisma writes history, rollback resolves only a genuinely absent failed
+# attempt, and the enum repair converges and is idempotent. Real runner
+# entrypoint, real Prisma CLI, real PostgreSQL. Needs CREATE DATABASE/ROLE.
+tests/integration/migration-ownership-recovery.spec.ts
+
 # ── Credential rotation ─────────────────────────────────────────────────────
 #
 # A rotation proven only by "the new password works" is not proven: the point of
@@ -463,3 +507,124 @@ tests/integration/runtime-async-crash.spec.ts
 # NOBYPASSRLS. That is asserted here rather than argued - the app role is made
 # to try both dumps, and fails both.
 tests/integration/backup-role-contract.spec.ts
+
+# Founder lockdown was enforced by the Next-owned v1 surfaces and bootstrap
+# only, so /db, /database, /v2, end-user sign-in, OAuth and realtime kept
+# serving a locked project. The runtime serving gate now sits in front of all
+# of them. This drives the REAL server/app.ts over a socket, because mount
+# order is the property under test. Mutation-checked: unmounting the gate
+# fails 7 of the 8 locked-door assertions (bootstrap has its own check).
+tests/integration/runtime-serving-gate.spec.ts
+
+# The public half of the inactivity pause, against real Postgres: the
+# fail-closed lifecycle lock, the conditional pause write that loses to real
+# use arriving mid-snapshot, CANCELLED webhook deliveries and a discarded
+# outbox, idempotent resume, paused-project jobs left queued with attempts
+# unspent, and the mutation kernel refusing a paused project. Mutation-checked:
+# dropping the activity guard or the job filter fails the matching tests.
+tests/integration/project-pause-lifecycle.spec.ts
+
+# The inactivity clock (Project.lastActivityAt), which decides who Backenly
+# Cloud pauses: first use, the hourly write ceiling, a paused project's clock
+# never moving, a stamp making a stale pause decision lose, the real runtime
+# stamping served traffic and NOT refused or unauthenticated traffic, and the
+# snapshot download refusing a row that points outside its project's backup
+# directory. Mutation-checked: dropping the runtime stamp or the containment
+# check fails the matching tests.
+tests/integration/project-activity-clock.spec.ts
+
+# PR 2b of the MCP program: the section tools' new actions, end to end through
+# the real MCP route with real keys. Webhooks run against a loopback receiver
+# that verifies the signature; the delete is parked and runs only when a human
+# approves it. Runs as the cloud edition with only the plan lookup supplied,
+# because the single-tenant resolver rightly refuses a database of many projects.
+tests/integration/mcp-domain-operations.spec.ts
+
+# Sandbox function runs lost every ctx.log line, after a success and after a
+# failure: the worker sends them in the message that ends the run, and the
+# parent used a list only per-line messages (never sent) would fill. Runs the
+# real executor and worker, and checks the persisted run record.
+tests/integration/sandbox-function-logs.spec.ts
+tests/integration/apply-migration-existing-table.spec.ts
+# MCP acceptance (scripts/mcp-acceptance/cases.ts): two agent workflows, twice
+# each, and the acceptance cases no other suite covered. Real MCP route, real
+# keys, provisioned projects, runtime engine mode.
+tests/integration/mcp-golden-workflows.spec.ts
+tests/integration/mcp-acceptance-cases.spec.ts
+
+# File storage is bounded by the owner's plan and measured by the server: not
+# the unused Project.storageLimit column (1 GiB on every project), not a
+# hardcoded 10 GB on the S3 path, and never a client-supplied storageUsed.
+__tests__/storage/storage-quota-follows-plan.test.ts
+
+# The usage ledger counts every metered quantity exactly once: batches applied
+# with an exactly-once id, a failed or ambiguous flush retried without double
+# counting, a SIGTERM spool replayed once, and an insert-only monthly close.
+__tests__/usage/usage-ledger.test.ts
+
+# Every meter measures what lib/usage/axes.ts says: streamed egress bytes once and
+# never for internal traffic, MAU once per user per month, database size including
+# branch schemas, file size from metadata, and function runs that executed.
+__tests__/usage/usage-meters.test.ts
+
+# Access-log egress (load balancer, S3 presigned downloads, CloudFront) is
+# attributed by path or key and each log object is ingested exactly once.
+__tests__/usage/usage-log-ingest.test.ts
+
+# Quotas are the account's, pooled across its projects (6 GB + 5 GB is over a
+# 10 GB plan), raised past the plan only by an enforce policy with a spend limit
+# and only by what the remaining limit buys; usage alerts are sent once each.
+__tests__/usage/pooled-quotas.test.ts
+
+# Past the grace period the data API is read-only (POST/PUT/PATCH refused, reads
+# and deletes kept) and files stop being served except to members; the plan's
+# fair-use ceiling bounds any one API key's configured rate.
+__tests__/usage/usage-restrictions.test.ts
+
+# A person and an agent read the same account usage: pooled usage against the
+# cap, the month-end forecast from the ledger, the estimated cost past the plan,
+# the spend limit and grace; and no MCP or brain tool can change the limit.
+__tests__/usage/usage-visibility.test.ts
+
+# The spend guard: a project whose daily egress, function runs or new MAU
+# jumps far past its own median becomes one Autonomy finding with ledger and
+# request-path evidence, refreshed while it lasts and resolved when it ends.
+__tests__/usage/usage-anomaly.test.ts
+
+# Behind a signed CDN every file leaves from the edge, and only after the
+# bucket policy, pause and usage restriction have allowed it: a CloudFront
+# canned-policy signature over exactly that object, verified with the key.
+__tests__/storage/signed-cdn.test.ts
+
+# One scheduler per database: every web process schedules, and a job runs only
+# where the scheduler's session advisory lock is held. Two instances elect one
+# leader, a stopping leader hands over (a deploy), a killed session stops
+# leading and another takes over, and nothing leads without a database. Session
+# lock semantics are the property under test, so it needs a real Postgres.
+tests/integration/scheduler-leader-lock.spec.ts
+
+# A table a developer creates over a READ_WRITE direct connection belongs to a
+# role the backup role's default privileges never named, so pg_dump failed for
+# that project on every run. backenly_direct_sync_schema now grants the backup
+# role (or backenly.backup_role) read on the schema it syncs, and never write.
+# Mutation-checked: the previous function fails the two grant tests.
+tests/integration/direct-access-backup-grants.spec.ts
+
+# Both storage drivers apply one per-file rule: the bucket's own limit under the
+# shared ceiling for uploads through the server. The local driver also applied
+# Project.maxFileSize, which nothing can set (10 MB everywhere), so a raised
+# bucket and every local multipart upload over 10 MB were refused on self-host.
+# Mutation-checked: the previous driver refuses the 12 MB file.
+tests/integration/local-upload-file-size.spec.ts
+
+# Sign-in stamps last_login whatever type users.id is. The id was bound as text
+# and uuid = text has no operator, so every uuid-keyed workspace failed the stamp
+# silently (callers catch it) and "active · 30d" never moved. Server-side type
+# resolution is the property, so it needs a real Postgres.
+tests/integration/last-login-id-type.spec.ts
+
+# The contract probe is exempt from the end-user auth limits only with the
+# internal-traffic token AND a reserved address; every other combination,
+# and every customer, keeps the 10-per-window budgets. The routes' own check
+# order against a real workspace is the property, so it needs a real Postgres.
+tests/integration/probe-auth-rate-limit.spec.ts

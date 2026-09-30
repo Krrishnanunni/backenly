@@ -7,9 +7,11 @@
  * These notify the developer about events on THEIR account:
  *   - payment_success / payment_failed
  *   - credits_low  (AI usage >= 80% of plan limit)
+ *   - usage_limit  (a usage quota or the spend limit crossed a threshold; lib/usage/alerts.ts)
  *   - job_completed / job_failed  (workspace job table events)
  *   - deploy_complete
  *   - system  (maintenance, feature announcements, etc.)
+ *   - health_alert  (a critical problem in one of their backends that needs them)
  *
  * Every `createPlatformNotification` call:
  *   1. Checks NotificationPreference — if inAppEnabled=false, skips DB insert.
@@ -27,22 +29,26 @@ export type PlatformNotificationType =
   | 'payment_success'
   | 'payment_failed'
   | 'credits_low'
+  | 'usage_limit'         // A usage quota or the spend limit crossed 50/80/100% (lib/usage/alerts.ts)
   | 'job_completed'
   | 'job_failed'
   | 'deploy_complete'
   | 'system'
   | 'autonomous_action'   // "While you were away" — autonomous background fixes and findings
+  | 'health_alert'        // A confirmed critical in one of their backends, still unresolved
 
 // All valid types — used for preference initialization
 export const ALL_NOTIFICATION_TYPES: PlatformNotificationType[] = [
   'payment_success',
   'payment_failed',
   'credits_low',
+  'usage_limit',
   'job_completed',
   'job_failed',
   'deploy_complete',
   'system',
   'autonomous_action',
+  'health_alert',
 ]
 
 export interface CreateNotificationInput {

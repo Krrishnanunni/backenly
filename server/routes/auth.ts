@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express'
 import { prisma } from '@/lib/db'
 import { hashPassword, verifyPassword } from '@/lib/auth/password'
 import { executeWithUserContext } from '@/lib/services/workspace-rls'
-import { ensureAuthUsersTable, buildUserInsert, isReservedTestEmail } from '@/lib/services/end-user-auth-table'
+import { ensureAuthUsersTable, buildUserInsert, isReservedTestEmail, AuthNotProvisionedError } from '@/lib/services/end-user-auth-table'
 import { sanitizeDiagnostic } from '@/lib/errors/diagnostic-sanitize'
 import { sendError, sendSuccess, ErrorCodes } from '../lib/response'
 import {
@@ -20,6 +20,9 @@ import { z } from 'zod'
 import jwt from 'jsonwebtoken'
 import { JWTSecretManager, resolveJwtSecret } from '@/lib/services/jwtSecretManager'
 import { asyncRoute } from '../lib/async-route'
+import { touchProjectActivity } from '@/lib/projects/activity'
+import { emitEndUserCreated } from '@/lib/services/end-user-auth-events'
+import { canAcceptNewEndUser, trackEndUserActive } from '@/lib/quota/kernel'
 
 const router = Router()
 
@@ -155,7 +158,7 @@ async function handleSignUp(req: Request, res: Response) {
     // it — creates it when missing, self-heals a drifted one (e.g. an
     // AI-generated `users` table with no `role` column). This is what
     // previously failed signup with `column "role" does not exist`.
-    const schema = await ensureAuthUsersTable(projectId)
+    const schema = await ensureAuthUsersTable(projectId, { email })
     const schemaName = schema.schemaName
 
     // Service-role: workspace users tables may have FORCE ROW LEVEL SECURITY.
@@ -170,6 +173,18 @@ async function handleSignUp(req: Request, res: Response) {
     if (existing.length > 0) {
       sendError(res, ErrorCodes.CONFLICT, 'An account with this email already exists', 409)
       return
+    }
+
+    // The account's MAU cap, as on the Next signup route: only a NEW end user
+    // is refused, existing users keep working. This route serves signups on
+    // the single-box layout, and skipping the check here made the cap depend
+    // on which process happened to answer.
+    if (!isInternalTest) {
+      const mau = await canAcceptNewEndUser(projectId)
+      if (!mau.allowed) {
+        sendError(res, ErrorCodes.FORBIDDEN, mau.message ?? 'Sign-ups are temporarily unavailable for this app.', 403)
+        return
+      }
     }
 
     const hashedPassword = await hashPassword(password)
@@ -196,6 +211,16 @@ async function handleSignUp(req: Request, res: Response) {
       { expiresIn: '7d', algorithm: 'HS256' }
     )
 
+    // A new end user is active this month (MAU; never blocks). The Next.js
+    // signup route always did this; this one, which serves single-box
+    // installs, did not.
+    trackEndUserActive(projectId, String(user.id), user.email).catch(() => {})
+
+    // auth.user.created, through the emitter the Next route also uses. This
+    // server never emitted it, so a single-box install's subscribers never heard
+    // of a sign-up. Reserved test accounts are skipped inside.
+    void emitEndUserCreated(projectId, user)
+
     // Non-blocking: fire on_signup AI functions. Synthetic verifier accounts are
     // filtered inside fireAiFunctionsOnSignup, not here — two signup routes call
     // it and a guard at the call site only ever covers one of them.
@@ -216,8 +241,14 @@ async function handleSignUp(req: Request, res: Response) {
       )
     }
 
+    // An end user signing up is the backend being used.
+    void touchProjectActivity(projectId)
     res.status(201).json({ data: { user, token } })
   } catch (error: any) {
+    if (error instanceof AuthNotProvisionedError) {
+      sendError(res, error.code, error.message, 503)
+      return
+    }
     console.error('Signup error:', error)
     // Never leak Prisma / Postgres internals to the end user's app.
     const safe = sanitizeDiagnostic(error)
@@ -344,6 +375,10 @@ async function handleSignIn(req: Request, res: Response) {
       resolveJwtSecret(project.jwtSecret),
       { expiresIn: '7d', algorithm: 'HS256' }
     )
+    // Only a SUCCESSFUL sign-in counts: failed attempts are not use, and
+    // counting them would let a credential-stuffing bot keep a project awake.
+    void touchProjectActivity(projectId)
+    trackEndUserActive(projectId, String(user.id), user.email).catch(() => {})
     sendSuccess(res, { user: { id: user.id, email: user.email, name: user.name }, token })
   } catch (error: any) {
     console.error('Signin error:', error?.message ?? 'unknown')

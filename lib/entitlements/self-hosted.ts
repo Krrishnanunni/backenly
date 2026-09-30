@@ -36,10 +36,16 @@ export function selfHostedEntitlements(): UserEntitlements {
     maxFileStorageMb: null,
     maxRealtimeConnections: null,
     maxAiFunctionInvocationsPerMonth: null,
+    includedEgressMb: null,
+    apiRateLimitPerMin: null,
     maxTriggersPerProject: null,
     maxTeamSeats: 1,
     maxDeploymentHistory: null,
     autonomyScanIntervalMin: null, // caller default; self-host is not throttled by a plan
+    // Never paused. Pausing idle projects is Backenly Cloud's resource policy;
+    // an operator's own deployment runs until the operator stops it.
+    inactivityPauseDays: null,
+    pausedFreeResumeDays: null,
 
     logRetentionDays: 365,
     supportResponseHours: null,

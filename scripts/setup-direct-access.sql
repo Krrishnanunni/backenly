@@ -23,8 +23,9 @@
 --   4. backenly_direct_drop_role    — terminate sessions, strip policies,
 --                                     reassign owned objects, drop.
 --   5. backenly_direct_sync_schema  — idempotent grants/ownership/RLS-policy
---                                     sync for a workspace schema. Called after
---                                     every governed DDL mutation and on adopt.
+--                                     sync for a workspace schema, including the
+--                                     backup role's read. Called after every
+--                                     governed DDL mutation and on adopt.
 --   6. backenly_capture_ddl/_drop   — event triggers that record every DDL
 --                                     statement executed BY a bkn_% role into
 --                                     public.schema_drift_events (the evidence
@@ -55,9 +56,22 @@
 --
 -- Override per database or per session:
 --   ALTER DATABASE mydb SET backenly.app_role = 'myrole';
+--
+-- This body is IDENTICAL to the one in scripts/sql/postgrest-ddl-sync.sql,
+-- scripts/sql/postgrest-schema-registry.sql and the managed-DB cutover, and
+-- tests/unit/backenly-app-role-definition.spec.ts keeps it that way. This file
+-- installs after postgrest-install.sh, so it used to have the last word with an
+-- older body whose final fallback was the literal 'backenly_user': on a managed
+-- database with no such role, reinstalling direct access silently pointed
+-- every grant made through this function at a role nothing could receive.
 CREATE OR REPLACE FUNCTION public.backenly_app_role() RETURNS text
 LANGUAGE sql STABLE AS $fn$
-  SELECT coalesce(nullif(current_setting('backenly.app_role', true), ''), 'backenly_user')
+  SELECT coalesce(
+    nullif(current_setting('backenly.app_role', true), ''),
+    (SELECT rolname::text FROM pg_roles WHERE rolname = 'backenly_app'),
+    (SELECT rolname::text FROM pg_roles WHERE rolname = 'backenly_user'),
+    current_user::text
+  )
 $fn$;
 
 -- ── 1. Remote-access group (pg_hba matches +backenly_external) ───────────────
@@ -207,6 +221,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
 AS $fn$
 DECLARE
   t record;
+  v_backup text;
 BEGIN
   IF p_schema !~ '^workspace_[0-9a-fA-F][0-9a-fA-F-]{10,60}$' THEN
     RAISE EXCEPTION 'backenly_direct_sync_schema: invalid schema %', p_schema;
@@ -270,6 +285,24 @@ BEGIN
     EXECUTE format('GRANT USAGE, CREATE ON SCHEMA %I TO %I', p_schema, p_rw);
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA %I TO %I', p_schema, p_rw);
     EXECUTE format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I TO %I', p_schema, p_rw);
+  END IF;
+
+  -- ── The backup role ────────────────────────────────────────────────────────
+  -- Backups dump each workspace as the read-only backup role
+  -- (scripts/setup-backup-role.ts). Its default privileges name the roles that
+  -- created tables when it last converged, and a table created over a
+  -- READ_WRITE connection belongs to bkn_rw_* (then bkn_own_*), which did not
+  -- exist then. Without this grant pg_dump fails "permission denied" for that
+  -- project on every run until someone reruns the converge. Every external
+  -- table passes through here on adoption, so this is where it is closed.
+  -- The role is BYPASSRLS, so it needs no policy. Name it with
+  --   ALTER DATABASE <db> SET backenly.backup_role = '<role>';
+  -- when BACKENLY_BACKUP_ROLE is not the default. No role, no grant.
+  v_backup := coalesce(nullif(current_setting('backenly.backup_role', true), ''), 'backenly_backup');
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_backup) THEN
+    EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', p_schema, v_backup);
+    EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO %I', p_schema, v_backup);
+    EXECUTE format('GRANT SELECT ON ALL SEQUENCES IN SCHEMA %I TO %I', p_schema, v_backup);
   END IF;
 
   -- ── RLS pass-through policies ───────────────────────────────────────────────

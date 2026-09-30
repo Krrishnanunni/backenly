@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest } from 'next/server'
 import { consume, AUTH_LIMITS, clientIp } from '@/lib/security/auth-rate-limit'
 import { throttledV1Response } from '@/lib/security/rate-limit-response'
+import { carriesInternalToken, isPlatformProbe } from '@/lib/security/platform-probe'
 import { createErrorResponse, createSuccessResponse, ErrorCodes } from '@/lib/api/v1/errors'
 import { signInSchema } from '@/lib/api/v1/schemas'
 import { validateRequestBody } from '@/lib/validation/schemas'
@@ -14,6 +15,7 @@ import { trackEndUserActive } from '@/lib/quota/kernel'
 import { sanitizeDiagnostic } from '@/lib/errors/diagnostic-sanitize'
 import jwt from 'jsonwebtoken'
 import { resolveJwtSecret } from '@/lib/services/jwtSecretManager'
+import { recordedV1 } from '@/lib/traffic/recorded-v1'
 
 /**
  * POST /v1/{projectId}/auth/signin
@@ -21,7 +23,7 @@ import { resolveJwtSecret } from '@/lib/services/jwtSecretManager'
  * Authenticates an END USER of the project — NOT a Backenly platform developer.
  * Reads from workspace_{projectId}.users — isolated from the platform User table.
  */
-export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+async function handlePOST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
   try {
     const projectId = params.projectId
@@ -35,12 +37,20 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     // Keyed on both so one project under attack cannot lock out sign-in attempts for a
     // different project behind the same egress address.
     const ip = clientIp(request)
-    const limit = await consume(
+    const consumeIp = () => consume(
       `v1:endUserSignin:${projectId}:${ip}`,
       AUTH_LIMITS.endUserSignin.ip.limit,
       AUTH_LIMITS.endUserSignin.ip.windowMs,
     )
-    if (!limit.allowed) return throttledV1Response(limit)
+    // Backenly's own contract probe is not counted (lib/security/platform-probe.ts),
+    // and whether a request is the probe depends on the address in its body. So a
+    // request carrying the internal-traffic token is counted once that address is
+    // known, below; every other request is counted here, before anything else.
+    const mayBeProbe = carriesInternalToken(request)
+    if (!mayBeProbe) {
+      const limit = await consumeIp()
+      if (!limit.allowed) return throttledV1Response(limit)
+    }
 
     // Validate project exists
     const project = await prisma.project.findUnique({
@@ -67,6 +77,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
 
     const { email, password } = validation.data
 
+    const probe = mayBeProbe && isPlatformProbe(request, email)
+    if (mayBeProbe && !probe) {
+      const limit = await consumeIp()
+      if (!limit.allowed) return throttledV1Response(limit)
+    }
+
     // A SECOND budget, keyed on the identity being guessed.
     //
     // The per-IP limit above is weak against distributed credential stuffing:
@@ -77,15 +93,17 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     //
     // Normalised, so `Alice@x.com` and `alice@x.com` share one budget rather
     // than doubling it.
-    const identityLimit = await consume(
-      `v1:endUserSignin:${projectId}:${String(email).trim().toLowerCase()}`,
-      AUTH_LIMITS.endUserSignin.ip.limit,
-      AUTH_LIMITS.endUserSignin.ip.windowMs,
-    )
-    // Deliberately the same answer as an IP trip, and the same shape as a
-    // wrong password: a different response here would confirm the address
-    // exists and is being defended.
-    if (!identityLimit.allowed) return throttledV1Response(identityLimit)
+    if (!probe) {
+      const identityLimit = await consume(
+        `v1:endUserSignin:${projectId}:${String(email).trim().toLowerCase()}`,
+        AUTH_LIMITS.endUserSignin.ip.limit,
+        AUTH_LIMITS.endUserSignin.ip.windowMs,
+      )
+      // Deliberately the same answer as an IP trip, and the same shape as a
+      // wrong password: a different response here would confirm the address
+      // exists and is being defended.
+      if (!identityLimit.allowed) return throttledV1Response(identityLimit)
+    }
     const schemaName = `workspace_${projectId}`
 
     // Check if users table exists
@@ -180,7 +198,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     )
 
     // Count this end-user as active for the month (MAU tracking — never blocks).
-    trackEndUserActive(projectId, String(user.id)).catch(() => {})
+    trackEndUserActive(projectId, String(user.id), user.email).catch(() => {})
     // Stamp last_login so the Auth dashboard's "active · 30d" metric is real.
     stampLastLogin(projectId, user.id).catch(() => {})
 
@@ -198,3 +216,5 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     )
   }
 }
+
+export const POST = recordedV1(handlePOST)

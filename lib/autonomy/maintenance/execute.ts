@@ -58,6 +58,11 @@ import { enqueue } from '@/lib/queue'
 import { FLAGS } from '@/lib/config/flags'
 import { isTierAutoAllowed, type AutonomyLevel } from '../autonomy-level'
 import { approvalStillValid, isPlanStale, type MaintenancePlan } from './plan'
+import { computeCatalogFingerprint } from './resolve'
+import { readLiveApproval } from './approval'
+import { withMaintenanceSingleFlight } from './single-flight'
+import { observeResource, hashCode, type ResourceIdentity } from './resource-state'
+import { dualWriteObjectName } from './primitives/dual-write'
 import {
   classifyMaintenanceStep,
   OPTIONAL_TERMINAL_STEPS,
@@ -116,8 +121,23 @@ export type StepBinding =
 export interface ExecuteMaintenanceInput {
   plan: MaintenancePlan
   projectId: string
-  /** The catalog as it is NOW. A plan built against a different one is stale. */
-  currentCatalogFingerprint: string
+  /**
+   * TEST SEAM. Omit it in production.
+   *
+   * This used to be required, and every production caller satisfied it by
+   * passing back the fingerprint `resolveMaintenancePlan` had just returned
+   * alongside the plan — the same value, from the same catalog read, that the
+   * plan's own `catalogFingerprint` was computed from. `isPlanStale` therefore
+   * compared a value to itself and returned false unconditionally, on all three
+   * production paths. The staleness gate the design rests on was a tautology.
+   *
+   * The executor now reads the catalog itself when this is absent, which is the
+   * only way the check can mean anything: staleness is a claim about the world
+   * at the moment of mutation, and a caller cannot supply that.
+   * `tests/core/maintenance-gates-are-live.test.ts` asserts no production call
+   * site passes it.
+   */
+  currentCatalogFingerprint?: string
   autonomyLevel: AutonomyLevel
   /** One binding per step, by ordinal. A step without one cannot run. */
   bindings: Record<number, StepBinding>
@@ -149,6 +169,13 @@ export type ExecutionStatus =
    * ladder resumes by being run again once the job finishes.
    */
   | 'awaiting_background_work'
+  /**
+   * Another process is already running a ladder on this project.
+   *
+   * Neither a failure nor a refusal. Nothing was evaluated and nothing was
+   * written, because somebody else holds the project's maintenance lock.
+   */
+  | 'in_flight_elsewhere'
 
 export interface StepOutcome {
   ordinal: number
@@ -183,7 +210,41 @@ export interface MaintenanceExecutionOutcome {
  * Returned as a reason rather than thrown, because a refusal is an outcome the
  * ledger records, not an error the caller handles.
  */
-function refuseLadder(input: ExecuteMaintenanceInput): string | null {
+/**
+ * What this rung will touch, in real identifiers.
+ *
+ * Derived from the BINDING, because the plan deliberately never names a
+ * column - it says `{ tableName, purpose }` and the concrete resource arrives
+ * with the approval. That is also why rollback cannot be reconstructed from
+ * the plan later, and why this has to be persisted at execution time.
+ *
+ * Null for a rung with no undoable resource, which is not a failure: `verify`
+ * mutates nothing and `contract` is never run here.
+ */
+function identityForStep(step: MaintenanceStep, binding: StepBinding): ResourceIdentity | null {
+  switch (binding.kind) {
+    case 'add_structure':
+      return { kind: 'column', table: binding.table, column: binding.column }
+    case 'backfill':
+      // Undoing a backfill means dropping the column it filled. Expand never
+      // destructively touches the source, so there is nothing to restore.
+      return { kind: 'column', table: binding.table, column: binding.targetColumn }
+    case 'dual_write':
+      return {
+        kind: 'trigger',
+        table: binding.table,
+        trigger: dualWriteObjectName(binding.table, binding.targetColumn),
+        targetColumn: binding.targetColumn,
+      }
+    default:
+      // `carry_constraints` is deliberately absent: its rollback is
+      // `drop_constraint`, which this deployment cannot perform, so the
+      // planner refuses the ladder before any of this runs.
+      return null
+  }
+}
+
+async function refuseLadder(input: ExecuteMaintenanceInput): Promise<string | null> {
   const { plan, autonomyLevel } = input
 
   // With the reasons, which the ledger then records. A halt reason that does
@@ -199,8 +260,14 @@ function refuseLadder(input: ExecuteMaintenanceInput): string | null {
       'a ladder is all-or-nothing and its runnable prefix must not be executed'
     )
   }
-  if (isPlanStale(plan, input.currentCatalogFingerprint)) {
-    return 'the catalog moved since this plan was built, so its preconditions describe a schema that no longer exists'
+  // Read now, not taken on trust. See the note on `currentCatalogFingerprint`.
+  const liveFingerprint =
+    input.currentCatalogFingerprint ?? (await computeCatalogFingerprint(input.projectId))
+  if (isPlanStale(plan, liveFingerprint)) {
+    return (
+      'the catalog moved since this plan was built, so its preconditions describe a schema that no longer exists ' +
+      `(planned against ${plan.catalogFingerprint}, catalog is now ${liveFingerprint})`
+    )
   }
 
   // Tier is asked per step below as well; this is the up-front answer to "could
@@ -214,7 +281,7 @@ function refuseLadder(input: ExecuteMaintenanceInput): string | null {
     if (OPTIONAL_TERMINAL_STEPS.includes(step.kind)) continue
 
     const { tier } = classifyMaintenanceStep(step)
-    const gate = tierGate(tier, autonomyLevel, input)
+    const gate = await tierGate(tier, autonomyLevel, input)
     if (gate) return `step ${step.ordinal} (${step.kind}): ${gate}`
     if (!input.bindings[step.ordinal]) return `step ${step.ordinal} (${step.kind}) has no binding`
     const binding = input.bindings[step.ordinal]
@@ -232,8 +299,25 @@ function refuseLadder(input: ExecuteMaintenanceInput): string | null {
  * version — `isTierAutoAllowed` hard-denies it regardless of level, and no
  * argument from this module changes that. Tier 3 is irreversible and this
  * executor never runs one: not with an approval, not at any level.
+ *
+ * ── Consent is re-read, not remembered ─────────────────────────────────────
+ *
+ * The string in `input.approvedPlanVersion` was read by the caller before the
+ * ladder started. A ladder can run for minutes — a backfill dispatches and the
+ * next tick resumes it — and withdrawing consent has to stop the rung that has
+ * not started, not merely the ladder that has not begun. So the row is read
+ * again here, immediately before each privileged mutation, and a revocation
+ * that landed mid-flight halts the ladder on its next rung.
+ *
+ * This is also where `maxTier` is enforced. It was stored on every approval and
+ * read by nothing, so consent recorded as "up to tier 1" authorised tier 2
+ * anyway — the column described a limit the code did not apply.
  */
-function tierGate(tier: number, level: AutonomyLevel, input: ExecuteMaintenanceInput): string | null {
+async function tierGate(
+  tier: number,
+  level: AutonomyLevel,
+  input: ExecuteMaintenanceInput,
+): Promise<string | null> {
   if (tier >= 3) {
     return 'tier 3 is irreversible and is never executed here, approval or not'
   }
@@ -241,6 +325,19 @@ function tierGate(tier: number, level: AutonomyLevel, input: ExecuteMaintenanceI
     if (!input.approvedPlanVersion) return 'tier 2 requires an approval and none was supplied'
     if (!approvalStillValid(input.plan, input.approvedPlanVersion)) {
       return 'the approval is for a different plan version, so it does not authorize this ladder'
+    }
+    const live = await readLiveApproval(input.plan.planId)
+    if (!live) {
+      return 'the approval authorising this ladder has been withdrawn since it started'
+    }
+    if (live.planVersion !== input.plan.planVersion) {
+      return (
+        `the live approval is for version ${live.planVersion} and this ladder is ${input.plan.planVersion}, ` +
+        'so it does not authorize this ladder'
+      )
+    }
+    if (tier > live.maxTier) {
+      return `this step is tier ${tier} and the approval covers up to tier ${live.maxTier}`
     }
     return null
   }
@@ -262,13 +359,44 @@ function tierGate(tier: number, level: AutonomyLevel, input: ExecuteMaintenanceI
 export async function executeMaintenancePlan(
   input: ExecuteMaintenanceInput,
 ): Promise<MaintenanceExecutionOutcome> {
+  // ── One process runs a ladder on a project at a time ──────────────────────
+  //
+  // Guarded at the mutation boundary rather than at the scheduler, because the
+  // scheduler is not the only caller: `scripts/run-maintenance-plan.ts` reaches
+  // this directly from the operator CLI and from the Fargate runner image. A
+  // lock on the sweep alone would leave an operator running one plan by hand
+  // while the scheduler ran another, which is the same interleaving with a
+  // person's name on half of it.
+  //
+  // This deployment can run several instances; `instrumentation.ts` already
+  // refuses to boot when a multi-instance topology would silently weaken the
+  // auth limiter. The ledger cannot provide this guarantee on its own: its row
+  // is written after the gates pass, and `nextAttempt` is a read-then-write
+  // that races. Only the database can decide this in one statement.
+  const flight = await withMaintenanceSingleFlight(input.projectId, () =>
+    runLadder(input),
+  )
+  if (!flight.ran) {
+    return {
+      status: 'in_flight_elsewhere',
+      executionId: null,
+      haltReason: 'another process is already running a maintenance ladder on this project',
+      steps: [],
+    }
+  }
+  return flight.value
+}
+
+async function runLadder(
+  input: ExecuteMaintenanceInput,
+): Promise<MaintenanceExecutionOutcome> {
   const { plan, projectId } = input
   // AND, not OR. The caller may narrow what the environment permits; it may
   // never widen it.
   const mutationsEnabled =
     (input.mutationsEnabled ?? true) && FLAGS.ENABLE_PHASE_6B_MAINTENANCE_MUTATIONS
 
-  const refusal = refuseLadder(input)
+  const refusal = await refuseLadder(input)
   if (refusal) {
     const execution = await openExecution(input, 'refused', refusal)
     return { status: 'refused', executionId: execution, haltReason: refusal, steps: [] }
@@ -296,7 +424,7 @@ export async function executeMaintenancePlan(
     if (!classification.executable) {
       return halt(executionId, steps, `step ${step.ordinal} (${step.kind}) is ${classification.capability}`)
     }
-    const gate = tierGate(classification.tier, input.autonomyLevel, input)
+    const gate = await tierGate(classification.tier, input.autonomyLevel, input)
     if (gate) return halt(executionId, steps, `step ${step.ordinal} (${step.kind}): ${gate}`)
 
     const existing = await prisma.maintenanceStepExecution.findUnique({
@@ -363,6 +491,28 @@ export async function executeMaintenancePlan(
       update: { status: 'running', startedAt: new Date() },
     })
 
+    // ── Recovery authority, captured at the only moment it exists ──────────
+    //
+    // `preconditionEvidence` above holds the planner's DECLARED sentences and
+    // cannot serve here: a claim written before the work cannot say what the
+    // work left behind, and a stale guard built on one would authorise undoing
+    // a resource somebody else replaced.
+    //
+    // Observation failure is recorded as null rather than swallowed into a
+    // shape, and `performRollback` refuses on a null - so a step whose state
+    // could not be captured is simply not undoable, which is the honest
+    // outcome rather than a guess.
+    const identity = identityForStep(step, binding)
+    const preState = identity
+      ? await observeResource(projectId, identity).catch(() => null)
+      : null
+    if (identity) {
+      await prisma.maintenanceStepExecution.update({
+        where: { id: row.id },
+        data: { resourceIdentity: identity as object, observedPreState: preState as object | undefined },
+      })
+    }
+
     let outcome: StepOutcome
     try {
       outcome = await runStep(projectId, step, binding, plan.planVersion)
@@ -376,13 +526,45 @@ export async function executeMaintenancePlan(
       return halt(executionId, steps, `step ${step.ordinal} (${step.kind}) threw: ${message}`)
     }
 
+    // ── Readers are identified only AFTER the switch ──────────────────────
+    //
+    // The binding names a table and a column pair; WHICH functions read that
+    // column is discovered by the switch itself. So unlike a column or a
+    // trigger, this identity cannot be captured before the mutation, and its
+    // pre-state comes from the bytes the primitive recorded rather than from
+    // a catalog read that is now too late.
+    let readersIdentity: ResourceIdentity | null = null
+    let readersPreState: unknown = null
+    if (step.kind === 'switch_readers' && outcome.switchedReaders?.length) {
+      readersIdentity = {
+        kind: 'readers',
+        functionIds: outcome.switchedReaders.map(r => r.id),
+      }
+      readersPreState = {
+        kind: 'readers',
+        entries: outcome.switchedReaders.map(r => ({ id: r.id, codeHash: hashCode(r.previousCode) })),
+      }
+    }
+
     await prisma.maintenanceStepExecution.update({
       where: { id: row.id },
       data: {
         status: outcome.status === 'failed' ? 'failed' : outcome.status,
         completedAt: new Date(),
         backgroundJobId: outcome.backgroundJobId ?? null,
+        ...(readersIdentity
+          ? {
+              resourceIdentity: readersIdentity as object,
+              observedPreState: readersPreState as object,
+            }
+          : {}),
         postconditionEvidence: { declared: step.expectedPostconditions, detail: outcome.detail },
+        // What the mutation actually left, as the catalog reports it. This is
+        // the value the stale guard compares against before undoing anything.
+        observedPostState: ((await (async () => {
+          const id = readersIdentity ?? identity
+          return id ? observeResource(projectId, id).catch(() => null) : null
+        })()) as object | undefined),
         // Through JSON so the ledger stores plain data. `switchedReaders`
         // carries the bytes a revert restores, so it has to land in the row
         // rather than only in the return value.

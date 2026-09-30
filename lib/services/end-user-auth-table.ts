@@ -287,16 +287,44 @@ export async function introspectAuthUsersTable(
 }
 
 /**
+ * A verifier account asked for end-user auth to be provisioned. Refused: see
+ * ensureAuthUsersTable. Signup routes answer it with 503 AUTH_NOT_CONFIGURED,
+ * which every probe already reads as "auth is not set up here".
+ */
+export class AuthNotProvisionedError extends Error {
+  readonly code = 'AUTH_NOT_CONFIGURED'
+  constructor() {
+    super('Authentication is not set up for this project yet.')
+    this.name = 'AuthNotProvisionedError'
+  }
+}
+
+/**
  * Guarantee `workspace_{projectId}.users` satisfies the auth contract, then
  * return its descriptor.
  *
  * Safe to call on every signup / OAuth callback: it is idempotent and cheap
  * (introspection plus, at most, one ALTER on the very first call per project).
+ *
+ * `requestedBy` is required so every caller states whose request this is. A
+ * verifier account (`isReservedTestEmail`) may use an auth table that exists
+ * but may never create one, or the schema around it. Monitoring that
+ * provisions is how a named-only project would grow a `users` table nobody
+ * built, and it re-created a workspace schema an operator had just dropped in
+ * the middle of a restore: the contract probe's signup ran
+ * CREATE SCHEMA IF NOT EXISTS between the platform replay and the workspace
+ * replay, and the restore failed on "schema already exists".
  */
 export async function ensureAuthUsersTable(
   projectId: string,
+  requestedBy: { email: string | null | undefined },
 ): Promise<AuthUsersSchema> {
   const schemaName = `workspace_${projectId}`
+
+  if (isReservedTestEmail(requestedBy.email)) {
+    const existing = await introspectColumns(schemaName)
+    if (existing.length === 0) throw new AuthNotProvisionedError()
+  }
 
   // 1. Schema + canonical table. Both IF NOT EXISTS — no-ops when present.
   await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`)
@@ -566,10 +594,27 @@ export async function stampLastLogin(
     true,
     `ALTER TABLE "${schemaName}"."users" ADD COLUMN IF NOT EXISTS "last_login" TIMESTAMP WITH TIME ZONE`,
   )
+  // Bind the id as the column's own type. A bare $1 arrives as text, and
+  // uuid = text has no operator, so on every workspace whose users.id is uuid
+  // this stamp failed (quietly: the callers catch it) and "active · 30d" never
+  // counted anyone. Casting by the id's shape instead, as buildUserInsert does
+  // for its VALUES, would break a text id that happens to hold a uuid. Matching
+  // the column's type also keeps its primary-key index usable.
+  const idType = await executeWithUserContext<{ data_type: string }>(
+    '',
+    true,
+    `SELECT data_type FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = 'users' AND column_name = 'id'`,
+    [schemaName],
+  )
+  const dataType = idType[0]?.data_type ?? ''
+  const cast = dataType === 'uuid'
+    ? '::uuid'
+    : ['smallint', 'integer', 'bigint'].includes(dataType) ? '::bigint' : ''
   await executeWithUserContext(
     '',
     true,
-    `UPDATE "${schemaName}"."users" SET "last_login" = NOW() WHERE id = $1`,
-    [userId],
+    `UPDATE "${schemaName}"."users" SET "last_login" = NOW() WHERE id = $1${cast}`,
+    [String(userId)],
   )
 }

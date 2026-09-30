@@ -19,18 +19,18 @@ import {
   LogOut, Mail, Lock, Trash2, HelpCircle, Key, Check, X,
   User, Shield, AlertTriangle, Sparkles, Smartphone, MessageSquare,
   Activity, Calendar, FolderKanban, Loader2, Copy, ShieldCheck, ShieldAlert,
-  Send, ArrowUpRight, CheckCircle2, LifeBuoy,
+  Send, ArrowUpRight, CheckCircle2, LifeBuoy, Bell,
 } from 'lucide-react'
 import { OrgShell } from '@/components/shell/OrgShell'
 import {
   SectionTitle, KitCard, KitCardHeader, KitCardBody, KitButton,
   KitField, KitInput, KitNote, KitBadge, KitTabs, KitTab,
 } from '@/components/inspector/kit'
-import { GlobalLoading } from '@/components/ui/GlobalLoading'
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import { DeploymentRecoverySection } from '@/components/app/DeploymentRecoverySection'
+import { deleteAccount, signOut } from '@/lib/api/auth'
 
-type Section = 'profile' | 'security' | 'recovery' | 'support' | 'danger'
+type Section = 'profile' | 'security' | 'notifications' | 'recovery' | 'support' | 'danger'
 
 interface UserProfile {
   id: string
@@ -75,10 +75,12 @@ function planLabelFor(tier?: string): string {
   return 'Free'
 }
 
+let cachedSettingsUser: UserProfile | null = null
+
 export default function SettingsPage() {
   const router = useRouter()
-  const [user, setUser] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<UserProfile | null>(() => cachedSettingsUser)
+  const [loading, setLoading] = useState(() => !cachedSettingsUser)
   const [activeSection, setActiveSection] = useState<Section>('profile')
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; msg: string } | null>(null)
 
@@ -113,8 +115,9 @@ export default function SettingsPage() {
       if (!response.ok) { router.push('/login'); return }
       const data = await response.json()
       const u = data.user ?? data
+      cachedSettingsUser = u
       setUser(u)
-      setNewName(u?.name || '')
+      setNewName((prev) => prev || u?.name || '')
     } catch {
       router.push('/login')
     } finally {
@@ -127,7 +130,7 @@ export default function SettingsPage() {
     // own org page (§5.4) — send legacy ?tab=billing there.
     const tab = new URLSearchParams(window.location.search).get('tab')
     if (tab === 'billing') { router.replace('/app/billing'); return }
-    if (tab && ['profile', 'security', 'support', 'danger'].includes(tab)) {
+    if (tab && ['profile', 'security', 'notifications', 'support', 'danger'].includes(tab)) {
       setActiveSection(tab as Section)
     }
     refreshUser()
@@ -161,12 +164,11 @@ export default function SettingsPage() {
     if (deleteConfirmText !== 'DELETE') return
     setDeletingAccount(true)
     try {
-      const response = await fetch('/api/auth/delete-account', { method: 'DELETE', credentials: 'include' })
-      if (response.ok) router.push('/login')
-      else showToast('Failed to delete account', 'error')
+      // On success the document is replaced; the modal stays on "Deleting…"
+      // until it is, rather than closing over the deleted account's settings.
+      await deleteAccount()
     } catch {
       showToast('Failed to delete account', 'error')
-    } finally {
       setDeletingAccount(false)
       setShowDeleteModal(false)
       setDeleteConfirmText('')
@@ -175,26 +177,19 @@ export default function SettingsPage() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-      router.push('/login')
-    } catch { /* noop */ }
+      await signOut()
+    } catch {
+      showToast('Could not sign out. Try again.', 'error')
+    }
   }
 
-  const handlePasswordReset = async () => {
+  // Reset is a code typed back with the new password, so it happens on the
+  // recovery page rather than as a fire-and-forget request with a toast that
+  // said "sent" whether or not anything was.
+  const handlePasswordReset = () => {
     if (!user?.email) return
     setResetLoading(true)
-    try {
-      const res = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email }),
-      })
-      showToast(res.ok ? 'Password reset link sent to your email' : 'Could not send reset link. Try again', res.ok ? 'success' : 'error')
-    } catch {
-      showToast('Could not send reset link. Try again', 'error')
-    } finally {
-      setResetLoading(false)
-    }
+    router.push(`/auth/forgot-password?email=${encodeURIComponent(user.email)}`)
   }
 
   const handle2FABegin = async () => {
@@ -270,8 +265,6 @@ export default function SettingsPage() {
     setTwoFABackupCodes(null)
   }
 
-  if (loading) return <GlobalLoading message="Loading your settings..." />
-
   const initials = user?.name
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : user?.email?.[0]?.toUpperCase() ?? 'U'
@@ -279,6 +272,7 @@ export default function SettingsPage() {
   const TABS: { id: Section; label: string; icon: typeof User }[] = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'security', label: 'Security', icon: Shield },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     // Self-host only, and absent rather than disabled in Cloud. Deployment
     // recovery reads the whole platform database - every tenant's projects,
     // users and secrets - which is right when the single account IS the
@@ -308,7 +302,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-[1000px] px-6 py-8 lg:px-10">
+      <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
         <SectionTitle
           title="Settings"
           description="Manage your profile, security and account."
@@ -328,37 +322,51 @@ export default function SettingsPage() {
           ))}
         </KitTabs>
 
-        {activeSection === 'profile' && (
-          <ProfileSection
-            user={user}
-            initials={initials}
-            planLabel={planLabelFor(user?.tier)}
-            editingName={editingName}
-            setEditingName={setEditingName}
-            newName={newName}
-            setNewName={setNewName}
-            savingName={savingName}
-            onSaveName={handleSaveName}
-          />
+        {loading ? (
+          <div className="space-y-4 animate-pulse">
+            <div className="h-44 rounded-xl border border-white/[0.07] bg-[#16171d] p-5 space-y-3">
+              <div className="h-4 w-32 rounded bg-white/[0.06]" />
+              <div className="h-8 w-48 rounded bg-white/[0.04]" />
+              <div className="h-3 w-64 rounded bg-white/[0.03]" />
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeSection === 'profile' && (
+              <ProfileSection
+                user={user}
+                initials={initials}
+                planLabel={planLabelFor(user?.tier)}
+                editingName={editingName}
+                setEditingName={setEditingName}
+                newName={newName}
+                setNewName={setNewName}
+                savingName={savingName}
+                onSaveName={handleSaveName}
+              />
+            )}
+
+            {activeSection === 'security' && (
+              <SecuritySection
+                user={user}
+                resetLoading={resetLoading}
+                onPasswordReset={handlePasswordReset}
+                on2FAEnroll={handle2FABegin}
+                on2FADisableOpen={() => { setTwoFAModal('disable'); setTwoFACode('') }}
+                twoFALoading={twoFALoading}
+                onLogout={handleLogout}
+              />
+            )}
+
+            {activeSection === 'notifications' && <NotificationsSection onToast={showToast} />}
+
+            {activeSection === 'recovery' && !CLOUD_CONTROL_PLANE && <DeploymentRecoverySection />}
+
+            {activeSection === 'support' && <SupportSection userEmail={user?.email} />}
+
+            {activeSection === 'danger' && <DangerSection onOpenDelete={() => setShowDeleteModal(true)} />}
+          </>
         )}
-
-        {activeSection === 'security' && (
-          <SecuritySection
-            user={user}
-            onPasswordReset={handlePasswordReset}
-            resetLoading={resetLoading}
-            on2FAEnroll={handle2FABegin}
-            on2FADisableOpen={() => { setTwoFAModal('disable'); setTwoFACode('') }}
-            twoFALoading={twoFALoading}
-            onLogout={handleLogout}
-          />
-        )}
-
-        {activeSection === 'recovery' && !CLOUD_CONTROL_PLANE && <DeploymentRecoverySection />}
-
-        {activeSection === 'support' && <SupportSection userEmail={user?.email} />}
-
-        {activeSection === 'danger' && <DangerSection onOpenDelete={() => setShowDeleteModal(true)} />}
       </div>
 
       {/* Delete account modal */}
@@ -704,6 +712,128 @@ function SecuritySection({
         </KitCardBody>
       </KitCard>
     </div>
+  )
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+/**
+ * What each preference controls, in the order an owner cares about. Types the
+ * API returns but this list does not name are still shown, under their raw
+ * name, so a new type is never silently unmanageable.
+ */
+const NOTIFICATION_LABELS: Record<string, { label: string; description: string }> = {
+  health_alert: {
+    label: 'Backend health alerts',
+    description: 'A critical problem in one of your backends that Backenly could not resolve on its own.',
+  },
+  autonomous_action: {
+    label: 'Autonomous changes',
+    description: 'What Backenly repaired or changed while you were away.',
+  },
+  deploy_complete: { label: 'Deployments', description: 'A deployment finished.' },
+  job_failed: { label: 'Failed jobs', description: 'A background job in one of your backends failed.' },
+  job_completed: { label: 'Completed jobs', description: 'A background job in one of your backends finished.' },
+  usage_limit: {
+    label: 'Usage limits',
+    description: 'Your usage or your spend limit crossed 50%, 80% or 100% this month.',
+  },
+  credits_low: { label: 'AI credits', description: 'You have used most of your AI credits for the month.' },
+  payment_failed: { label: 'Failed payments', description: 'A payment for your plan did not go through.' },
+  payment_success: { label: 'Receipts', description: 'A payment for your plan succeeded.' },
+  system: { label: 'Account notices', description: 'Changes to your account or subscription.' },
+}
+
+interface NotificationPref {
+  type: string
+  emailEnabled: boolean
+  inAppEnabled: boolean
+}
+
+function NotificationsSection({ onToast }: { onToast: (msg: string, kind?: 'success' | 'error') => void }) {
+  const [prefs, setPrefs] = useState<NotificationPref[] | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/notification-preferences', { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then(d => { if (!cancelled) setPrefs(Array.isArray(d?.preferences) ? d.preferences : []) })
+      .catch(() => { if (!cancelled) setPrefs([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  const order = Object.keys(NOTIFICATION_LABELS)
+  const rows = (prefs ?? []).slice().sort((a, b) => {
+    const ia = order.indexOf(a.type)
+    const ib = order.indexOf(b.type)
+    return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib)
+  })
+
+  const update = async (type: string, channel: 'emailEnabled' | 'inAppEnabled', value: boolean) => {
+    const before = prefs
+    setSaving(`${type}:${channel}`)
+    setPrefs(p => (p ?? []).map(x => (x.type === type ? { ...x, [channel]: value } : x)))
+    try {
+      const res = await fetch('/api/notification-preferences', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: [{ type, [channel]: value }] }),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+    } catch {
+      setPrefs(before)
+      onToast('Could not save that preference', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <KitCard>
+      <KitCardHeader title="Notifications" description="Choose what Backenly tells you about, and where" />
+      <KitCardBody>
+        {prefs === null ? (
+          <div className="flex items-center gap-2 text-[12.5px] text-zinc-500">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading preferences…
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="text-[12.5px] text-zinc-400">Preferences could not be loaded. Try again in a moment.</p>
+        ) : (
+          <div className="divide-y divide-white/[0.06]">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 pb-2 text-[10.5px] font-medium uppercase tracking-wide text-zinc-500">
+              <span />
+              <span className="w-12 text-center">Email</span>
+              <span className="w-12 text-center">In app</span>
+            </div>
+            {rows.map(pref => {
+              const meta = NOTIFICATION_LABELS[pref.type] ?? { label: pref.type, description: '' }
+              return (
+                <div key={pref.type} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 py-3">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium text-zinc-100">{meta.label}</p>
+                    {meta.description && <p className="mt-0.5 text-[11.5px] text-zinc-500">{meta.description}</p>}
+                  </div>
+                  {(['emailEnabled', 'inAppEnabled'] as const).map(channel => (
+                    <label key={channel} className="flex w-12 justify-center">
+                      <span className="sr-only">{`${meta.label}: ${channel === 'emailEnabled' ? 'email' : 'in app'}`}</span>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer accent-zinc-200 disabled:cursor-wait"
+                        checked={pref[channel]}
+                        disabled={saving === `${pref.type}:${channel}`}
+                        onChange={e => update(pref.type, channel, e.target.checked)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </KitCardBody>
+    </KitCard>
   )
 }
 
