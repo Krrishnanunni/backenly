@@ -147,7 +147,7 @@ test.describe('cloud-only surfaces are absent, not merely refused', () => {
 test.describe('empty states are honest, not fabricated', () => {
   test('a fresh install says it has no logs rather than inventing some', async ({ page }) => {
     await page.goto(`/app/projects/${projectId()}/monitoring`)
-    await page.getByRole('button', { name: 'Logs', exact: true }).click()
+    await page.getByRole('tab', { name: 'Logs', exact: true }).click()
 
     const table = page.locator('tbody tr')
     const empty = page.getByText('No logs yet')

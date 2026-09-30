@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('logs is a tab on monitoring, not a page nobody links to', async ({ page }) => {
-  const tab = page.getByRole('button', { name: 'Logs', exact: true })
+  const tab = page.getByRole('tab', { name: 'Logs', exact: true })
   await expect(tab).toBeVisible({ timeout: 30_000 })
   await tab.click()
 
@@ -37,7 +37,7 @@ test('a fresh deployment shows the logs empty state, not the monitoring one', as
   // when the backend is not live, and the logs tab has to be reached before
   // that gate — a deployment with no traffic still records system and auth
   // logs, and hiding the tab would hide them.
-  await page.getByRole('button', { name: 'Logs', exact: true }).click()
+  await page.getByRole('tab', { name: 'Logs', exact: true }).click()
 
   await expect(page.getByText('Nothing to watch yet')).toHaveCount(0)
 
@@ -50,7 +50,7 @@ test('a fresh deployment shows the logs empty state, not the monitoring one', as
 })
 
 test('filtering to a severity with nothing in it offers a way back', async ({ page }) => {
-  await page.getByRole('button', { name: 'Logs', exact: true }).click()
+  await page.getByRole('tab', { name: 'Logs', exact: true }).click()
   await expect(page.getByLabel('Filter by severity')).toBeVisible({ timeout: 30_000 })
 
   await page.getByLabel('Filter by severity').selectOption('debug')
@@ -73,10 +73,10 @@ test('filtering to a severity with nothing in it offers a way back', async ({ pa
 test('the tab survives a reload of the monitoring page', async ({ page }) => {
   // Guards against the tab depending on state only reachable by clicking
   // through from a warm page.
-  await page.getByRole('button', { name: 'Logs', exact: true }).click()
+  await page.getByRole('tab', { name: 'Logs', exact: true }).click()
   await expect(page.getByLabel('Search logs')).toBeVisible({ timeout: 30_000 })
 
   await page.reload()
-  await page.getByRole('button', { name: 'Logs', exact: true }).click()
+  await page.getByRole('tab', { name: 'Logs', exact: true }).click()
   await expect(page.getByLabel('Search logs')).toBeVisible({ timeout: 30_000 })
 })

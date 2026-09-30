@@ -48,16 +48,17 @@ const PUBLIC_TARGET = 'https://example.com/backenly-hook'
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`/app/projects/${projectId()}/webhooks`)
-  await expect(page.getByText('Outbound webhooks')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('heading', { name: 'Webhooks', exact: true, level: 1 })).toBeVisible({ timeout: 60_000 })
 })
 
 test('the page is reachable from the sidebar, not only by URL', async ({ page }) => {
   await page.goto(`/app/projects/${projectId()}`)
-  const link = page.getByRole('button', { name: 'Webhooks', exact: true })
+  // A real link in the sidebar, so it can be opened in a new tab as well.
+  const link = page.getByRole('link', { name: 'Webhooks', exact: true })
   await expect(link).toBeVisible({ timeout: 60_000 })
   await link.click()
   await expect(page).toHaveURL(/\/webhooks$/, { timeout: 30_000 })
-  await expect(page.getByText('Outbound webhooks')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('heading', { name: 'Webhooks', exact: true, level: 1 })).toBeVisible({ timeout: 30_000 })
 })
 
 test('an endpoint created in the form survives a reload, and its secret does not', async ({ page }) => {
@@ -67,7 +68,7 @@ test('an endpoint created in the form survives a reload, and its secret does not
 
   await page.getByRole('button', { name: /add endpoint/i }).first().click()
   await page.getByPlaceholder('https://example.com/hooks/backenly').fill(PUBLIC_TARGET)
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save endpoint', exact: true }).click()
 
   // The API actually answered, and answered 201. A toast is not evidence.
   const res = await created
@@ -118,7 +119,7 @@ test('a refused destination reports the guard’s real reason, and writes nothin
   const refused = page.waitForResponse(
     r => r.url().includes('/webhooks') && r.request().method() === 'POST',
   )
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByRole('button', { name: 'Save endpoint', exact: true }).click()
 
   const res = await refused
   expect(res.status(), 'a link-local destination was not refused').toBe(400)
@@ -164,7 +165,7 @@ test('the test button performs a real delivery attempt and reports its real outc
   const attempted = page.waitForResponse(
     r => r.url().includes('/test') && r.request().method() === 'POST',
   )
-  await page.getByRole('button', { name: 'Test', exact: true }).first().click()
+  await page.getByRole('button', { name: 'Send test', exact: true }).first().click()
 
   const res = await attempted
   expect(res.status(), 'the test route did not answer').toBe(200)
@@ -194,7 +195,9 @@ test('the test button performs a real delivery attempt and reports its real outc
 test('deleting an endpoint asks first, and then actually removes it', async ({ page }) => {
   await expect(page.getByText(PUBLIC_TARGET).first()).toBeVisible({ timeout: 30_000 })
 
-  await page.getByRole('button', { name: 'Delete', exact: true }).first().click()
+  // Delete lives in the row's overflow menu, beside the other rare actions.
+  await page.getByRole('button', { name: `More actions for ${PUBLIC_TARGET}` }).first().click()
+  await page.getByRole('menuitem', { name: 'Delete endpoint…' }).click()
 
   // Named, not a bare "are you sure?" — the dialog says what stops and what is
   // lost with it.
@@ -208,11 +211,11 @@ test('deleting an endpoint asks first, and then actually removes it', async ({ p
   )
   // Scoped to the dialog rather than picking the last matching button on the
   // page, so a future row added below cannot silently retarget the click.
-  await confirm.getByRole('button', { name: 'Delete', exact: true }).click()
+  await confirm.getByRole('button', { name: 'Delete endpoint', exact: true }).click()
   const res = await removed
   expect(res.status(), 'delete did not succeed').toBe(200)
 
   await page.reload()
-  await expect(page.getByText('Outbound webhooks')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('heading', { name: 'Webhooks', exact: true, level: 1 })).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText(PUBLIC_TARGET)).toHaveCount(0, { timeout: 30_000 })
 })

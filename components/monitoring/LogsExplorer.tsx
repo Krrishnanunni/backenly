@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { AlertCircle, RefreshCw, Search, X } from 'lucide-react'
-import { EmptyState, KitButton } from '@/components/inspector/kit'
+import { EmptyState, IconButton, INPUT_BASE, KitButton, StatusDot } from '@/components/inspector/kit'
 import { FileText } from 'lucide-react'
 
 type Severity = 'error' | 'warning' | 'info' | 'debug'
@@ -50,10 +50,17 @@ const SEVERITIES = ['all', 'error', 'warning', 'info', 'debug'] as const
 
 const SEVERITY_TONE: Record<string, string> = {
   error: 'text-rose-300',
-  warning: 'text-amber-300',
+  warning: 'text-amber-200',
   info: 'text-zinc-300',
   debug: 'text-zinc-500',
 }
+
+const SEVERITY_DOT: Record<string, 'failed' | 'attention' | 'neutral'> = {
+  error: 'failed',
+  warning: 'attention',
+}
+
+const SELECT = '[color-scheme:dark] h-[30px] rounded-[7px] border border-white/[0.08] bg-[#08090a] pl-2.5 pr-7 text-[16px] text-zinc-200 transition-colors hover:border-white/[0.12] focus:border-violet-300/50 focus:outline-none focus:ring-[3px] focus:ring-violet-400/15 sm:text-[13px]'
 
 const PAGE_SIZE = 50
 
@@ -129,17 +136,18 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
   return (
     <div className="flex h-full w-full flex-col">
       {/* ── Filter bar ─────────────────────────────────────── */}
-      <div className="flex h-11 flex-shrink-0 flex-wrap items-center gap-2 border-b border-white/[0.06] px-3">
+      <div className="flex min-h-[44px] flex-shrink-0 flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-1.5 sm:px-4">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-600" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-600" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') applySearch() }}
             onBlur={applySearch}
-            placeholder="Search message, endpoint, service"
+            placeholder="Search logs…"
             aria-label="Search logs"
-            className="h-7 w-64 rounded-md border border-white/[0.07] bg-[#08090a] pl-7 pr-2 text-[12.5px] text-zinc-100 placeholder:text-zinc-600 focus:border-violet-400/40 focus:outline-none"
+            type="search"
+            className={`${INPUT_BASE} h-[30px] w-56 pl-8 pr-2.5 sm:w-72`}
           />
         </div>
 
@@ -147,7 +155,7 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
           value={type}
           onChange={(e) => { setPage(1); setType(e.target.value as typeof type) }}
           aria-label="Filter by type"
-          className="h-7 rounded-md border border-white/[0.07] bg-[#08090a] px-2 text-[12.5px] text-zinc-200 focus:border-violet-400/40 focus:outline-none"
+          className={SELECT}
         >
           {TYPES.map((t) => <option key={t} value={t}>{t === 'all' ? 'All types' : t}</option>)}
         </select>
@@ -156,37 +164,38 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
           value={severity}
           onChange={(e) => { setPage(1); setSeverity(e.target.value as typeof severity) }}
           aria-label="Filter by severity"
-          className="h-7 rounded-md border border-white/[0.07] bg-[#08090a] px-2 text-[12.5px] text-zinc-200 focus:border-violet-400/40 focus:outline-none"
+          className={SELECT}
         >
           {SEVERITIES.map((s) => <option key={s} value={s}>{s === 'all' ? 'All severities' : s}</option>)}
         </select>
 
         {filtersActive && (
-          <button
-            onClick={clearFilters}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 focus:outline-none"
-          >
-            <X className="h-3 w-3" /> Clear
-          </button>
+          <KitButton size="sm" variant="ghost" icon={X} onClick={clearFilters}>
+            Clear
+          </KitButton>
         )}
 
         <div className="ml-auto flex items-center gap-3">
           {stats && (
-            <div className="flex items-center gap-2.5 text-[12px] tabular-nums">
-              {(['error', 'warning', 'info', 'debug'] as const).map((s) => (
-                <span key={s} className={SEVERITY_TONE[s]}>
-                  {stats[s]} {s}
-                </span>
+            <div className="hidden items-center gap-3 text-[12px] tabular-nums text-zinc-500 md:flex">
+              {/* Tinted only when there is something to look at. */}
+              {(['error', 'warning'] as const).map((sev) => (
+                <StatusDot
+                  key={sev}
+                  tone={stats[sev] > 0 ? (sev === 'error' ? 'failed' : 'attention') : 'neutral'}
+                  label={`${stats[sev].toLocaleString()} ${sev === 'error' ? (stats[sev] === 1 ? 'error' : 'errors') : stats[sev] === 1 ? 'warning' : 'warnings'}`}
+                />
               ))}
+              <span>{stats.info.toLocaleString()} info</span>
+              <span>{stats.debug.toLocaleString()} debug</span>
             </div>
           )}
-          <button
+          <IconButton
+            icon={RefreshCw}
+            label="Refresh logs"
             onClick={() => void load()}
-            aria-label="Refresh logs"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 focus:outline-none"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+            className={loading ? '[&_svg]:animate-spin' : ''}
+          />
         </div>
       </div>
 
@@ -194,14 +203,14 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
       <div className="min-h-0 flex-1 overflow-auto">
         {error ? (
           <div className="flex h-full items-center justify-center px-8">
-            <div className="max-w-md rounded-lg border border-rose-500/20 bg-rose-500/[0.05] px-4 py-3">
+            <div className="max-w-md rounded-[10px] border border-rose-400/20 bg-rose-500/[0.05] px-4 py-3.5">
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-300" />
                 <div>
-                  <p className="text-[12.5px] font-medium text-rose-200">Could not load logs</p>
+                  <p className="text-[13px] font-medium text-rose-200">Could not load logs</p>
                   <p className="mt-1 font-mono text-[12px] text-rose-200/70">{error}</p>
                   <p className="mt-2 text-[12px] text-zinc-400">
-                    Nothing is shown above because this query failed — not because the
+                    Nothing is shown because this query failed, not because the
                     system was quiet.
                   </p>
                   <KitButton variant="secondary" onClick={() => void load()} className="mt-2.5">
@@ -240,12 +249,12 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
           </div>
         ) : (
           <table className="w-full border-collapse">
-            <thead className="sticky top-0 z-10 bg-[#0a0b0d]">
+            <thead className="sticky top-0 z-10 bg-[#0e0f11]">
               <tr>
-                {['Time', 'Severity', 'Type', 'Message', 'Endpoint', 'Status', 'Duration'].map((h) => (
+                {['Time', 'Severity', 'Type', 'Message', 'Endpoint', 'Status', 'Duration'].map((h, i) => (
                   <th
                     key={h}
-                    className="border-b border-white/[0.06] px-3 py-2 text-left text-[12px] font-medium text-zinc-500"
+                    className={`h-[36px] whitespace-nowrap border-b border-white/[0.06] px-3 text-[12px] font-medium text-zinc-500 ${i >= 5 ? 'text-right' : 'text-left'}`}
                   >
                     {h}
                   </th>
@@ -254,23 +263,23 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="hover:bg-white/[0.02]">
+                <tr key={r.id} className="transition-colors hover:bg-[#121316]">
                   <td className="whitespace-nowrap border-b border-white/[0.04] px-3 py-[9px] text-[12px] tabular-nums text-zinc-500">
                     {new Date(r.timestamp).toLocaleString()}
                   </td>
-                  <td className={`border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] ${SEVERITY_TONE[r.severity] ?? 'text-zinc-400'}`}>
-                    {r.severity}
+                  <td className="whitespace-nowrap border-b border-white/[0.04] px-3 py-[9px]">
+                    <StatusDot tone={SEVERITY_DOT[r.severity] ?? 'neutral'} label={<span className={SEVERITY_TONE[r.severity] ?? 'text-zinc-400'}>{r.severity}</span>} />
                   </td>
                   <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] text-zinc-500">{r.type}</td>
                   <td className="border-b border-white/[0.04] px-3 py-[9px] text-[12.5px] text-zinc-200">{r.message}</td>
                   <td className="border-b border-white/[0.04] px-3 py-[9px] font-mono text-[12px] text-zinc-500">
-                    {r.method ? `${r.method} ` : ''}{r.endpoint ?? '—'}
+                    {r.method ? `${r.method} ` : ''}{r.endpoint ?? ''}
                   </td>
                   <td className="border-b border-white/[0.04] px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-500">
-                    {r.statusCode ?? '—'}
+                    {r.statusCode ?? ''}
                   </td>
                   <td className="border-b border-white/[0.04] px-3 py-[9px] text-right text-[12px] tabular-nums text-zinc-500">
-                    {r.duration != null ? `${r.duration}ms` : '—'}
+                    {r.duration != null ? `${r.duration} ms` : ''}
                   </td>
                 </tr>
               ))}
@@ -281,22 +290,22 @@ export function LogsExplorer({ projectId }: { projectId: string }) {
 
       {/* ── Paging ─────────────────────────────────────────── */}
       {pagination && pagination.totalPages > 1 && (
-        <div className="flex h-9 flex-shrink-0 items-center justify-between border-t border-white/[0.06] px-3">
-          <span className="text-[12px] tabular-nums text-zinc-600">
+        <div className="flex h-[40px] flex-shrink-0 items-center justify-between border-t border-white/[0.06] px-4">
+          <span className="text-[12px] tabular-nums text-zinc-500">
             {pagination.total} entries · page {pagination.page} of {pagination.totalPages}
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={pagination.page <= 1 || loading}
-              className="h-6 rounded px-2 text-[12.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
+              className="h-[26px] rounded-[6px] px-2.5 text-[12.5px] font-medium text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/60"
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => p + 1)}
               disabled={pagination.page >= pagination.totalPages || loading}
-              className="h-6 rounded px-2 text-[12.5px] text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none"
+              className="h-[26px] rounded-[6px] px-2.5 text-[12.5px] font-medium text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/60"
             >
               Next
             </button>
