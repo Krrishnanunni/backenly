@@ -32,10 +32,10 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Mail, Loader2, Send, Save, Trash2, RotateCcw, AlertTriangle, CheckCircle2, Eye,
+  Send, Save, Trash2, RotateCcw, AlertTriangle, CheckCircle2, Eye,
 } from 'lucide-react'
 import {
-  KitButton, KitNote, KitField, KitInput, KitTextarea, KitBadge, KitModal, KitConfirmDialog,
+  KitButton, KitNote, KitField, KitInput, KitTextarea, KitModal, KitConfirmDialog, SettingsCard, Spinner, StatusDot,
 } from '@/components/inspector/kit'
 
 interface SmtpView {
@@ -68,6 +68,12 @@ interface TemplateRow {
 interface FieldProblem {
   field?: string
   message: string
+}
+
+const SOURCE_LABEL: Record<SmtpView['activeSource'], string> = {
+  project: 'This project’s SMTP',
+  deployment: 'Deployment SMTP',
+  none: 'Not configured',
 }
 
 const SOURCE_TEXT: Record<SmtpView['activeSource'], string> = {
@@ -226,42 +232,62 @@ export function EmailSettingsPanel({ projectId }: { projectId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 px-4 py-6 text-[12px] text-zinc-500">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      <div className="mx-auto flex w-full max-w-[1200px] items-center gap-2 px-4 py-8 text-[13px] text-zinc-500 sm:px-6 lg:px-8">
+        <Spinner />
         Loading mail settings…
       </div>
     )
   }
 
+  const busyIcon = (key: string, icon: typeof Save) => (busy === key ? undefined : icon)
+
   return (
-    <div className="px-4 py-5">
-      <div className="max-w-[72ch] space-y-6">
+    <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
+      <div className="max-w-[880px] space-y-6">
         {loadError && <KitNote icon={AlertTriangle} tone="danger">{loadError}</KitNote>}
         {message && (
-          <KitNote icon={message.tone === 'success' ? CheckCircle2 : AlertTriangle} tone={message.tone}>
-            {message.text}
-          </KitNote>
+          <div aria-live="polite">
+            <KitNote icon={message.tone === 'success' ? CheckCircle2 : AlertTriangle} tone={message.tone}>
+              {message.text}
+            </KitNote>
+          </div>
         )}
 
         {/* ── Where mail sends from ───────────────────────────────── */}
-        <section>
-          <div className="flex items-center gap-2">
-            <Mail className="h-3.5 w-3.5 text-zinc-500" />
-            <h2 className="text-[12px] font-medium text-zinc-200">Outgoing mail</h2>
-            {smtp && (
-              <KitBadge tone={smtp.activeSource === 'none' ? 'failed' : 'operational'}>
-                {smtp.activeSource}
-              </KitBadge>
-            )}
-          </div>
-
-          {smtp && (
-            <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">{SOURCE_TEXT[smtp.activeSource]}</p>
-          )}
-
+        <SettingsCard
+          title={
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              Outgoing mail
+              {smtp && (
+                <StatusDot
+                  tone={smtp.activeSource === 'none' ? 'attention' : 'operational'}
+                  label={<span className="text-[12.5px] font-normal">{SOURCE_LABEL[smtp.activeSource]}</span>}
+                />
+              )}
+            </span>
+          }
+          description={smtp ? SOURCE_TEXT[smtp.activeSource] : undefined}
+          footer={
+            smtp?.deploymentFallbackAvailable
+              ? 'Turning these off falls back to the deployment’s SMTP.'
+              : 'Turning these off means auth emails are only logged.'
+          }
+          actions={
+            <>
+              {smtp?.configured && (
+                <KitButton variant="ghost" size="sm" icon={Trash2} disabled={busy !== null} onClick={() => setConfirmRemove(true)}>
+                  Remove
+                </KitButton>
+              )}
+              <KitButton variant="primary" size="sm" icon={busyIcon('save', Save)} loading={busy === 'save'} disabled={busy !== null && busy !== 'save'} onClick={save}>
+                Save settings
+              </KitButton>
+            </>
+          }
+        >
           {/* Evidence of a real send, kept apart from whether settings exist. */}
           {smtp?.configured && (
-            <div className="mt-3">
+            <div className="mb-5">
               {smtp.lastTestAt && !smtp.lastTestError && (
                 <KitNote icon={CheckCircle2} tone="success">
                   Last test delivered on {new Date(smtp.lastTestAt).toLocaleString()}.
@@ -274,15 +300,15 @@ export function EmailSettingsPanel({ projectId }: { projectId: string }) {
               )}
               {!smtp.lastTestAt && (
                 <KitNote icon={AlertTriangle} tone="warn">
-                  These settings have never been tested, so nothing here says they work.
+                  These settings have never been tested, so nothing here says they work yet.
                 </KitNote>
               )}
             </div>
           )}
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <KitField label="Host">
-              <KitInput value={form.host} onChange={e => setForm({ ...form, host: e.target.value })} placeholder="smtp.example.com" />
+              <KitInput value={form.host} onChange={e => setForm({ ...form, host: e.target.value })} placeholder="smtp.example.com" spellCheck={false} autoComplete="off" />
             </KitField>
             <KitField
               label="Port"
@@ -295,7 +321,7 @@ export function EmailSettingsPanel({ projectId }: { projectId: string }) {
               <KitInput value={form.port} onChange={e => setForm({ ...form, port: e.target.value })} inputMode="numeric" />
             </KitField>
             <KitField label="Username">
-              <KitInput value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
+              <KitInput value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} spellCheck={false} autoComplete="off" />
             </KitField>
             <KitField
               label="Password"
@@ -310,30 +336,32 @@ export function EmailSettingsPanel({ projectId }: { projectId: string }) {
               />
             </KitField>
             <KitField label="From address">
-              <KitInput value={form.fromAddress} onChange={e => setForm({ ...form, fromAddress: e.target.value })} placeholder="auth@example.com" />
+              <KitInput type="email" value={form.fromAddress} onChange={e => setForm({ ...form, fromAddress: e.target.value })} placeholder="auth@example.com" spellCheck={false} />
             </KitField>
             <KitField label="From name" hint="Optional.">
               <KitInput value={form.fromName} onChange={e => setForm({ ...form, fromName: e.target.value })} placeholder="Example" />
             </KitField>
           </div>
 
-          <label className="mt-3 flex cursor-pointer items-center gap-2 text-[12px] text-zinc-300">
+          <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[8px] border border-white/[0.07] bg-white/[0.02] px-3.5 py-3">
             <input
               type="checkbox"
               checked={form.enabled}
               onChange={e => setForm({ ...form, enabled: e.target.checked })}
-              className="accent-violet-400"
+              className="mt-[3px] h-4 w-4 flex-shrink-0 accent-violet-400"
             />
-            Use these settings
-            <span className="text-zinc-500">
-              {smtp?.deploymentFallbackAvailable
-                ? '— unchecked falls back to the deployment’s SMTP.'
-                : '— unchecked means auth emails are only logged.'}
+            <span className="min-w-0">
+              <span className="block text-[13px] font-medium text-zinc-100">Send with these settings</span>
+              <span className="mt-0.5 block text-[12.5px] leading-[18px] text-zinc-500">
+                {smtp?.deploymentFallbackAvailable
+                  ? 'Unchecked, auth emails fall back to the deployment’s SMTP.'
+                  : 'Unchecked, auth emails are only logged to the server console.'}
+              </span>
             </span>
           </label>
 
           {problems.length > 0 && (
-            <div className="mt-3">
+            <div className="mt-4">
               <KitNote icon={AlertTriangle} tone="danger" title="These settings cannot be used">
                 <ul className="list-disc pl-4">
                   {problems.map((p, i) => <li key={i}>{p.field ? `${p.field}: ` : ''}{p.message}</li>)}
@@ -341,73 +369,78 @@ export function EmailSettingsPanel({ projectId }: { projectId: string }) {
               </KitNote>
             </div>
           )}
+        </SettingsCard>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <KitButton variant="primary" size="sm" icon={busy === 'save' ? Loader2 : Save} disabled={busy !== null} onClick={save}>
-              Save
-            </KitButton>
-            {smtp?.configured && (
-              <KitButton variant="ghost" size="sm" icon={Trash2} disabled={busy !== null} onClick={() => setConfirmRemove(true)}>
-                Remove
-              </KitButton>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-end gap-2">
-            <div className="min-w-[240px] flex-1">
-              <KitField label="Send a test to" hint="A real message, through these settings. It is the only thing that proves they work.">
-                <KitInput value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="you@example.com" />
-              </KitField>
+        <SettingsCard
+          title="Send a test"
+          description="A real message through the settings above. A delivered test is the only proof they work."
+        >
+          <form
+            className="flex flex-col gap-2 sm:flex-row"
+            onSubmit={(e) => { e.preventDefault(); if (testTo.trim()) sendTest() }}
+          >
+            <div className="min-w-0 flex-1">
+              <KitInput
+                type="email"
+                aria-label="Send a test to"
+                value={testTo}
+                onChange={e => setTestTo(e.target.value)}
+                placeholder="you@example.com"
+                spellCheck={false}
+              />
             </div>
             <KitButton
+              type="submit"
               variant="secondary"
-              size="sm"
-              icon={busy === 'test' ? Loader2 : Send}
+              icon={busyIcon('test', Send)}
+              loading={busy === 'test'}
               disabled={busy !== null || testTo.trim() === ''}
-              onClick={sendTest}
             >
               Send test
             </KitButton>
-          </div>
-        </section>
+          </form>
+        </SettingsCard>
 
         {/* ── What the mail says ──────────────────────────────────── */}
-        <section className="border-t border-white/[0.06] pt-5">
-          <h2 className="text-[12px] font-medium text-zinc-200">Auth email templates</h2>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
-            Each email has a built-in version that already works. Editing one replaces it for
-            this project; reverting removes the override. Available values:{' '}
-            {variables.map(v => <code key={v} className="mr-1.5 font-mono text-[12.5px] text-zinc-300">{`{{${v}}}`}</code>)}
-          </p>
-
-          <div className="mt-4 space-y-2">
+        <SettingsCard
+          title="Auth email templates"
+          description={
+            <>
+              Each email has a built-in version that already works. Editing one replaces it for this project;
+              reverting removes the override. Available values:{' '}
+              {variables.map(v => <code key={v} className="mr-1.5 font-mono text-[12px] text-zinc-300">{`{{${v}}}`}</code>)}
+            </>
+          }
+        >
+          <ul className="-mx-5 divide-y divide-white/[0.06] border-t border-white/[0.06] sm:-mx-6">
             {templates.map(t => (
-              <div key={t.kind} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3.5 py-3">
+              <li key={t.kind} className="flex flex-wrap items-center gap-3 px-5 py-3.5 sm:px-6">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[12px] text-zinc-200">{t.title}</p>
-                  <p className="mt-0.5 text-[12.5px] text-zinc-500">{t.sends}</p>
+                  <p className="text-[13px] font-medium text-zinc-100">{t.title}</p>
+                  <p className="mt-0.5 text-[12.5px] leading-[18px] text-zinc-500">{t.sends}</p>
                 </div>
-                <KitBadge tone={t.customised ? 'operational' : 'neutral'}>
-                  {t.customised ? 'customised' : 'built-in'}
-                </KitBadge>
-                <KitButton variant="ghost" size="sm" disabled={busy !== null} onClick={() => setEditing(t)}>
-                  Edit
-                </KitButton>
-                {t.customised && (
-                  <KitButton
-                    variant="ghost"
-                    size="sm"
-                    icon={busy === `revert-${t.kind}` ? Loader2 : RotateCcw}
-                    disabled={busy !== null}
-                    onClick={() => revertTemplate(t.kind)}
-                  >
-                    Revert
+                <StatusDot tone={t.customised ? 'beta' : 'neutral'} label={t.customised ? 'Customised' : 'Built-in'} />
+                <div className="flex items-center gap-1">
+                  {t.customised && (
+                    <KitButton
+                      variant="ghost"
+                      size="sm"
+                      icon={busyIcon(`revert-${t.kind}`, RotateCcw)}
+                      loading={busy === `revert-${t.kind}`}
+                      disabled={busy !== null}
+                      onClick={() => revertTemplate(t.kind)}
+                    >
+                      Revert
+                    </KitButton>
+                  )}
+                  <KitButton variant="secondary" size="sm" disabled={busy !== null} onClick={() => setEditing(t)}>
+                    Edit
                   </KitButton>
-                )}
-              </div>
+                </div>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </SettingsCard>
       </div>
 
       {confirmRemove && (
@@ -507,11 +540,11 @@ function TemplateEditor({
       footer={
         <>
           <KitButton variant="ghost" size="sm" onClick={onClose}>Cancel</KitButton>
-          <KitButton variant="secondary" size="sm" icon={busy === 'preview' ? Loader2 : Eye} disabled={busy !== null} onClick={runPreview}>
+          <KitButton variant="secondary" size="sm" icon={Eye} loading={busy === 'preview'} disabled={busy !== null && busy !== 'preview'} onClick={runPreview}>
             Preview
           </KitButton>
-          <KitButton variant="primary" size="sm" icon={busy === 'save' ? Loader2 : Save} disabled={busy !== null} onClick={save}>
-            Save
+          <KitButton variant="primary" size="sm" icon={Save} loading={busy === 'save'} disabled={busy !== null && busy !== 'save'} onClick={save}>
+            Save template
           </KitButton>
         </>
       }
@@ -544,8 +577,8 @@ function TemplateEditor({
 
         {preview && (
           <div>
-            <p className="mb-1.5 text-[12px] font-medium text-zinc-400">
-              Preview — subject: <span className="text-zinc-200">{preview.subject}</span>
+            <p className="mb-2 text-[12.5px] text-zinc-500">
+              Preview. Subject: <span className="text-zinc-200">{preview.subject}</span>
             </p>
             {/* Sandboxed with NO tokens: no scripts, no same-origin. Operator
                 HTML renders here and can do nothing to the dashboard. */}
@@ -553,7 +586,7 @@ function TemplateEditor({
               title="Email preview"
               sandbox=""
               srcDoc={preview.bodyHtml}
-              className="h-64 w-full rounded-lg border border-white/10 bg-white"
+              className="h-72 w-full rounded-[8px] border border-white/10 bg-white"
             />
           </div>
         )}
