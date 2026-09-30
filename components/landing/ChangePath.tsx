@@ -44,7 +44,7 @@
  *
  * HOW IT DRAWS. One SVG in a fixed 1260x500 coordinate space, scaled to the
  * container, shown from xl up (below that the text would scale under 10px, so
- * smaller screens get the same story as cards). Lines draw
+ * smaller screens get the same day drawn upright; see PhoneScene). Lines draw
  * with framer's pathLength; dashed lines draw through a mask, because
  * pathLength works by rewriting stroke-dasharray and would erase the dashes.
  * The sequence starts the first time the figure is 35% on screen. Reduced
@@ -126,13 +126,15 @@ function Line({ d, stroke, delay, duration, kit }: {
 }
 
 /** A dashed line that still draws: the dashes are revealed through a mask. */
-function Dashed({ d, delay, duration, kit, stroke = 'rgba(255,255,255,0.32)', className }: {
+function Dashed({ d, delay, duration, kit, stroke = 'rgba(255,255,255,0.32)', className, box = [W, H] }: {
   d: string; delay: number; duration?: number; kit: Kit; stroke?: string; className?: string
+  /** The canvas the mask must cover: the desktop drawing by default. */
+  box?: [number, number]
 }) {
   const id = `m${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   return (
     <>
-      <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={W} height={H}>
+      <mask id={id} maskUnits="userSpaceOnUse" x={0} y={0} width={box[0]} height={box[1]}>
         <motion.path d={d} stroke="#fff" strokeWidth={6} fill="none" variants={kit.draw(delay, duration)} />
       </mask>
       <path d={d} stroke={stroke} strokeWidth={1.25} strokeDasharray="3 5" fill="none" mask={`url(#${id})`} className={className} />
@@ -286,8 +288,7 @@ const RECEIPT: { time: string; step: string; detail: string }[] = [
   { time: '03:14', step: 'tested', detail: 'queries fast again' },
 ]
 
-function Receipt({ x, y, delay, kit }: { x: number; y: number; delay: number; kit: Kit }) {
-  const w = 380
+function Receipt({ x, y, delay, kit, w = 380 }: { x: number; y: number; delay: number; kit: Kit; w?: number }) {
   const h = 176
   return (
     <motion.g variants={kit.rise(delay)}>
@@ -479,7 +480,265 @@ function Scene({ kit }: { kit: Kit }) {
   )
 }
 
-/* ── The key, the explanations, and the small-screen version ─────────────── */
+/* ── The phone drawing ───────────────────────────────────────────────────── */
+
+/*
+ * Below xl the same day is drawn upright: production runs down the middle,
+ * each change branches off to one side, passes its steps, and merges back, the
+ * way a branch timeline reads on a phone. Same colours, same stories, same
+ * receipt; only the geometry turns.
+ *
+ * It is taller than a phone screen, so it does not play in one go. Each story
+ * is a chapter that starts when it scrolls into view, which is also how the
+ * reader meets it. Reduced motion gets every chapter finished and still.
+ *
+ * Coordinates are a 390-unit-wide canvas, drawn at 1:1 on a 390px phone and
+ * capped at 440px so a tablet does not blow the type up.
+ */
+
+const MW = 390
+const MH = 1056
+const TX = 195 // the production line
+const RC = 300 // right-hand branches
+const LC = 82 // left-hand branches
+const MONO_11 = 6.6 // Geist Mono at 11px, per character
+
+/** Keep a pill or card on its own side of the line, inside the canvas. */
+function fit(center: number, w: number, side: 'left' | 'right') {
+  const [lo, hi] = side === 'right' ? [TX + 14, MW - 8] : [8, TX - 14]
+  return Math.min(Math.max(center - w / 2, lo), hi - w)
+}
+
+function MNode({ y, color, delay, kit }: { y: number; color: string; delay: number; kit: Kit }) {
+  return (
+    <motion.g variants={kit.pop(delay)} style={CENTRED}>
+      <circle cx={TX} cy={y} r={7.5} fill="#08090a" stroke={color} strokeOpacity={0.55} strokeWidth={1.25} />
+      <circle cx={TX} cy={y} r={3.25} fill={color} />
+    </motion.g>
+  )
+}
+
+/** A time sits on the side of the line its branch does not use. */
+function MTime({ y, side, delay, kit, children }: { y: number; side: 'left' | 'right'; delay: number; kit: Kit; children: string }) {
+  return (
+    <motion.text
+      x={side === 'left' ? TX - 16 : TX + 16}
+      y={y + 4}
+      textAnchor={side === 'left' ? 'end' : 'start'}
+      fontSize={11}
+      className="fill-zinc-500 font-mono"
+      variants={kit.fade(delay)}
+    >
+      {children}
+    </motion.text>
+  )
+}
+
+function MPill({ col, cy, side, actor, action, delay, kit }: {
+  col: number; cy: number; side: 'left' | 'right'; actor: Actor; action: string; delay: number; kit: Kit
+}) {
+  const a = ACTOR[actor]
+  const w = 14 + 14 + 8 + action.length * MONO_11 + 14
+  const x = fit(col, w, side)
+  return (
+    <motion.g variants={kit.rise(delay)}>
+      <rect
+        x={x}
+        y={cy - 16}
+        width={w}
+        height={32}
+        rx={16}
+        fill="#0c0d10"
+        stroke={actor === 'autonomy' ? 'rgba(167,139,250,0.45)' : 'rgba(255,255,255,0.16)'}
+      />
+      <svg x={x + 14} y={cy - 7} width={14} height={14} viewBox="0 0 24 24">
+        <path d={a.d} stroke={a.color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <text x={x + 36} y={cy + 4} fontSize={11} className="fill-zinc-100 font-mono">
+        {action}
+      </text>
+    </motion.g>
+  )
+}
+
+function MCard({ col, cy, side, badge, label, badgeFill = '#09090b', badgeText = '#fafafa', delay, kit }: {
+  col: number; cy: number; side: 'left' | 'right'; badge: string; label: string; badgeFill?: string; badgeText?: string; delay: number; kit: Kit
+}) {
+  const bw = badge.length * 6 + 14
+  const w = 7 + bw + 8 + label.length * MONO_11 + 12
+  const x = fit(col, w, side)
+  return (
+    <motion.g variants={kit.rise(delay)}>
+      <rect x={x} y={cy - 18} width={w} height={36} rx={8} fill="#f4f4f5" />
+      <rect x={x + 7} y={cy - 11} width={bw} height={22} rx={4} fill={badgeFill} />
+      <text x={x + 7 + bw / 2} y={cy + 3.5} textAnchor="middle" fontSize={10} letterSpacing="0.06em" fill={badgeText} className="font-mono">
+        {badge}
+      </text>
+      <text x={x + 7 + bw + 8} y={cy + 4} fontSize={11} fill="#09090b" className="font-mono">
+        {label}
+      </text>
+    </motion.g>
+  )
+}
+
+/** A step on a branch, labelled on the side that faces the production line. */
+function MOutcome({ cx, cy, glyph, color, label, delay, kit }: {
+  cx: number; cy: number; glyph: Glyph; color: string; label: string; delay: number; kit: Kit
+}) {
+  const labelLeft = cx > TX
+  return (
+    <>
+      <motion.g variants={kit.pop(delay)} style={CENTRED}>
+        <circle cx={cx} cy={cy} r={16} fill="#08090a" stroke={color} strokeWidth={1.5} />
+        <path d={GLYPHS[glyph]} transform={`translate(${cx} ${cy}) scale(0.9)`} stroke={color} strokeWidth={1.75} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </motion.g>
+      <motion.text
+        x={labelLeft ? cx - 26 : cx + 26}
+        y={cy + 4}
+        textAnchor={labelLeft ? 'end' : 'start'}
+        fontSize={12}
+        className="fill-zinc-400"
+        variants={kit.fade(delay + 0.1)}
+      >
+        {label}
+      </motion.text>
+    </>
+  )
+}
+
+/** One story: it plays when it scrolls into view, or is simply there. */
+function Chapter({ quiet, children }: { quiet: boolean; children: React.ReactNode }) {
+  return quiet ? (
+    <motion.g initial="hidden" animate="visible">
+      {children}
+    </motion.g>
+  ) : (
+    <motion.g initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.3 }}>
+      {children}
+    </motion.g>
+  )
+}
+
+function PhoneScene({ kit, quiet }: { kit: Kit; quiet: boolean }) {
+  const box: [number, number] = [MW, MH]
+  const nodes = [118, 196, 412, 492, 600, 834]
+  const ticks: number[] = []
+  for (let y = 96; y < 834; y += 30) if (nodes.every((n) => Math.abs(n - y) > 12)) ticks.push(y)
+  const violet = 'rgba(167,139,250,0.55)'
+
+  return (
+    <>
+      <defs>
+        {/* An ellipse inside the night's box, spent before any edge, so the
+            night has no hard border where the canvas stops short of the page. */}
+        <radialGradient id="cpm-night" cx="0.5" cy="0.56" r="0.5">
+          <stop offset="0" stopColor="#4c1d95" stopOpacity="0.36" />
+          <stop offset="0.55" stopColor="#4c1d95" stopOpacity="0.14" />
+          <stop offset="1" stopColor="#4c1d95" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="cpm-track" gradientUnits="userSpaceOnUse" x1={0} x2={0} y1={70} y2={842}>
+          <stop offset="0" stopColor="#fff" stopOpacity="0.24" />
+          <stop offset="0.94" stopColor="#fff" stopOpacity="0.24" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0.08" />
+        </linearGradient>
+      </defs>
+
+      {/* Day, production, and the line it runs along. */}
+      <Chapter quiet={quiet}>
+        <motion.g variants={kit.fade(0.1, 0.5)}>
+          <svg x={14} y={6} width={13} height={13} viewBox="0 0 24 24">
+            <path d={SUN} stroke="#a1a1aa" strokeWidth={2} fill="none" strokeLinecap="round" />
+          </svg>
+          <text x={34} y={17} fontSize={11} className="fill-zinc-500 font-mono">
+            you&apos;re online
+          </text>
+        </motion.g>
+        <motion.g variants={kit.rise(0)}>
+          <rect x={TX - 76} y={32} width={152} height={38} rx={8} fill="#f4f4f5" />
+          <rect x={TX - 68} y={40} width={40} height={22} rx={4} fill="#16a34a" />
+          <text x={TX - 48} y={55} textAnchor="middle" fontSize={10} letterSpacing="0.06em" fill="#f0fdf4" className="font-mono">
+            LIVE
+          </text>
+          <text x={TX - 20} y={56} fontSize={13} fontWeight={500} fill="#09090b">
+            Production
+          </text>
+        </motion.g>
+        <motion.path d={`M${TX} 70 V842`} stroke="url(#cpm-track)" strokeWidth={1.25} fill="none" variants={kit.draw(0.15, 1.8)} />
+        {ticks.map((y) => (
+          <motion.circle
+            key={y}
+            cx={TX}
+            cy={y}
+            r={2.25}
+            fill="rgba(255,255,255,0.26)"
+            variants={kit.pop(0.15 + ((y - 70) / 772) * 1.8, 0.3)}
+            style={CENTRED}
+          />
+        ))}
+      </Chapter>
+
+      {/* 14:02 · Your agent adds comments: planned, applied, tested. Right. */}
+      <Chapter quiet={quiet}>
+        <MNode y={118} color="#e4e4e7" delay={0} kit={kit} />
+        <MTime y={118} side="left" delay={0.05} kit={kit}>14:02</MTime>
+        <Dashed d={`M${TX + 8} 118 H${RC - 20} A20 20 0 0 1 ${RC} 138 V152`} delay={0.15} duration={0.35} kit={kit} box={box} />
+        <MPill col={RC} cy={168} side="right" actor="agent" action="add comments" delay={0.4} kit={kit} />
+        <Dashed d={`M${RC} 184 V208`} delay={0.6} duration={0.2} kit={kit} box={box} />
+        <MCard col={RC} cy={226} side="right" badge="PLAN" label="4 safe steps" delay={0.75} kit={kit} />
+        <Line d={`M${RC} 244 V274`} stroke={GREEN} delay={0.95} duration={0.2} kit={kit} />
+        <MOutcome cx={RC} cy={290} glyph="up" color={GREEN} label="Applied" delay={1.1} kit={kit} />
+        <Line d={`M${RC} 306 V334`} stroke={GREEN} delay={1.25} duration={0.2} kit={kit} />
+        <MOutcome cx={RC} cy={350} glyph="check" color={GREEN} label="Tested 5/5" delay={1.4} kit={kit} />
+        <Line d={`M${RC} 366 V390 A22 22 0 0 1 ${RC - 22} 412 H${TX + 8}`} stroke={GREEN} delay={1.55} duration={0.45} kit={kit} />
+        <MNode y={412} color={GREEN} delay={1.95} kit={kit} />
+      </Chapter>
+
+      {/* 17:40 · Your agent asks to drop a column: it waits for you. Left. */}
+      <Chapter quiet={quiet}>
+        <MNode y={196} color="#e4e4e7" delay={0} kit={kit} />
+        <MTime y={196} side="right" delay={0.05} kit={kit}>17:40</MTime>
+        <Dashed d={`M${TX - 8} 196 H${LC + 20} A20 20 0 0 0 ${LC} 216 V234`} delay={0.15} duration={0.35} kit={kit} box={box} />
+        <MPill col={LC} cy={250} side="left" actor="agent" action="drop legacy_slug" delay={0.4} kit={kit} />
+        <Dashed d={`M${LC} 266 V290`} delay={0.6} duration={0.2} kit={kit} box={box} />
+        <MCard col={LC} cy={308} side="left" badge="NEEDS YOU" label="1,284 rows" badgeFill={AMBER} badgeText="#1c1407" delay={0.75} kit={kit} />
+        <Line d={`M${LC} 326 V356`} stroke={AMBER} delay={0.95} duration={0.2} kit={kit} />
+        <MOutcome cx={LC} cy={372} glyph="person" color={AMBER} label="You approved" delay={1.1} kit={kit} />
+        <Line d={`M${LC} 388 V418`} stroke={GREEN} delay={1.25} duration={0.2} kit={kit} />
+        <MOutcome cx={LC} cy={434} glyph="up" color={GREEN} label="Applied" delay={1.4} kit={kit} />
+        <Line d={`M${LC} 450 V470 A22 22 0 0 0 ${LC + 22} 492 H${TX - 8}`} stroke={GREEN} delay={1.55} duration={0.45} kit={kit} />
+        <MNode y={492} color={GREEN} delay={1.95} kit={kit} />
+      </Chapter>
+
+      {/* 03:12 · Nobody online: Backenly fixes it and leaves a receipt. */}
+      <Chapter quiet={quiet}>
+        <motion.g variants={kit.fade(0, 0.8)}>
+          <rect x={0} y={500} width={MW} height={MH - 500} fill="url(#cpm-night)" />
+          <svg x={14} y={538} width={13} height={13} viewBox="0 0 24 24">
+            <path d="M20 14.5 A8.5 8.5 0 1 1 9.5 4 A7 7 0 0 0 20 14.5 Z" fill={VIOLET} fillOpacity={0.8} />
+          </svg>
+          <text x={34} y={549} fontSize={11} className="font-mono" fill="#8b86a8">
+            nobody online
+          </text>
+        </motion.g>
+        <MNode y={600} color={VIOLET} delay={0.2} kit={kit} />
+        <MTime y={600} side="left" delay={0.25} kit={kit}>03:12</MTime>
+        <Dashed d={`M${TX + 8} 600 H${RC - 20} A20 20 0 0 1 ${RC} 620 V638`} delay={0.35} duration={0.35} kit={kit} stroke={violet} box={box} />
+        <MPill col={RC} cy={654} side="right" actor="autonomy" action="finds slow queries" delay={0.6} kit={kit} />
+        <Dashed d={`M${RC} 670 V694`} delay={0.8} duration={0.2} kit={kit} stroke={violet} box={box} />
+        <MCard col={RC} cy={712} side="right" badge="FIX" label="add missing index" badgeFill="#7c3aed" delay={0.95} kit={kit} />
+        <Line d={`M${RC} 730 V760`} stroke={GREEN} delay={1.15} duration={0.2} kit={kit} />
+        <MOutcome cx={RC} cy={776} glyph="check" color={GREEN} label="Tested" delay={1.3} kit={kit} />
+        <Line d={`M${RC} 792 V812 A22 22 0 0 1 ${RC - 22} 834 H${TX + 8}`} stroke={GREEN} delay={1.45} duration={0.45} kit={kit} />
+        <MNode y={834} color={GREEN} delay={1.85} kit={kit} />
+        <MTime y={834} side="left" delay={1.9} kit={kit}>03:14</MTime>
+        <Dashed d={`M${TX} 842 V868`} delay={2.0} duration={0.2} kit={kit} stroke={violet} box={box} />
+        <Receipt x={12} y={868} w={MW - 24} delay={2.2} kit={kit} />
+      </Chapter>
+    </>
+  )
+}
+
+/* ── The key and the explanations ───────────────────────────────────────── */
 
 const LEGEND: { label: string; color: string }[] = [
   { label: 'Your agent asks', color: '#e4e4e7' },
@@ -493,49 +752,29 @@ const LEGEND: { label: string; color: string }[] = [
  * a reader can match each paragraph to its branch. The third carries what the
  * landing's separate autonomy section used to say.
  */
-const STORIES: { time: string; actor: Actor; action: string; title: string; body: string; result: string; color: string }[] = [
+const STORIES: { time: string; title: string; body: string; color: string }[] = [
   {
     time: '14:02',
-    actor: 'agent',
-    action: 'add comments',
     title: 'Your agent ships a feature',
     body: 'Backenly turns the request into planned steps, applies them behind a restore point, then tests the live backend with real requests. Done means it works, not that it ran.',
-    result: 'Applied, tested 5/5',
     color: GREEN,
   },
   {
     time: '17:40',
-    actor: 'agent',
-    action: 'drop legacy_slug',
     title: 'Anything risky waits for you',
     body: 'A change that would delete data stops and shows you exactly what it touches. Your agent can ask. Only you can approve, and every change can be undone.',
-    result: 'Waited for you, then applied',
     color: AMBER,
   },
   {
     time: '03:12',
-    actor: 'autonomy',
-    action: 'finds slow queries',
     title: 'Backenly fixes it while you sleep',
     body: 'Every minute, on every plan, Backenly checks the live backend. It snapshots first, fixes only what is safe, tests the fix, and never spends your AI credits doing it.',
-    result: 'Fixed and tested, receipt waiting',
     color: VIOLET,
   },
 ]
 
-function ActorLine({ time, actor, action }: { time: string; actor: Actor; action: string }) {
-  const a = ACTOR[actor]
-  return (
-    <div className="flex items-center gap-2 font-mono text-[12px]">
-      <span className="text-zinc-500">{time}</span>
-      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" aria-hidden>
-        <path d={a.d} stroke={a.color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <span className={actor === 'autonomy' ? 'text-violet-300' : 'text-zinc-500'}>{a.name}</span>
-      <span className="truncate text-zinc-100">{action}</span>
-    </div>
-  )
-}
+const DESCRIPTION =
+  'One day and night on production. At 14:02 your agent adds comments: Backenly plans 4 safe steps, applies them, and tests them 5 of 5. At 17:40 your agent asks to drop a column with 1,284 live rows: it waits until you approve, then applies. At 03:12, with nobody online, Backenly finds slow queries, saves a restore point, adds the missing index, tests it, and leaves you a receipt.'
 
 export function ChangePath() {
   const quiet = useSettledReducedMotion()
@@ -545,100 +784,68 @@ export function ChangePath() {
 
   return (
     <figure>
+      {/* The key: what each colour on the drawing means. */}
+      <ul
+        aria-label="How to read the timeline"
+        className="mx-auto mb-10 grid max-w-[440px] grid-cols-2 gap-x-4 gap-y-3 text-[13px] text-zinc-400 xl:mx-0 xl:flex xl:max-w-none xl:flex-wrap xl:items-center xl:gap-x-7 xl:gap-y-2.5"
+      >
+        {LEGEND.map((item) => (
+          <li key={item.label} className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className="flex h-3.5 w-3.5 items-center justify-center rounded-full border"
+              style={{ borderColor: item.color }}
+            >
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />
+            </span>
+            {item.label}
+          </li>
+        ))}
+      </ul>
+
       <div ref={ref} className="hidden xl:block">
-        {/* The key: what each colour on the drawing means. */}
-        <ul aria-label="How to read the timeline" className="mb-10 flex flex-wrap items-center gap-x-7 gap-y-2 text-[13px] text-zinc-400">
-          {LEGEND.map((item) => (
-            <li key={item.label} className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="flex h-3.5 w-3.5 items-center justify-center rounded-full border"
-                style={{ borderColor: item.color }}
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />
-              </span>
-              {item.label}
-            </li>
-          ))}
-        </ul>
         <motion.svg
           viewBox={`0 0 ${W} ${H}`}
           className="block h-auto w-full select-none overflow-visible"
           role="img"
-          aria-label="One day and night on production. At 14:02 your agent adds comments: Backenly plans 4 safe steps, applies them, and tests them 5 of 5. At 17:40 your agent asks to drop a column with 1,284 live rows: it waits until you approve, then applies. At 03:12, with nobody online, Backenly finds slow queries, saves a restore point, adds the missing index, tests it, and leaves you a receipt."
+          aria-label={DESCRIPTION}
           initial="hidden"
           animate={inView || quiet ? 'visible' : 'hidden'}
         >
           <Scene kit={kit} />
         </motion.svg>
-        <p className="mt-2 text-right text-[13px] text-zinc-600">
-          One project, one day and one night, drawn from the real flow. Names and times are illustrative.
-        </p>
       </div>
 
+      {/* Phones and tablets: the same day, upright. */}
+      <div className="xl:hidden">
+        <svg
+          viewBox={`0 0 ${MW} ${MH}`}
+          className="mx-auto block h-auto w-full max-w-[440px] select-none overflow-visible"
+          role="img"
+          aria-label={DESCRIPTION}
+        >
+          <PhoneScene kit={kit} quiet={quiet} />
+        </svg>
+      </div>
+
+      <p className="mx-auto mt-3 max-w-[440px] text-center text-[13px] text-zinc-600 xl:mt-2 xl:max-w-none xl:text-right">
+        One project, one day and one night, drawn from the real flow. Names and times are illustrative.
+      </p>
+
       {/* What just happened, keyed by the times on the drawing. */}
-      <figcaption className="hidden gap-x-10 xl:mt-14 xl:grid xl:grid-cols-3">
+      <figcaption className="mt-12 grid gap-x-10 gap-y-9 md:grid-cols-3 xl:mt-14">
         {STORIES.map((story) => (
           <div key={story.time} className="border-t border-white/[0.08] pt-5">
             <p className="font-mono text-[12px]" style={{ color: story.color }}>
               {story.time}
             </p>
             <h3 className="mt-2 text-[17px] font-semibold tracking-[-0.018em] text-white">{story.title}</h3>
-            <p className="mt-2 max-w-[44ch] text-[14.5px] leading-[1.65] tracking-[-0.004em] text-zinc-400">
+            <p className="mt-2 max-w-[48ch] text-[14.5px] leading-[1.65] tracking-[-0.004em] text-zinc-400">
               {story.body}
             </p>
           </div>
         ))}
       </figcaption>
-
-      {/* Below xl the drawing's type would scale under 10px, so the same day
-          is told as three cards, and the night's receipt as a card of its own. */}
-      <div className="xl:hidden">
-        <ol className="grid gap-3 md:grid-cols-3">
-          {STORIES.map((story) => (
-            <li key={story.time} className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
-              <ActorLine time={story.time} actor={story.actor} action={story.action} />
-              <h3 className="mt-4 text-[17px] font-semibold tracking-[-0.018em] text-white">{story.title}</h3>
-              <p className="mt-2 text-[15px] leading-[1.65] text-zinc-400">{story.body}</p>
-              <p className="mt-auto flex items-center gap-2 pt-5 text-[14px] text-zinc-300">
-                <span
-                  aria-hidden
-                  className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border"
-                  style={{ borderColor: story.color }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: story.color }} />
-                </span>
-                {story.result}
-              </p>
-            </li>
-          ))}
-        </ol>
-
-        <div className="mt-3 overflow-hidden rounded-2xl border border-violet-300/25 bg-[#0c0d10]">
-          <div className="flex items-center justify-between gap-4 border-b border-white/[0.07] px-5 py-3.5">
-            <p className="flex items-center gap-2 text-[14px] font-medium text-zinc-100">
-              <svg viewBox="-8 -8 16 16" className="h-3.5 w-3.5 shrink-0" aria-hidden>
-                <path d={GLYPHS.check} stroke={GREEN} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Fixed while you slept
-            </p>
-            <span className="font-mono text-[11px] text-violet-300">reversible</span>
-          </div>
-          <dl className="grid gap-2 px-5 py-4 font-mono text-[12px]">
-            {RECEIPT.map((row) => (
-              <div key={row.step} className="grid grid-cols-[44px_68px_minmax(0,1fr)] gap-2">
-                <dt className="sr-only">{row.step}</dt>
-                <span aria-hidden className="text-zinc-500">{row.time}</span>
-                <span aria-hidden className="text-violet-300">{row.step}</span>
-                <dd className="truncate text-zinc-200">{row.detail}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="border-t border-white/[0.07] px-5 py-3 text-[13px] text-zinc-500">
-            No AI credits spent. Checked again at 03:15.
-          </p>
-        </div>
-      </div>
     </figure>
   )
 }
