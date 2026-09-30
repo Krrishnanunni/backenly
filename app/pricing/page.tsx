@@ -94,7 +94,7 @@ const plans: Plan[] = [
       { label: 'Users', value: `${PRO_INCLUDED.mau.toLocaleString('en-US')} MAU` },
       { label: 'Autonomy', value: 'Every minute, full dial' },
       { label: 'AI credits', value: '3,000 monthly' },
-      { label: 'Database and files', value: `${PRO_INCLUDED.dbGib} GB Postgres, ${PRO_INCLUDED.fileGib} GB files` },
+      { label: 'Database and files', value: `${PRO_INCLUDED.dbGib}\u00a0GB Postgres, ${PRO_INCLUDED.fileGib}\u00a0GB files` },
     ],
     features: [
       'The same uncapped self-healing loop as Free: you pay for capacity, never for uptime',
@@ -194,8 +194,8 @@ function comparisonGroups(published: boolean): MatrixGroup[] {
       icon: UploadCloud,
       title: 'Storage',
       rows: [
-        { label: 'File storage', cells: ['1 GB', metered('file_bytes'), 'Custom'] },
-        { label: 'Egress', cells: ['5 GB', metered('egress_bytes'), 'Custom'] },
+        { label: 'File storage', cells: ['1\u00a0GB', metered('file_bytes'), 'Custom'] },
+        { label: 'Egress', cells: ['5\u00a0GB', metered('egress_bytes'), 'Custom'] },
       ],
     },
     {
@@ -286,7 +286,7 @@ const startupApplyHref = `mailto:${ROUTES.supportEmail}?subject=${encodeURICompo
 const startupSources = ['Supabase', 'Appwrite', 'Firebase', 'Self-hosted', 'Starting fresh']
 
 const startupPass = [
-  `${PRO_INCLUDED.mau.toLocaleString('en-US')} MAU, ${PRO_INCLUDED.dbGib} GB Postgres, ${PRO_INCLUDED.fileGib} GB files`,
+  `${PRO_INCLUDED.mau.toLocaleString('en-US')}\u00a0MAU, ${PRO_INCLUDED.dbGib}\u00a0GB Postgres, ${PRO_INCLUDED.fileGib}\u00a0GB files`,
   'Unlimited projects and API requests, 5 team seats',
   '3,000 AI credits every month',
   'Self-healing every minute, never metered',

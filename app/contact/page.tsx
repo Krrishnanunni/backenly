@@ -136,7 +136,7 @@ export default function ContactPage() {
                         </span>
                         <span className="min-w-0">
                           <span className={`block text-[16px] text-white ${HEADING}`}>{channel.title}</span>
-                          <span className="mt-1.5 block text-[14px] leading-[1.6] text-zinc-400">{channel.body}</span>
+                          <span className="mt-1.5 block text-[14px] leading-[1.6] text-zinc-400 [text-wrap:pretty]">{channel.body}</span>
                           <span className="mt-3 inline-flex items-center gap-1.5 text-[14px] font-medium text-zinc-300 transition-colors duration-200 group-hover:text-white">
                             {channel.action}
                             <ArrowUpRight

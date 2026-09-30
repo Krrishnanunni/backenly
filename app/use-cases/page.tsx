@@ -146,21 +146,25 @@ export default function UseCasesPage() {
                       {uc.subheadline}
                     </p>
 
-                    <ol aria-label="The sequence Backenly runs" className="mt-7 flex flex-wrap items-center gap-y-2">
-                      {uc.workflow.map((step, i) => (
-                        <li key={step.label} className="flex items-center">
-                          <span className="rounded-md border border-white/[0.10] bg-white/[0.03] px-2.5 py-1 text-[13px] text-zinc-300 transition-colors duration-300 group-hover:border-violet-300/25">
-                            {step.label}
-                          </span>
-                          {i < uc.workflow.length - 1 && (
+                    {/* Each connector leads its step and the list hangs 28px (one
+                        connector) outside a clipping box, so whichever step starts
+                        a row loses its connector and a wrap never leaves a dangling
+                        line at a row's end. */}
+                    <div className="mt-7 overflow-hidden">
+                      <ol aria-label="The sequence Backenly runs" className="-ml-7 flex flex-wrap items-center gap-y-2">
+                        {uc.workflow.map((step) => (
+                          <li key={step.label} className="flex items-center">
                             <span aria-hidden className="mx-1.5 h-px w-4 bg-white/[0.16]" />
-                          )}
-                        </li>
-                      ))}
-                    </ol>
+                            <span className="rounded-md border border-white/[0.10] bg-white/[0.03] px-2.5 py-1 text-[13px] text-zinc-300 transition-colors duration-300 group-hover:border-violet-300/25">
+                              {step.label}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
 
-                    <p className="mt-7 max-w-[62ch] text-[14px] leading-[1.65] text-zinc-500">
-                      <span className="text-zinc-300">Where it stops. </span>
+                    <p className="mt-7 max-w-[62ch] text-[14px] leading-[1.65] text-zinc-400 [text-wrap:pretty]">
+                      <span className="text-zinc-200">Where it stops. </span>
                       {uc.limitations[0]}
                     </p>
 

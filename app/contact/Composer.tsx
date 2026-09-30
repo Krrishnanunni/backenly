@@ -191,7 +191,7 @@ export function Composer() {
         <button
           type="button"
           onClick={copyAddress}
-          className={`inline-flex h-[46px] cursor-pointer items-center gap-2 rounded-lg px-3 text-[15px] font-medium text-zinc-300 transition-colors duration-200 hover:text-white ${FOCUS_RING}`}
+          className={`-ml-3 inline-flex h-[46px] cursor-pointer items-center gap-2 self-start rounded-lg px-3 text-[15px] sm:ml-0 sm:self-auto font-medium text-zinc-300 transition-colors duration-200 hover:text-white ${FOCUS_RING}`}
         >
           {copied ? <Check aria-hidden className="h-4 w-4 text-violet-300" /> : <Copy aria-hidden className="h-4 w-4" />}
           {copied ? 'Address copied' : SUPPORT_EMAIL}
