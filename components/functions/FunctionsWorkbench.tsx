@@ -28,7 +28,7 @@ import {
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import {
   AgentPrompt, BarDivider, CommandBar, CopyField, EmptyState, IconButton, INPUT_BASE, KIT, KitButton,
-  KitConfirmDialog, KitModal, KitTab, KitTabs, Spinner, StatusDot, Tag,
+  KitConfirmDialog, KitModal, KitTab, KitTabs, NoticeStrip, Spinner, StatusDot,
 } from '@/components/inspector/kit'
 import { FOCUS_INSET } from '@/components/console/tokens'
 
@@ -644,41 +644,35 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
 
       {/* Advisories — flush strips under the bar, never floating cards. */}
       {untestedActiveFns.length > 0 && (
-        <Advisory
+        <NoticeStrip
           icon={AlertCircle}
           tone="attention"
-          text={
-            <>
-              <span className="font-medium text-zinc-100">
-                {untestedActiveFns.length} active {untestedActiveFns.length === 1 ? 'function has' : 'functions have'} never run.
-              </span>{' '}
-              <span className="text-zinc-400">Run each once before your app depends on it.</span>
-            </>
-          }
           action={
             <KitButton size="sm" icon={Play} loading={runningAll} onClick={handleRunAllUntested}>
               {runningAll ? 'Running…' : 'Run all once'}
             </KitButton>
           }
-        />
+        >
+          <strong>
+            {untestedActiveFns.length} active {untestedActiveFns.length === 1 ? 'function has' : 'functions have'} never run.
+          </strong>{' '}
+          Run each once before your app depends on it.
+        </NoticeStrip>
       )}
       {schemaFns.length > 0 && (
-        <Advisory
+        <NoticeStrip
           icon={Info}
-          text={
-            <>
-              <span className="font-medium text-zinc-200">
-                {schemaFns.length} auto-generated validation-schema {schemaFns.length === 1 ? 'endpoint' : 'endpoints'}.
-              </span>{' '}
-              <span className="text-zinc-500">Safe to keep: they serve live form-validation schemas to your frontend.</span>
-            </>
-          }
           action={
             <KitButton size="sm" variant="ghost" icon={Trash2} loading={cleaningUp} onClick={() => setConfirmCleanup(true)}>
               {cleaningUp ? 'Removing…' : 'Remove all'}
             </KitButton>
           }
-        />
+        >
+          <strong>
+            {schemaFns.length} auto-generated validation-schema {schemaFns.length === 1 ? 'endpoint' : 'endpoints'}.
+          </strong>{' '}
+          <span className="text-zinc-500">Safe to keep: they serve live form-validation schemas to your frontend.</span>
+        </NoticeStrip>
       )}
 
       {/* ── Workbench ─────────────────────────────────────── */}
@@ -1033,27 +1027,6 @@ export function FunctionsWorkbench({ projectId }: { projectId: string }) {
         danger
         busy={cleaningUp}
       />
-    </div>
-  )
-}
-
-/** A one-line notice under the command bar: a fact, and the action it calls for. */
-function Advisory({
-  icon: Icon,
-  tone = 'neutral',
-  text,
-  action,
-}: {
-  icon: typeof Info
-  tone?: 'neutral' | 'attention'
-  text: React.ReactNode
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="flex min-h-[44px] flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-white/[0.06] px-4 py-2 sm:px-5">
-      <Icon className={`h-4 w-4 flex-shrink-0 ${tone === 'attention' ? 'text-amber-300' : 'text-zinc-500'}`} strokeWidth={1.75} />
-      <p className="min-w-0 flex-1 text-[13px] leading-[20px]">{text}</p>
-      {action}
     </div>
   )
 }

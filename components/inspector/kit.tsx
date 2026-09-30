@@ -30,7 +30,7 @@ import {
   type ComponentType,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
-import { Check, ChevronRight, Copy, MoreHorizontal, X, type LucideIcon } from 'lucide-react'
+import { Check, ChevronRight, Copy, Info, MoreHorizontal, X, type LucideIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CANVAS,
@@ -931,6 +931,38 @@ export function KitNote({ icon: Icon = Check, tone = 'info', title, children, ac
         <div className="text-zinc-400 [&_code]:font-mono [&_code]:text-[12px] [&_code]:text-zinc-300">{children}</div>
       </div>
       {actions && <div className="flex flex-shrink-0 items-center gap-2">{actions}</div>}
+    </div>
+  )
+}
+
+/**
+ * A one-line notice that runs flush under an instrument surface's command bar:
+ * the fact, then the action it calls for. For page-level state (a stale
+ * session, an offline stream, work waiting), never for decoration.
+ */
+export function NoticeStrip({
+  icon: Icon = Info,
+  tone = 'neutral',
+  children,
+  action,
+}: {
+  icon?: IconLike
+  tone?: 'neutral' | 'attention' | 'danger'
+  children: ReactNode
+  action?: ReactNode
+}) {
+  const iconTone = { neutral: 'text-zinc-500', attention: 'text-amber-300', danger: 'text-rose-300' }[tone]
+  const wash = { neutral: '', attention: 'bg-amber-400/[0.03]', danger: 'bg-rose-500/[0.04]' }[tone]
+  return (
+    <div
+      role={tone === 'neutral' ? undefined : 'alert'}
+      className={`flex min-h-[44px] flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b ${RULE} px-4 py-2 sm:px-5 ${wash}`}
+    >
+      <Icon className={`h-4 w-4 flex-shrink-0 ${iconTone}`} strokeWidth={1.75} />
+      <div className="min-w-0 flex-1 text-[13px] leading-[20px] text-zinc-400 [&_strong]:font-medium [&_strong]:text-zinc-100">
+        {children}
+      </div>
+      {action && <div className="flex flex-shrink-0 items-center gap-2">{action}</div>}
     </div>
   )
 }
