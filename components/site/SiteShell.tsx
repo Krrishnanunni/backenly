@@ -113,7 +113,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
     <div>
       <SmoothScroll />
       <div
-        className="bg-[#08090a] text-white antialiased relative min-h-screen overflow-x-hidden selection:bg-violet-500/30 selection:text-white font-light flex flex-col items-center"
+        // overflow-x-CLIP, not hidden. `hidden` makes this wrapper a scroll
+        // container (overflow-y computes to auto), and a sticky descendant
+        // then sticks to a box that never scrolls, i.e. never sticks at all:
+        // every `sticky` on the marketing pages was silently inert. `clip`
+        // crops the same overflow without creating a scroll container.
+        className="bg-[#08090a] text-white antialiased relative min-h-screen overflow-x-clip selection:bg-violet-500/30 selection:text-white font-light flex flex-col items-center"
         style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
       >
         <div className="relative w-full min-h-screen flex flex-col z-20">
