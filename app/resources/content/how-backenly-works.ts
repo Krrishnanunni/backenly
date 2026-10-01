@@ -12,7 +12,7 @@ export const article: ArticleData = {
   dateModified: '2026-08-29',
   dateDisplay: 'Updated August 29, 2026',
   intro:
-    'Backenly is four layers with one rule between them: nothing mutates structure except through a single typed kernel. That constraint is what makes a change reviewable, reversible, and safe for an agent to make. This page walks the path a change takes and names what each layer owns — including the parts that are deliberately not automatic.',
+    'Backenly is four layers with one rule between them: nothing mutates structure except through a single typed kernel. That constraint is what makes a change reviewable, reversible, and safe for an agent to make. This page walks the path a change takes and names what each layer owns, including the parts that are deliberately not automatic.',
   sections: [
     {
       heading: 'The path of one change',
@@ -28,7 +28,7 @@ export const article: ArticleData = {
             {
               label: '2',
               title: 'Planning turns intent into typed actions',
-              body: 'A classifier routes the turn — build, modify, fix, destructive, question — and a planner derives entities, relations, columns, and policies. The output is a plan of discrete actions, not SQL text handed to the database.',
+              body: 'A classifier routes the turn (build, modify, fix, destructive, question) and a planner derives entities, relations, columns, and policies. The output is a plan of discrete actions, not SQL text handed to the database.',
             },
             {
               label: '3',
@@ -59,7 +59,7 @@ export const article: ArticleData = {
       blocks: [
         {
           kind: 'p',
-          text: 'A language model asked to run twenty interdependent DDL statements will get most of them right. The failure is not dramatic — step fourteen names a column slightly differently than step three assumed, and you get a backend that looks correct and breaks at runtime. Retrying with a better prompt does not fix a class of error that comes from unbounded execution.',
+          text: 'A language model asked to run twenty interdependent DDL statements will get most of them right. The failure is not dramatic: step fourteen names a column slightly differently than step three assumed, and you get a backend that looks correct and breaks at runtime. Retrying with a better prompt does not fix a class of error that comes from unbounded execution.',
         },
         {
           kind: 'p',
@@ -67,7 +67,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'p',
-          text: 'What you get for that constraint is that the agent\'s model of the database and the database itself cannot silently diverge, and every change — from you, from your agent, or from an automated repair — arrives through the same audited door.',
+          text: 'What you get for that constraint is that the agent\'s model of the database and the database itself cannot silently diverge, and every change, from you, from your agent, or from an automated repair, arrives through the same audited door.',
         },
       ],
     },
@@ -80,7 +80,7 @@ export const article: ArticleData = {
         },
         {
           kind: 'p',
-          text: 'One consequence is a shape you should expect: requests PostgREST cannot model — nested paths beyond the supported depth, `/search`, `/bulk` — return 404 rather than degrading into something with different semantics. A 404 there is the contract telling you where the boundary is.',
+          text: 'One consequence is a shape you should expect: requests PostgREST cannot model (nested paths beyond the supported depth, `/search`, `/bulk`) return 404 rather than degrading into something with different semantics. A 404 there is the contract telling you where the boundary is.',
         },
       ],
     },
@@ -118,11 +118,11 @@ export const article: ArticleData = {
         },
         {
           kind: 'p',
-          text: 'The loop applies only the reversible safe band. Auth changes, external credentials, destructive operations, and anything irreversible always wait for a human — that floor is not a setting. What the loop applies on its own is snapshotted before the fix and revertible afterward. The operations guide covers the dial, the review queue, and the activity gate that decides which projects get a pass.',
+          text: 'The loop applies only the reversible safe band. Auth changes, external credentials, destructive operations, and anything irreversible always wait for a human. That floor is not a setting. What the loop applies on its own is snapshotted before the fix and revertible afterward. The operations guide covers the dial, the review queue, and the activity gate that decides which projects get a pass.',
         },
         {
           kind: 'note',
-          text: 'One detector depends on a server-level PostgreSQL setting. Without `pg_stat_statements`, the measured slow-query check reports itself UNCHECKED rather than passing — an empty result is indistinguishable from a healthy backend, and treating it as green is how a dead detector once read healthy for months.',
+          text: 'One detector depends on a server-level PostgreSQL setting. Without `pg_stat_statements`, the measured slow-query check reports itself UNCHECKED rather than passing: an empty result is indistinguishable from a healthy backend, and treating it as green is how a dead detector once read healthy for months.',
         },
       ],
     },
@@ -146,12 +146,12 @@ export const article: ArticleData = {
         },
         {
           kind: 'p',
-          text: 'The honest summary of what this replaces: not the work of deciding what to build, and not the code your agent is good at writing. It replaces the operator — the person who would otherwise own the migration, the policy, the monitoring, and the 3 a.m. page.',
+          text: 'The honest summary of what this replaces: not the work of deciding what to build, and not the code your agent is good at writing. It replaces the operator: the person who would otherwise own the migration, the policy, the monitoring, and the 3 a.m. page.',
         },
       ],
     },
   ],
   conclusion:
-    'One kernel for every structural change, PostgREST reading the catalog for every read, PostgreSQL enforcing every authorization decision, and a loop that keeps checking after your session ends. The constraint that makes it work — no raw-SQL mutation path — is also the thing to weigh before you adopt it.',
+    'One kernel for every structural change, PostgREST reading the catalog for every read, PostgreSQL enforcing every authorization decision, and a loop that keeps checking after your session ends. The constraint that makes it work, no raw-SQL mutation path, is also the thing to weigh before you adopt it.',
   relatedSlugs: ['the-data-api', 'after-you-launch', 'self-hosting'],
 }

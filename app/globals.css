@@ -49,8 +49,8 @@
   animation: heroFrameEnter 1450ms cubic-bezier(0.16, 1, 0.3, 1) 720ms forwards;
 }
 
-/* Launch chip: the violet top hairline sweeps, so the edge reads imminent
-   rather than static. TEMPORARY, paired with LaunchPill in app/page.tsx;
+/* Launch bar: the violet hairline sweeps, so the edge reads imminent
+   rather than static. TEMPORARY, paired with components/site/LaunchBar.tsx;
    delete both together after the Product Hunt launch.
 
    This is CSS rather than framer-motion on purpose. The first attempt used a
