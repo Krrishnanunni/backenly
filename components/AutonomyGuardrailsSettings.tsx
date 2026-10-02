@@ -428,7 +428,7 @@ export function AutonomyGuardrailsSettings({ projectId }: { projectId: string })
                 <tbody>
                   {data.recentActivity.map((a, i) => (
                     <tr key={i} className={`transition-colors ${KIT.rowHoverOn}`}>
-                      <td className="border-b border-white/[0.04] px-4 py-2.5 align-top text-[12px] tabular-nums text-zinc-500">
+                      <td className="whitespace-nowrap border-b border-white/[0.04] px-4 py-2.5 align-top text-[12px] tabular-nums text-zinc-500">
                         {timeAgo(a.at)}
                       </td>
                       <td className="border-b border-white/[0.04] px-3 py-2.5 align-top">
