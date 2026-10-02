@@ -3,10 +3,10 @@
 /**
  * Account Settings (/app/settings) — IA restructure §5.6.
  *
- * Rebuilt to live INSIDE the org shell (§5) and speak the locked flat kit (§11):
- * #16171d panels, hairline borders, mono numerals, violet only for action/
- * attention — no ambient glows, no gradient cover cards, no "Back" button. The
- * org sidebar is the only navigation; sub-sections are in-page tabs.
+ * Lives inside the org shell (§5) on the console kit: the standard document
+ * header with the sections as tabs under it, hairline panels, and the plan
+ * shown only on Cloud, where there is one. The org sidebar is the only
+ * navigation.
  *
  * Billing was promoted to its own org page (§5.4) — any legacy ?tab=billing
  * deep link redirects there. Every auth handler (profile, 2FA, password,
@@ -23,9 +23,12 @@ import {
 } from 'lucide-react'
 import { OrgShell } from '@/components/shell/OrgShell'
 import {
-  SectionTitle, KitCard, KitCardHeader, KitCardBody, KitButton,
+  KitCard, KitCardHeader, KitCardBody, KitButton,
   KitField, KitInput, KitNote, KitBadge, KitTabs, KitTab,
+  INPUT_BASE, PageHeader, Skeleton, StatusDot, Tag,
 } from '@/components/inspector/kit'
+import { FLOAT, PAGE_GUTTER, PAGE_WIDTH, RAISE } from '@/components/console/tokens'
+import { usePlanName } from '@/components/shell/ConsoleChrome'
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import { DeploymentRecoverySection } from '@/components/app/DeploymentRecoverySection'
 import { deleteAccount, signOut } from '@/lib/api/auth'
@@ -80,6 +83,7 @@ let cachedSettingsUser: UserProfile | null = null
 export default function SettingsPage() {
   const router = useRouter()
   const [user, setUser] = useState<UserProfile | null>(() => cachedSettingsUser)
+  const planName = usePlanName()
   const [loading, setLoading] = useState(() => !cachedSettingsUser)
   const [activeSection, setActiveSection] = useState<Section>('profile')
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; msg: string } | null>(null)
@@ -291,9 +295,7 @@ export default function SettingsPage() {
       {/* Toast */}
       {toast && (
         <div className="fixed top-16 right-6 z-50">
-          <div className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 bg-[#141518] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${
-            toast.kind === 'success' ? 'border-emerald-500/25' : 'border-rose-500/25'
-          }`}>
+          <div role="status" aria-live="polite" className={`flex items-center gap-2.5 rounded-[10px] px-3.5 py-2.5 ${RAISE} ${FLOAT}`}>
             {toast.kind === 'success'
               ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               : <AlertTriangle className="h-4 w-4 text-rose-400" />}
@@ -302,33 +304,33 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
-        <SectionTitle
+      <div className={`${PAGE_WIDTH} ${PAGE_GUTTER} pb-16`}>
+        <PageHeader
+          className="!px-0"
           title="Settings"
-          description="Manage your profile, security and account."
+          description="Your profile, sign-in and security, and the account itself."
           actions={
-            <KitButton variant="secondary" size="sm" icon={LogOut} onClick={handleLogout}>
+            <KitButton variant="secondary" icon={LogOut} onClick={handleLogout}>
               Sign out
             </KitButton>
           }
+          tabs={
+            <KitTabs>
+              {TABS.map(({ id, label, icon: Icon }) => (
+                <KitTab key={id} active={activeSection === id} onClick={() => setActiveSection(id)}>
+                  <Icon />
+                  {label}
+                </KitTab>
+              ))}
+            </KitTabs>
+          }
         />
-
-        <KitTabs className="mb-5">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <KitTab key={id} active={activeSection === id} onClick={() => setActiveSection(id)}>
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </KitTab>
-          ))}
-        </KitTabs>
+        <div className="h-6" />
 
         {loading ? (
-          <div className="space-y-4 animate-pulse">
-            <div className="h-44 rounded-xl border border-white/[0.07] bg-[#0f1012] p-5 space-y-3">
-              <div className="h-4 w-32 rounded bg-white/[0.06]" />
-              <div className="h-8 w-48 rounded bg-white/[0.04]" />
-              <div className="h-3 w-64 rounded bg-white/[0.03]" />
-            </div>
+          <div className="max-w-[760px] space-y-4" aria-hidden>
+            <Skeleton className="h-[150px] w-full rounded-[10px]" />
+            <Skeleton className="h-[180px] w-full rounded-[10px]" />
           </div>
         ) : (
           <>
@@ -336,7 +338,7 @@ export default function SettingsPage() {
               <ProfileSection
                 user={user}
                 initials={initials}
-                planLabel={planLabelFor(user?.tier)}
+                planLabel={CLOUD_CONTROL_PLANE ? planName ?? planLabelFor(user?.tier) : null}
                 editingName={editingName}
                 setEditingName={setEditingName}
                 newName={newName}
@@ -532,7 +534,7 @@ function ProfileSection({
 }: {
   user: UserProfile | null
   initials: string
-  planLabel: string
+  planLabel: string | null
   editingName: boolean
   setEditingName: (v: boolean) => void
   newName: string
@@ -545,16 +547,16 @@ function ProfileSection({
       {/* Identity */}
       <KitCard>
         <div className="flex flex-wrap items-center gap-4 px-5 py-5">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-lg font-semibold text-zinc-100">
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#27272a,#18181b)] text-[16px] font-semibold text-zinc-100 ring-1 ring-inset ring-white/[0.12]">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[17px] font-semibold leading-tight text-white">{user?.name || 'Unnamed user'}</h2>
-            <p className="mt-0.5 text-[12.5px] text-zinc-500">{user?.email}</p>
+            <h2 className="text-[17px] font-semibold leading-[24px] tracking-[-0.014em] text-zinc-50">{user?.name || 'Unnamed user'}</h2>
+            <p className="text-[13px] text-zinc-500">{user?.email}</p>
           </div>
-          <div className="flex items-center gap-2">
-            {user?.emailVerified && <KitBadge tone="operational">Verified</KitBadge>}
-            <KitBadge tone="beta" icon={Sparkles}>{planLabel}</KitBadge>
+          <div className="flex items-center gap-3">
+            {user?.emailVerified && <StatusDot tone="operational" label="Email verified" />}
+            {planLabel && <Tag>{planLabel} plan</Tag>}
           </div>
         </div>
         <div className="grid grid-cols-2 border-t border-white/[0.06] divide-x divide-white/[0.04] sm:grid-cols-4">
@@ -575,7 +577,8 @@ function ProfileSection({
               <input
                 value={user?.email || ''}
                 disabled
-                className="h-8 w-full cursor-not-allowed rounded-lg border border-white/[0.07] bg-white/[0.02] pl-9 pr-3 text-[12.5px] text-zinc-400"
+                aria-label="Email address"
+                className={`${INPUT_BASE} h-[36px] cursor-not-allowed pl-9 pr-3 text-zinc-400 sm:h-[32px]`}
               />
             </div>
           </KitField>
@@ -584,17 +587,20 @@ function ProfileSection({
             {editingName ? (
               <div className="flex items-center gap-2">
                 <KitInput value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Enter your name" autoFocus />
-                <KitButton variant="primary" onClick={onSaveName} disabled={savingName} icon={savingName ? undefined : Check}>
-                  {savingName ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+                <KitButton variant="primary" onClick={onSaveName} loading={savingName} icon={Check}>
+                  Save
                 </KitButton>
-                <KitButton variant="ghost" onClick={() => { setEditingName(false); setNewName(user?.name || '') }} icon={X}>{''}</KitButton>
+                <KitButton variant="ghost" onClick={() => { setEditingName(false); setNewName(user?.name || '') }}>
+                  Cancel
+                </KitButton>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <input
                   value={user?.name || 'Not set'}
                   disabled
-                  className={`h-8 flex-1 cursor-not-allowed rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 text-[12.5px] ${user?.name ? 'text-zinc-200' : 'italic text-zinc-600'}`}
+                  aria-label="Display name"
+                  className={`${INPUT_BASE} h-[36px] flex-1 cursor-not-allowed px-3 sm:h-[32px] ${user?.name ? 'text-zinc-200' : 'italic text-zinc-500'}`}
                 />
                 <KitButton variant="secondary" onClick={() => setEditingName(true)}>Edit</KitButton>
               </div>
@@ -1085,10 +1091,10 @@ function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: st
   return (
     <div className="px-4 py-3.5">
       <div className="flex items-center gap-1.5">
-        <Icon className="h-3 w-3 text-zinc-600" />
-        <p className="text-[12px] font-medium text-zinc-500">{label}</p>
+        <Icon className="h-3.5 w-3.5 text-zinc-600" strokeWidth={1.75} />
+        <p className="text-[12px] text-zinc-500">{label}</p>
       </div>
-      <p className="mt-1.5 truncate text-[13px] font-medium text-zinc-200">{value}</p>
+      <p className="mt-1 truncate text-[13px] font-medium tabular-nums text-zinc-100">{value}</p>
     </div>
   )
 }
@@ -1096,8 +1102,8 @@ function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: st
 function ModalShell({ children, onClose, accent = 'default' }: { children: React.ReactNode; onClose: () => void; accent?: 'default' | 'danger' }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className={`relative w-full max-w-md overflow-hidden rounded-xl border bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${accent === 'danger' ? 'border-rose-500/20' : 'border-white/[0.07]'}`}>
+      <div className="absolute inset-0 bg-black/65" onClick={onClose} />
+      <div role="dialog" aria-modal="true" className={`relative w-full max-w-md overflow-hidden rounded-[14px] ${RAISE} ${FLOAT} ${accent === 'danger' ? 'ring-1 ring-rose-400/25' : ''}`}>
         {children}
       </div>
     </div>
@@ -1108,10 +1114,10 @@ function ModalHeader({ icon: Icon, title, subtitle, onClose }: { icon: React.Ele
   return (
     <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
       <div className="flex items-center gap-2.5">
-        <Icon className="h-4 w-4 text-violet-300" />
+        <Icon className="h-4 w-4 text-zinc-400" strokeWidth={1.75} />
         <div>
-          <h3 className="text-base font-semibold leading-none text-white">{title}</h3>
-          {subtitle && <p className="mt-1 text-[12.5px] text-zinc-500">{subtitle}</p>}
+          <h3 className="text-[15px] font-semibold leading-[22px] tracking-[-0.012em] text-zinc-50">{title}</h3>
+          {subtitle && <p className="text-[13px] text-zinc-400">{subtitle}</p>}
         </div>
       </div>
       <button onClick={onClose} className="rounded-md p-1 text-zinc-500 transition hover:bg-white/[0.06] hover:text-white" aria-label="Close">
