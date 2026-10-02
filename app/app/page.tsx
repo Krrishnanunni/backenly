@@ -1,30 +1,45 @@
 'use client'
 
+/**
+ * Projects (/app): every backend on the account.
+ *
+ * Rebuilt 2026-10-02 on the console kit. A project card is a real link (it
+ * prefetches, and Cmd/Ctrl-click opens a new tab), it states only what the
+ * listing actually returns (status, tables, last change), and its secondary
+ * actions live behind one overflow menu. A new account sees what a project is
+ * and how it gets built, instead of an empty dashed box.
+ */
+
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  ChevronRight,
-  Clock,
-  Database,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-  X,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { AlertTriangle, Cable, Database, MessageSquare, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { getProjects, deleteProject, type Project } from '@/lib/api/projects'
 import { OrgShell } from '@/components/shell/OrgShell'
-import { KitConfirmDialog } from '@/components/inspector/kit'
+import {
+  EmptyState,
+  KitButton,
+  KitConfirmDialog,
+  KitField,
+  KitInput,
+  KitModal,
+  KitNote,
+  OverflowMenu,
+  PageHeader,
+  Skeleton,
+  StatusDot,
+  type StatusTone,
+} from '@/components/inspector/kit'
+import { EDGE, FOCUS, PAGE_GUTTER, PAGE_WIDTH, PLATE, RULE, R_PANEL, WELL } from '@/components/console/tokens'
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 
 type UserProfile = { id: string; name?: string; email?: string }
 
 let cachedProjects: Project[] | null = null
 let cachedCurrentUser: UserProfile | null = null
+
+/** Search earns its place once there is something to search through. */
+const SEARCH_THRESHOLD = 6
 
 async function getCurrentUser(): Promise<UserProfile | null> {
   try {
@@ -40,19 +55,29 @@ async function getCurrentUser(): Promise<UserProfile | null> {
 function timeAgo(dateStr: string | Date | undefined): string {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  const now = new Date()
-  const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
+  const diff = Math.floor((Date.now() - date.getTime()) / 1000)
   if (diff < 60) return 'just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
+  if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function getStatus(status?: string) {
-  if (status === 'LIVE') return { label: 'Live', dot: 'bg-emerald-400', text: 'text-emerald-300' }
-  if (status === 'DEPLOYING') return { label: 'Deploying', dot: 'bg-amber-300 animate-pulse', text: 'text-amber-500' }
-  if (status === 'FAILED') return { label: 'Failed', dot: 'bg-rose-400', text: 'text-rose-300' }
-  return { label: 'Draft', dot: 'bg-zinc-500', text: 'text-zinc-400' }
+/** The project's state, in the words the top bar's project switcher uses. */
+function statusOf(project: Project): { tone: StatusTone; label: string; pulse?: boolean } {
+  // A paused project's API refuses every call, so its publish status would
+  // mislead. Neutral on purpose: paused is a state, not an alarm.
+  if (project.pausedAt) return { tone: 'paused', label: 'Paused' }
+  switch (project.projectStatus) {
+    case 'LIVE':
+      return { tone: 'operational', label: 'Live' }
+    case 'DEPLOYING':
+      return { tone: 'attention', label: 'Deploying', pulse: true }
+    case 'FAILED':
+      return { tone: 'failed', label: 'Failed' }
+    default:
+      return { tone: 'managed', label: 'Not published' }
+  }
 }
 
 export default function DashboardPage() {
@@ -122,14 +147,14 @@ export default function DashboardPage() {
     }
     if (response.status === 403) {
       const errData = await response.json().catch(() => ({}))
-      // Off Cloud a 403 here is PROJECT_CREATION_UNSUPPORTED — architectural,
+      // Off Cloud a 403 here is PROJECT_CREATION_UNSUPPORTED: architectural,
       // not a tier ceiling. "Your free plan" would be both wrong and an
       // upsell on a deployment with nothing to sell.
       setLimitError(
         errData.error ||
           (CLOUD_CONTROL_PLANE
             ? 'You have reached your project limit on the free plan.'
-            : 'This deployment hosts one project. That is architectural, not a limit that can be lifted.')
+            : 'This deployment hosts one project. That is architectural, not a limit that can be lifted.'),
       )
       return null
     }
@@ -138,12 +163,7 @@ export default function DashboardPage() {
     return data.project?.id || data.data?.id || data.id || null
   }
 
-  const handleDeleteProject = (
-    e: React.MouseEvent | React.KeyboardEvent,
-    projectId: string,
-    projectName: string,
-  ) => {
-    e.stopPropagation()
+  const handleDeleteProject = (projectId: string, projectName: string) => {
     setDeleteError(null)
     setDeleteTarget({ id: projectId, name: projectName })
   }
@@ -161,14 +181,13 @@ export default function DashboardPage() {
       })
       setDeleteTarget(null)
     } catch {
-      setDeleteError('Failed to delete the project. Please try again.')
+      setDeleteError('The project could not be deleted. Try again.')
     } finally {
       setDeleteBusy(false)
     }
   }
 
-  const handleStartRename = (e: React.MouseEvent | React.KeyboardEvent, project: Project) => {
-    e.stopPropagation()
+  const handleStartRename = (project: Project) => {
     setEditingProjectId(project.id)
     setEditingName(project.name)
     setTimeout(() => editInputRef.current?.select(), 0)
@@ -203,397 +222,363 @@ export default function DashboardPage() {
 
   const isEmpty = projects.length === 0
   const query = searchQuery.trim().toLowerCase()
-  const visibleProjects = query
-    ? projects.filter((project) => project.name.toLowerCase().includes(query))
-    : projects
+  const visibleProjects = query ? projects.filter((project) => project.name.toLowerCase().includes(query)) : projects
+  const showSearch = projects.length >= SEARCH_THRESHOLD
+
+  const openNew = () => {
+    setCreateError(null)
+    setShowNewModal(true)
+  }
 
   return (
     <OrgShell>
-      {/* Full-bleed inside the org frame: the page owns the whole content area,
-          top bar to bottom edge, so a one-project account reads as a dashboard
-          rather than a card stranded at the top of an empty screen. */}
-      {/* overflow-x-hidden prevents horizontal scroll bleed from drawer slide-in animations */}
-      <main className="flex min-h-[calc(100vh-48px)] w-full flex-col overflow-x-hidden px-4 pb-24 sm:px-6 md:pb-10 lg:px-10">
-        {/* ── Header ────────────────────────────────────────────────────── */}
-        {/* pt-4 on mobile (tight), pt-10 on desktop — matches the shell's chrome rhythm */}
-        <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-y-4 gap-x-6 pt-4 sm:pt-10">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl sm:text-[1.75rem] font-semibold tracking-tight text-white">Projects</h1>
-              {projects.length > 0 && (
-                <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[12px] tabular-nums text-zinc-400">
-                  {projects.length}
-                </span>
-              )}
-            </div>
-            {/* Subtitle is implied by context on mobile — hide it to save vertical space */}
-            <p className="mt-1 hidden sm:block text-[12.5px] sm:text-[13px] leading-5 text-zinc-500">
-              Every backend on this account. Open one to manage its data, functions and autonomy.
-            </p>
-          </div>
-
-          <div className="flex w-full items-center gap-3 sm:w-auto">
-            <div className="relative w-full sm:w-[260px] md:w-[280px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search project"
-                className="h-9 w-full rounded-lg border border-white/[0.07] bg-[#0f1012] pl-9 pr-8 text-[16px] sm:text-[13px] text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 ring-1 ring-white/[0.05] sm:ring-0 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Clear search"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-300"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            {/* Desktop New project button */}
-            {CLOUD_CONTROL_PLANE && (
-              <button
-                type="button"
-                onClick={() => setShowNewModal(true)}
-                className="hidden sm:inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-semibold text-black transition-colors hover:bg-zinc-200"
-              >
-                <Plus className="h-4 w-4" />
-                New project
-              </button>
-            )}
-          </div>
-        </header>
-
-        {/* ── Project grid ──────────────────────────────────────────────── */}
-        <section className="mt-6 sm:mt-7 flex flex-1 flex-col">
-          {loading ? (
-            <div className="grid content-start gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="flex min-h-[160px] sm:min-h-[176px] flex-col rounded-xl border border-white/[0.07] bg-[#0f1012] p-4 animate-pulse"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 shrink-0 rounded-lg bg-white/[0.05]" />
-                    <div className="min-w-0 flex-1 space-y-2 pt-1">
-                      <div className="h-4 w-3/5 rounded bg-white/[0.06]" />
-                      <div className="h-3 w-2/5 rounded bg-white/[0.03]" />
-                    </div>
-                  </div>
-                  <div className="mt-4 h-3 w-4/5 rounded bg-white/[0.03]" />
-                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-white/[0.04]">
-                    <div className="h-3 w-16 rounded bg-white/[0.04]" />
-                    <div className="h-3 w-12 rounded bg-white/[0.04]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : visibleProjects.length > 0 ? (
-            <div className="grid content-start gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {visibleProjects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  editingProjectId={editingProjectId}
-                  editingName={editingName}
-                  editInputRef={editInputRef}
-                  onOpen={() => router.push(`/app/projects/${project.id}`)}
-                  onStartRename={handleStartRename}
-                  onRenameChange={setEditingName}
-                  onRenameSubmit={handleRenameSubmit}
-                  onCancelRename={() => setEditingProjectId(null)}
-                  onDelete={handleDeleteProject}
-                />
-              ))}
-            </div>
-          ) : (
-            /* Empty state — on mobile: no dashed border, radial glow + larger icon for emotional presence */
-            <div className="flex flex-1 flex-col items-center justify-center sm:rounded-xl sm:border sm:border-dashed sm:border-white/[0.1] sm:bg-white/[0.02] px-6 py-16 text-center">
-              {/* Radial glow sits behind the icon for a subtle brand-warmth halo */}
-              <div className="relative flex items-center justify-center">
-                <div aria-hidden className="pointer-events-none absolute h-24 w-24 rounded-full bg-violet-500/[0.05] blur-2xl" />
-                <div className="relative flex h-14 w-14 items-center justify-center rounded-xl border border-white/[0.08] bg-gradient-to-br from-violet-500/[0.12] to-transparent">
-                  <Database className="h-6 w-6 text-zinc-400" />
-                </div>
-              </div>
-              {isEmpty ? (
-                <>
-                  <h3 className="mt-4 text-sm font-bold text-white">No projects yet</h3>
-                  {CLOUD_CONTROL_PLANE ? (
-                    <>
-                      <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-500">
-                        Create a project, then wire your coding agent to it from the project&apos;s
-                        Connect page.
-                      </p>
-                      {/* Hidden on mobile — the FAB handles creation there */}
+      <div className={`${PAGE_WIDTH} ${PAGE_GUTTER} pb-16`}>
+        <PageHeader
+          className="!px-0"
+          title="Projects"
+          meta={
+            !loading && projects.length > 0 ? (
+              <span className="text-[13px] tabular-nums text-zinc-500">{projects.length}</span>
+            ) : undefined
+          }
+          description="Every backend on this account. Open one to manage its data, functions and autonomy."
+          actions={
+            !loading && !isEmpty ? (
+              <>
+                {showSearch && (
+                  <div className="relative w-full sm:w-[240px]">
+                    <Search
+                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+                      strokeWidth={2}
+                    />
+                    <KitInput
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search projects"
+                      aria-label="Search projects"
+                      className="pl-8 pr-8"
+                    />
+                    {searchQuery && (
                       <button
                         type="button"
-                        onClick={() => setShowNewModal(true)}
-                        className="mt-4 hidden sm:inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-semibold text-black transition-colors hover:bg-zinc-200"
+                        onClick={() => setSearchQuery('')}
+                        aria-label="Clear search"
+                        className={`absolute right-1.5 top-1/2 flex h-[22px] w-[22px] -translate-y-1/2 items-center justify-center rounded-[5px] text-zinc-500 hover:text-zinc-200 ${FOCUS}`}
                       >
-                        <Plus className="h-4 w-4" />
-                        New project
+                        <X className="h-3.5 w-3.5" />
                       </button>
-                    </>
-                  ) : (
-                    <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-500">
-                      This deployment provisions its one project with{' '}
-                      <code className="rounded bg-white/[0.06] px-1 py-0.5 text-[12px] text-zinc-300">npm run bootstrap</code>.
-                      Run it, then reload this page.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  <h3 className="mt-4 text-sm font-bold text-white">No matching projects</h3>
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-500">
-                    No project matches &quot;{searchQuery.trim()}&quot;.
-                  </p>
-                </>
-              )}
+                    )}
+                  </div>
+                )}
+                {CLOUD_CONTROL_PLANE && (
+                  <KitButton variant="primary" icon={Plus} onClick={openNew}>
+                    New project
+                  </KitButton>
+                )}
+              </>
+            ) : undefined
+          }
+        />
+
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={`${PLATE} border ${EDGE} ${R_PANEL} p-4`}>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-[32px] w-[32px] rounded-[8px]" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-[13px] w-2/5" />
+                    <Skeleton className="h-[11px] w-1/4" />
+                  </div>
+                </div>
+                <Skeleton className="mt-5 h-[12px] w-4/5" />
+                <Skeleton className="mt-2 h-[12px] w-3/5" />
+                <div className={`mt-5 border-t ${RULE} pt-3`}>
+                  <Skeleton className="h-[12px] w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : isEmpty ? (
+          CLOUD_CONTROL_PLANE ? (
+            <FirstProject onCreate={openNew} />
+          ) : (
+            <div className={`${PLATE} border ${EDGE} ${R_PANEL}`}>
+              <EmptyState
+                icon={Database}
+                title="No project yet"
+                description="This deployment provisions its one project with npm run bootstrap. Run it on the server, then reload this page."
+              />
             </div>
-          )}
-        </section>
-
-        {/* Mobile floating action button — safe-area bottom guard for iPhone home indicator */}
-        {CLOUD_CONTROL_PLANE && !showNewModal && !limitError && !deleteTarget && (
-          <button
-            type="button"
-            onClick={() => setShowNewModal(true)}
-            style={{ bottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}
-            className="fixed right-4 z-30 sm:hidden inline-flex items-center gap-2 rounded-full bg-white px-4 py-3 text-[13px] font-semibold text-black shadow-[0_12px_44px_-8px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.12)] border border-white/20 active:scale-95 transition-transform duration-100"
-            aria-label="New project"
-          >
-            <Plus className="h-4 w-4 stroke-[2.5]" />
-            <span>New project</span>
-          </button>
-        )}
-      </main>
-
-      {/* New Project modal */}
-      <AnimatePresence>
-        {showNewModal && CLOUD_CONTROL_PLANE && (
-          <NewProjectModal
-            creating={creating}
-            error={createError}
-            onClose={() => { setShowNewModal(false); setCreateError(null) }}
-            onCreate={async (name) => {
-              setCreating(true)
-              setCreateError(null)
-              try {
-                const id = await createProject(name)
-                if (id) {
-                  router.push(`/app/projects/${id}`)
-                }
-                setShowNewModal(false)
-              } catch {
-                setCreateError('Something went wrong creating the project. Please try again.')
-              } finally {
-                setCreating(false)
+          )
+        ) : visibleProjects.length === 0 ? (
+          <div className={`${PLATE} border ${EDGE} ${R_PANEL}`}>
+            <EmptyState
+              icon={Search}
+              title="No matching projects"
+              description={`No project name contains “${searchQuery.trim()}”.`}
+              action={
+                <KitButton icon={X} onClick={() => setSearchQuery('')}>
+                  Clear search
+                </KitButton>
               }
-            }}
-          />
+            />
+          </div>
+        ) : (
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleProjects.map((project) => (
+              <li key={project.id}>
+                <ProjectCard
+                  project={project}
+                  renaming={editingProjectId === project.id}
+                  editingName={editingName}
+                  editInputRef={editInputRef}
+                  onStartRename={() => handleStartRename(project)}
+                  onRenameChange={setEditingName}
+                  onRenameSubmit={() => handleRenameSubmit(project.id)}
+                  onCancelRename={() => setEditingProjectId(null)}
+                  onDelete={() => handleDeleteProject(project.id, project.name)}
+                />
+              </li>
+            ))}
+          </ul>
         )}
-      </AnimatePresence>
+      </div>
 
-      {/* Delete confirmation — kit dialog, never window.confirm */}
+      {CLOUD_CONTROL_PLANE && (
+        <NewProjectModal
+          open={showNewModal}
+          creating={creating}
+          error={createError}
+          onClose={() => {
+            if (creating) return
+            setShowNewModal(false)
+            setCreateError(null)
+          }}
+          onCreate={async (name) => {
+            setCreating(true)
+            setCreateError(null)
+            try {
+              const id = await createProject(name)
+              if (id) router.push(`/app/projects/${id}`)
+              setShowNewModal(false)
+            } catch {
+              setCreateError('The project could not be created. Try again in a moment.')
+            } finally {
+              setCreating(false)
+            }
+          }}
+        />
+      )}
+
+      {/* Delete confirmation: kit dialog, never window.confirm */}
       <KitConfirmDialog
         open={!!deleteTarget}
-        onCancel={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteError(null) } }}
+        onCancel={() => {
+          if (!deleteBusy) {
+            setDeleteTarget(null)
+            setDeleteError(null)
+          }
+        }}
         onConfirm={confirmDeleteProject}
-        title={`Delete "${deleteTarget?.name ?? ''}"?`}
-        description="The project's backend, tables and data are removed. This cannot be undone."
+        title={`Delete ${deleteTarget?.name ?? 'this project'}?`}
+        description="Its database, tables, end users, files and change history are removed. This cannot be undone."
         confirmLabel="Delete project"
         danger
         busy={deleteBusy}
       >
         {deleteError && (
-          <p className="text-[12.5px] leading-5 text-rose-300">{deleteError}</p>
+          <KitNote icon={AlertTriangle} tone="danger">
+            {deleteError}
+          </KitNote>
         )}
       </KitConfirmDialog>
 
-      {/* Plan-limit modal */}
-      <AnimatePresence>
-        {limitError && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm sm:backdrop-blur-none"
-              onClick={() => setLimitError(null)}
-            />
-            <motion.div
-              initial={{ y: '100%', opacity: 0.6 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="relative w-full sm:max-w-md overflow-hidden rounded-t-2xl sm:rounded-xl border-t sm:border border-white/[0.07] bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] pb-safe sm:pb-0"
-            >
-              {/* Mobile drag handle */}
-              <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
-                <div className="h-1 w-10 rounded-full bg-white/20" />
-              </div>
-              <div className="border-b border-white/[0.06] px-5 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-[13px] font-semibold text-zinc-100">Project limit reached</h3>
-                    <p className="mt-1 text-[12.5px] text-zinc-500">Upgrade to create more backends.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setLimitError(null)}
-                    className="rounded-md p-1.5 sm:p-1 text-zinc-500 transition hover:bg-white/[0.06] hover:text-white"
-                    aria-label="Close"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="p-5">
-                <p className="text-[12.5px] leading-5 text-zinc-300">{limitError}</p>
-                <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {CLOUD_CONTROL_PLANE && (
-                    <button
-                      type="button"
-                      onClick={() => router.push('/app/billing')}
-                      className="min-h-[44px] sm:min-h-0 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200"
-                    >
-                      Upgrade
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setLimitError(null)}
-                    className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/[0.08] px-4 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Plan limit */}
+      <KitModal
+        open={!!limitError}
+        onClose={() => setLimitError(null)}
+        title="Project limit reached"
+        description={limitError ?? undefined}
+        footer={
+          <>
+            <KitButton variant="ghost" onClick={() => setLimitError(null)}>
+              Dismiss
+            </KitButton>
+            {CLOUD_CONTROL_PLANE && (
+              <KitButton variant="primary" onClick={() => router.push('/app/billing')}>
+                Compare plans
+              </KitButton>
+            )}
+          </>
+        }
+      />
     </OrgShell>
   )
 }
 
-// ─── New Project modal ────────────────────────────────────────────────────────
+// ─── First project ────────────────────────────────────────────────────────────
+
+const STEPS = [
+  {
+    icon: Plus,
+    title: 'Create a project',
+    body: 'Backenly provisions an isolated Postgres schema with its own auth, storage, functions and REST API.',
+  },
+  {
+    icon: Cable,
+    title: 'Connect your coding agent',
+    body: 'One scoped key and one pasted prompt for Claude Code, Cursor, Codex or any MCP client.',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Describe what to build',
+    body: 'Tables, access rules, storage and functions land as planned, verified changes you can roll back.',
+  },
+] as const
+
+/** What a brand-new account sees: what a project is, and the three steps to a working backend. */
+function FirstProject({ onCreate }: { onCreate: () => void }) {
+  return (
+    <section className={`overflow-hidden ${PLATE} border ${EDGE} ${R_PANEL}`} aria-labelledby="first-project-title">
+      <div className="grid gap-8 px-5 py-7 sm:px-8 sm:py-9 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-12">
+        <div className="max-w-[46ch]">
+          <h2 id="first-project-title" className="text-[18px] font-semibold leading-[26px] tracking-[-0.016em] text-zinc-50">
+            Create your first backend
+          </h2>
+          <p className="mt-2 text-[14px] leading-[22px] text-zinc-400 [text-wrap:pretty]">
+            A project is one backend: a Postgres database with end-user auth, file storage, functions and an
+            API. Your coding agent builds it. Backenly plans each change, applies it, verifies it, and keeps it
+            running.
+          </p>
+          <div className="mt-6">
+            <KitButton variant="primary" icon={Plus} onClick={onCreate}>
+              New project
+            </KitButton>
+          </div>
+        </div>
+
+        <ol className={`relative ${R_PANEL} border ${EDGE} ${WELL}`}>
+          {STEPS.map((step, i) => {
+            const Icon = step.icon
+            return (
+              <li key={step.title} className={`flex gap-3.5 px-4 py-4 sm:px-5 ${i > 0 ? `border-t ${RULE}` : ''}`}>
+                <span
+                  aria-hidden
+                  className="mt-[1px] flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.03] text-[12px] font-medium tabular-nums text-zinc-300"
+                >
+                  {i + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-[13px] font-medium leading-[20px] text-zinc-100">
+                    <Icon className="h-3.5 w-3.5 text-zinc-500" strokeWidth={1.75} aria-hidden />
+                    {step.title}
+                  </p>
+                  <p className="mt-0.5 text-[13px] leading-[20px] text-zinc-400">{step.body}</p>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      </div>
+    </section>
+  )
+}
+
+// ─── New project ──────────────────────────────────────────────────────────────
 
 function NewProjectModal({
+  open,
   creating,
   error,
   onClose,
   onCreate,
 }: {
+  open: boolean
   creating: boolean
   error?: string | null
   onClose: () => void
   onCreate: (name: string) => void
 }) {
   const [name, setName] = useState('')
+  useEffect(() => {
+    if (open) setName('')
+  }, [open])
+  const submit = () => {
+    const trimmed = name.trim()
+    if (trimmed && !creating) onCreate(trimmed)
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm sm:backdrop-blur-none"
-        onClick={() => !creating && onClose()}
-      />
-      <motion.div
-        initial={{ y: '100%', opacity: 0.6 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '100%', opacity: 0 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-xl border-t sm:border border-white/[0.07] bg-[#0f1012] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] pb-safe sm:pb-0"
-      >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-300/40 to-transparent" />
-        {/* Mobile drag handle */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
-          <div className="h-1 w-10 rounded-full bg-white/20" />
-        </div>
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
-          <h3 className="text-[13px] font-semibold text-zinc-100">New project</h3>
-          <button
-            type="button"
-            onClick={() => !creating && onClose()}
-            className="rounded-md p-1.5 sm:p-1 text-zinc-500 transition hover:bg-white/[0.06] hover:text-white"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-4 p-5">
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium tracking-tight text-zinc-400">Project name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Movie Reviews"
-              autoFocus
-              maxLength={100}
-              onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onCreate(name.trim()) }}
-              className="h-10 sm:h-9 w-full rounded-lg border border-white/[0.07] bg-[#08090a] px-3 text-[16px] sm:text-[13px] text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
-            />
-          </div>
-          <p className="text-[12.5px] leading-5 text-zinc-500">
-            Then wire your coding agent on the project&apos;s Connect page. Describe
-            the backend in Claude Code or Cursor and it lands here.
-          </p>
-
-          {/* Honest region: one AWS region, no fake globe/selector */}
-          <div className="flex items-center gap-2 text-[12.5px] text-zinc-500">
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-1 font-mono text-[12px] text-zinc-400">
-              <span className="h-[5px] w-[5px] rounded-full bg-emerald-400" />
-              AWS · ap-south-1
-            </span>
-            <span>Deployed to Backenly&apos;s single region.</span>
-          </div>
-
-          {error && (
-            <p className="text-[12.5px] leading-5 text-rose-300">{error}</p>
-          )}
-        </div>
-
-        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-white/[0.06] px-5 py-4">
-          <button
-            type="button"
-            onClick={() => !creating && onClose()}
-            className="min-h-[44px] sm:min-h-0 rounded-lg border border-white/[0.08] px-4 py-2 text-[13px] font-medium text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
-          >
+    <KitModal
+      open={open}
+      onClose={onClose}
+      title="New project"
+      description="Then connect your coding agent from the project's Connect page and describe the backend you want."
+      footer={
+        <>
+          <KitButton variant="ghost" onClick={onClose} disabled={creating}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => name.trim() && onCreate(name.trim())}
-            disabled={!name.trim() || creating}
-            className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-[13px] font-semibold text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-zinc-600"
-          >
-            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          </KitButton>
+          <KitButton variant="primary" icon={Plus} onClick={submit} disabled={!name.trim()} loading={creating}>
             Create project
-          </button>
+          </KitButton>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <KitField label="Project name" hint="Shown in the project list and on every change receipt. You can rename it later.">
+          <KitInput
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submit()
+            }}
+            placeholder="e.g. movie-reviews"
+            maxLength={100}
+            disabled={creating}
+            aria-label="Project name"
+          />
+        </KitField>
+
+        {/* Honest region: one AWS region, no fake globe or selector. */}
+        <div className={`flex items-center justify-between gap-3 ${R_PANEL} border ${EDGE} ${WELL} px-3 py-2.5`}>
+          <div className="min-w-0">
+            <p className="text-[12.5px] font-medium text-zinc-300">Region</p>
+            <p className="text-[12px] text-zinc-500">Backenly Cloud runs in one region today.</p>
+          </div>
+          <StatusDot tone="operational" label="AWS ap-south-1" />
         </div>
-      </motion.div>
-    </div>
+
+        {error && (
+          <KitNote icon={AlertTriangle} tone="danger">
+            {error}
+          </KitNote>
+        )}
+      </div>
+    </KitModal>
   )
 }
 
 // ─── Project card ─────────────────────────────────────────────────────────────
 
+function Monogram({ name }: { name: string }) {
+  const letter = name.trim().charAt(0).toUpperCase() || '·'
+  return (
+    <span
+      aria-hidden
+      className="flex h-[32px] w-[32px] flex-shrink-0 items-center justify-center rounded-[8px] border border-white/[0.09] bg-[linear-gradient(160deg,rgba(255,255,255,0.07),rgba(255,255,255,0.015))] text-[13px] font-semibold text-zinc-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+    >
+      {letter}
+    </span>
+  )
+}
+
 function ProjectCard({
   project,
-  editingProjectId,
+  renaming,
   editingName,
   editInputRef,
-  onOpen,
   onStartRename,
   onRenameChange,
   onRenameSubmit,
@@ -601,190 +586,96 @@ function ProjectCard({
   onDelete,
 }: {
   project: Project
-  editingProjectId: string | null
+  renaming: boolean
   editingName: string
   editInputRef: React.RefObject<HTMLInputElement>
-  onOpen: () => void
-  onStartRename: (e: React.MouseEvent | React.KeyboardEvent, project: Project) => void
+  onStartRename: () => void
   onRenameChange: (name: string) => void
-  onRenameSubmit: (projectId: string) => void
+  onRenameSubmit: () => void
   onCancelRename: () => void
-  onDelete: (e: React.MouseEvent | React.KeyboardEvent, projectId: string, projectName: string) => void
+  onDelete: () => void
 }) {
-  // A paused project's API refuses every call, so its deploy status would
-  // mislead. Monochrome on purpose: paused is a state, not an alarm.
-  const status = project.pausedAt
-    ? { label: 'Paused', dot: 'bg-zinc-500', text: 'text-zinc-400' }
-    : getStatus((project as any).projectStatus)
-  const updatedAt = (project as any).updatedAt
-  const description = project.description?.trim() || 'No prompt saved for this backend yet.'
-
-  // Mobile overflow menu state — replaces always-visible action buttons on small screens.
-  // Desktop keeps its reveal-on-hover behaviour (opacity-0 group-hover:opacity-100) exactly as before.
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const mobileMenuRef = useRef<HTMLDivElement>(null)
-
-  // Close the overflow tray on any touchstart outside it
-  useEffect(() => {
-    if (!mobileMenuOpen) return
-    const handler = (e: TouchEvent) => {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
-        setMobileMenuOpen(false)
-      }
-    }
-    document.addEventListener('touchstart', handler, { passive: true })
-    return () => document.removeEventListener('touchstart', handler)
-  }, [mobileMenuOpen])
+  const status = statusOf(project)
+  const tables = project.metrics?.totalTables
+  const description = project.description?.trim()
+  const href = `/app/projects/${project.id}`
 
   return (
     <article
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onOpen()
-        }
-      }}
-      className="group relative flex min-h-[160px] sm:min-h-[176px] cursor-pointer flex-col rounded-xl border border-white/[0.07] bg-[#0f1012] p-4 text-left shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] outline-none transition-colors hover:border-white/[0.14] focus-visible:border-violet-400/40 focus-visible:ring-2 focus-visible:ring-violet-400/20"
+      className={`group relative flex h-full min-h-[172px] flex-col ${PLATE} border ${EDGE} ${R_PANEL} p-4 transition-[border-color,background-color] duration-150 hover:border-white/[0.14] hover:bg-[#111215]`}
     >
-      {/* Subtle depth gradient — gives 3D lift on mobile where no hover effect exists */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-br from-white/[0.015] to-transparent" />
+      {/* The whole card is the link; the menu and the rename field sit above it. */}
+      <Link
+        href={href}
+        aria-label={`Open ${project.name}`}
+        className={`absolute inset-0 z-0 ${R_PANEL} ${FOCUS}`}
+      />
 
       <div className="flex items-start gap-3">
-        {/* Violet-tinted icon container — decorative brand warmth, not an interactive accent */}
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-gradient-to-br from-violet-500/[0.08] to-transparent">
-          <Database className="h-4 w-4 text-zinc-400" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          {editingProjectId === project.id ? (
+        <Monogram name={project.name} />
+        <div className="min-w-0 flex-1 pt-[1px]">
+          {renaming ? (
             <input
               ref={editInputRef}
               value={editingName}
               onChange={(e) => onRenameChange(e.target.value)}
-              onBlur={() => onRenameSubmit(project.id)}
+              onBlur={onRenameSubmit}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onRenameSubmit(project.id)
+                if (e.key === 'Enter') onRenameSubmit()
                 if (e.key === 'Escape') onCancelRename()
-                e.stopPropagation()
               }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full rounded-md border border-white/[0.12] bg-white/[0.06] px-2.5 py-1 text-base sm:text-sm font-semibold text-white outline-none focus:border-violet-400/40"
+              aria-label="Project name"
               maxLength={100}
               autoFocus
+              className="relative z-10 -my-[3px] h-[28px] w-full rounded-[6px] border border-violet-300/40 bg-[#08090a] px-2 text-[14px] font-semibold text-zinc-50 outline-none ring-[3px] ring-violet-400/15"
             />
           ) : (
-            <h3 className="line-clamp-2 text-base font-semibold leading-snug text-white">{project.name}</h3>
+            <h3 className="truncate text-[14px] font-semibold leading-[22px] tracking-[-0.01em] text-zinc-50">
+              {project.name}
+            </h3>
           )}
-          <p className="mt-1 truncate font-mono text-[12px] text-zinc-500">
-            {project.environment || 'development'} workspace
+          <p className="truncate text-[12px] leading-[16px] text-zinc-500">
+            {CLOUD_CONTROL_PLANE ? 'AWS ap-south-1' : 'Self-hosted'}
           </p>
         </div>
-
-        {/* ─── Desktop action buttons — reveal on group-hover, invisible on touch ─── */}
-        <div className="hidden sm:flex shrink-0 items-center gap-1 opacity-0 sm:transition sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-          <ProjectIconButton label="Rename project" icon={Pencil} onClick={(e) => onStartRename(e, project)} />
-          <ProjectIconButton label="Delete project" icon={Trash2} onClick={(e) => onDelete(e, project.id, project.name)} destructive />
-        </div>
-
-        {/* ─── Mobile overflow menu (⋯) — replaces always-visible buttons ─── */}
-        <div className="relative sm:hidden" ref={mobileMenuRef}>
-          <button
-            type="button"
-            aria-label="Project actions"
-            onClick={(e) => { e.stopPropagation(); setMobileMenuOpen((o) => !o) }}
-            onTouchStart={(e) => e.stopPropagation()}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-zinc-500 transition active:bg-white/[0.08]"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          {/* Inline action tray — positions below the ⋯ button, above card content */}
-          <AnimatePresence>
-            {mobileMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -6, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -6, scale: 0.95 }}
-                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute right-0 top-full mt-1 z-50 min-w-[140px] overflow-hidden rounded-lg border border-white/[0.10] bg-[#141518] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.9)]"
-              >
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(false); onStartRename(e, project) }}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  className="flex w-full items-center gap-2.5 px-3 py-3 text-left text-[13px] text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors"
-                >
-                  <Pencil className="h-3.5 w-3.5 text-zinc-500" />
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(false); onDelete(e, project.id, project.name) }}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  className="flex w-full items-center gap-2.5 px-3 py-3 text-left text-[13px] text-rose-300 hover:bg-rose-500/[0.08] transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* Always visible: a hover-only trigger would also hide its own open
+            menu the moment the pointer left the card. */}
+        <div className="relative z-10 -mr-1.5 -mt-1">
+          <OverflowMenu
+            label={`Actions for ${project.name}`}
+            items={[
+              { label: 'Rename', icon: Pencil, onClick: onStartRename },
+              { separator: true },
+              { label: 'Delete project', icon: Trash2, onClick: onDelete, danger: true },
+            ]}
+          />
         </div>
       </div>
 
-      {/* 1-line clamp on mobile — descriptions are secondary on small screens */}
-      <p className="mt-4 line-clamp-1 sm:line-clamp-2 min-h-[24px] sm:min-h-[40px] text-sm leading-6 text-zinc-400">{description}</p>
+      <p
+        className={`mt-3 line-clamp-2 min-h-[40px] text-[13px] leading-[20px] [text-wrap:pretty] ${
+          description ? 'text-zinc-400' : 'text-zinc-600'
+        }`}
+      >
+        {description || 'No description yet.'}
+      </p>
 
-      <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
-        <div className="inline-flex items-center gap-2">
-          <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
-          <span className={`font-mono text-[12px] font-medium ${status.text}`}>{status.label}</span>
-        </div>
-        <div className="flex min-w-0 items-center gap-2 text-zinc-500">
-          {updatedAt && (
-            <span className="inline-flex items-center gap-1 text-[12px] tabular-nums">
-              <Clock className="h-3.5 w-3.5" />
-              {timeAgo(updatedAt)}
+      <div className={`mt-auto flex items-center gap-2 border-t ${RULE} pt-3 text-[12px] leading-[16px] text-zinc-500`}>
+        <StatusDot tone={status.tone} label={status.label} pulse={status.pulse} />
+        {typeof tables === 'number' && (
+          <>
+            <span aria-hidden className="text-zinc-700">·</span>
+            <span className="tabular-nums">
+              {tables} {tables === 1 ? 'table' : 'tables'}
             </span>
-          )}
-          <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5 group-hover:text-zinc-300" />
-        </div>
+          </>
+        )}
+        {project.updatedAt && (
+          <span className="ml-auto tabular-nums" title={new Date(project.updatedAt).toLocaleString()}>
+            Updated {timeAgo(project.updatedAt)}
+          </span>
+        )}
       </div>
     </article>
-  )
-}
-
-function ProjectIconButton({
-  label,
-  icon: Icon,
-  onClick,
-  destructive = false,
-}: {
-  label: string
-  icon: LucideIcon
-  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void
-  destructive?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick(e)
-      }}
-      onKeyDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      className={`inline-flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] transition ${
-        destructive
-          ? 'text-zinc-500 hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-300 active:bg-rose-500/20'
-          : 'text-zinc-500 hover:border-white/20 hover:bg-white/[0.06] hover:text-white active:bg-white/[0.1]'
-      }`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </button>
   )
 }
