@@ -3,7 +3,7 @@
 /**
  * TopBar: the single persistent bar across the project workspace.
  *
- *   ◆ / account / ● project ▾  Production       Search ⌘K  ⎔  Ask  Connect agent  (A)
+ *   ◆ / account Pro / ● project ▾  Production       Search ⌘K  ⎔  Ask  Connect agent  (A)
  *
  * The breadcrumb names where you are; the right cluster holds the only
  * global actions. "Ask" toggles the Q&A Assistant (⌘/Ctrl+J), which answers
@@ -21,13 +21,13 @@ import { useParams, useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { Cable, Check, ChevronsUpDown, Inbox, Plus, Sparkles } from 'lucide-react'
 import { useAssistantStore } from '@/lib/stores/use-assistant-store'
-import { OrgSwitcher } from '@cloud/org-switcher'
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import { getProjects, type Project } from '@/lib/api/projects'
 import { BUTTON_BASE, BUTTON_VARIANTS, Kbd } from '@/components/inspector/kit'
 import { FOCUS, R_CONTROL } from '@/components/console/tokens'
 import {
   AccountMenu,
+  AccountScope,
   BrandHome,
   ConsoleBar,
   Crumb,
@@ -36,9 +36,7 @@ import {
   MenuSeparator,
   MobileNavButton,
   SearchTrigger,
-  displayNameOf,
   useDismiss,
-  useMe,
 } from './ConsoleChrome'
 
 const STATUS_DOT: Record<string, string> = {
@@ -77,7 +75,6 @@ export function TopBar() {
   }, [toggleAssistant])
 
   const [, startTransition] = useTransition()
-  const user = useMe()
   const [projects, setProjects] = useState<Project[]>([])
   const [pendingReview, setPendingReview] = useState(0)
   const [projectMenu, setProjectMenu] = useState(false)
@@ -124,7 +121,7 @@ export function TopBar() {
 
       <div className="hidden min-w-0 items-center sm:flex">
         <Crumb />
-        <OrgSwitcher fallbackName={displayNameOf(user, 'Personal')} plan="Free" />
+        <AccountScope />
       </div>
       <Crumb />
 

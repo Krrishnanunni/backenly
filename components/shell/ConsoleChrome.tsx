@@ -32,8 +32,10 @@ import { Logo } from '@/components/Logo'
 import { signOut } from '@/lib/api/auth'
 import { useMobileNavStore } from '@/lib/stores/use-mobile-nav-store'
 import { openCommandPalette } from '@/components/app/CommandPalette'
-import { Kbd, MenuItem, MenuPanel, MenuSeparator, useDismiss } from '@/components/inspector/kit'
+import { Kbd, MenuItem, MenuPanel, MenuSeparator, Skeleton, useDismiss } from '@/components/inspector/kit'
 import { CANVAS, CHROME, FOCUS, R_CONTROL } from '@/components/console/tokens'
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
+import { OrgSwitcher } from '@cloud/org-switcher'
 
 /* ── Frame ─────────────────────────────────────────────────────────────── */
 
@@ -283,6 +285,53 @@ export function initialsOf(user: MeUser | null): string {
 
 export function displayNameOf(user: MeUser | null, fallback = 'Account'): string {
   return user?.name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? fallback
+}
+
+let cachedPlan: string | null | undefined
+
+/**
+ * The account's plan name on Backenly Cloud ("Free", "Pro", "Enterprise"), or
+ * null while it loads and on a self-hosted build, which has no plan.
+ *
+ * Both bars used to print the literal "Free", so an account that had paid for
+ * Pro was told it was on the free tier on every page. The answer comes from
+ * the same subscription row Billing reads, fetched once per page load.
+ */
+export function usePlanName(): string | null {
+  const [plan, setPlan] = useState<string | null>(cachedPlan ?? null)
+  useEffect(() => {
+    // A self-hosted build has no billing routes; asking would be a 404.
+    if (!CLOUD_CONTROL_PLANE || cachedPlan !== undefined) return
+    let cancelled = false
+    fetch('/api/billing/current', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        cachedPlan = typeof d?.displayName === 'string' && d.displayName ? d.displayName : null
+        if (!cancelled) setPlan(cachedPlan)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return plan
+}
+
+/**
+ * Who is in scope: the organization switcher on Cloud (a static name chip on a
+ * self-hosted build), with the plan beside it. A short placeholder holds the
+ * place until the signed-in user is known, so the bar never flashes a
+ * made-up "Personal" before the real name arrives.
+ */
+export function AccountScope({ className = '' }: { className?: string }) {
+  const user = useMe()
+  const plan = usePlanName()
+  if (!user) return <Skeleton className={`mx-1.5 h-[14px] w-[72px] ${className}`} />
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <OrgSwitcher fallbackName={displayNameOf(user, 'Personal')} plan={plan ?? ''} />
+    </div>
+  )
 }
 
 export function Avatar({ user, size = 28 }: { user: MeUser | null; size?: number }) {

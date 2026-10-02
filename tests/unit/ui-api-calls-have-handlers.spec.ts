@@ -17,6 +17,9 @@ import path from 'path'
 const CLOUD_OVERLAY_ROUTES = [
   '/api/projects/[id]/access',
   '/api/billing/usage',
+  // The console bars' plan chip (usePlanName in components/shell/ConsoleChrome),
+  // fetched only when CLOUD_CONTROL_PLANE is true.
+  '/api/billing/current',
   // The spend limit: the Usage page reads and changes it (backenly-cloud #27).
   '/api/billing/spend-limit',
   '/api/billing/spend-limit/confirm',

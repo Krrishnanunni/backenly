@@ -15,6 +15,7 @@ import { FolderKanban, Gauge, Users, CreditCard, Settings } from 'lucide-react'
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import {
   AccountMenu,
+  AccountScope,
   BrandHome,
   ConsoleBar,
   ConsoleFrame,
@@ -24,8 +25,6 @@ import {
   NavItem,
   SearchTrigger,
   SidebarNav,
-  displayNameOf,
-  useMe,
 } from './ConsoleChrome'
 
 /**
@@ -56,7 +55,6 @@ const NAV = [
 
 export function OrgShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? ''
-  const user = useMe()
   const settingsActive = pathname.startsWith('/app/settings')
 
   const bar = (
@@ -64,15 +62,9 @@ export function OrgShell({ children }: { children: ReactNode }) {
       <MobileNavButton />
       <BrandHome />
       <Crumb />
-      <span className="truncate px-1.5 text-[13px] font-medium text-zinc-200">{displayNameOf(user, 'Personal')}</span>
-      {/* Plan chip is a Cloud concept. It was a hardcoded literal, so a
-          self-hosted deployment — which has unlimited entitlements — was
-          being told it was on a free tier. */}
-      {CLOUD_CONTROL_PLANE && (
-        <span className="hidden h-[20px] items-center rounded-[5px] border border-white/[0.09] px-1.5 text-[11.5px] font-medium text-zinc-400 sm:inline-flex">
-          Free
-        </span>
-      )}
+      {/* The same scope chip the project bar shows: the organization (a
+          switcher on Cloud) and the account's real plan. */}
+      <AccountScope />
       <div className="ml-auto flex items-center gap-1.5">
         <SearchTrigger />
         <AccountMenu />
