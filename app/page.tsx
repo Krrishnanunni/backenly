@@ -298,7 +298,7 @@ function ChangeSection() {
       <div className={CONTAINER}>
         <Reveal>
           <SectionHead
-            title="Every change tested and reversible, even at 3am"
+            title="Every change tested and reversible"
             body="One day on production. Your agent ships a feature and asks for something risky, then at 3am, with nobody online, Backenly fixes a slow query on its own."
           />
         </Reveal>
