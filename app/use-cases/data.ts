@@ -45,7 +45,7 @@ const LIST: UseCaseData[] = [
   {
     slug: 'ai-assisted-developers',
     label: 'Agent-driven development',
-    metaTitle: 'Drive a real backend from Claude Code or Cursor — Backenly',
+    metaTitle: 'Drive a real backend from Claude Code or Cursor',
     metaDescription:
       'Give your coding agent a live schema to read and a governed surface to write through: 20 MCP tools, destructive operations blocked at the key scope and routed to human approval, and a change ledger that outlives the session.',
     headline: 'Give your agent a backend it cannot guess at',
@@ -55,7 +55,7 @@ const LIST: UseCaseData[] = [
     alreadyHave: 'A frontend and an agent in the editor',
     need: 'A live schema and safe writes',
     problem:
-      'Ask an agent for a full-stack feature without giving it a backend and it invents one. It writes fetch calls to endpoints that do not exist, defines response types nothing returns, and mocks the data so the UI renders. The frontend works the way a film set works. Then the session ends, and everything the agent knew about the schema ends with it — the next session re-derives it, slightly differently.',
+      'Ask an agent for a full-stack feature without giving it a backend and it invents one. It writes fetch calls to endpoints that do not exist, defines response types nothing returns, and mocks the data so the UI renders. The frontend works the way a film set works. Then the session ends, and everything the agent knew about the schema ends with it. The next session re-derives it, slightly differently.',
     normallyBuild:
       'A schema and its migrations, REST or GraphQL handlers, auth middleware and session handling, row-level authorization on every query path, a deploy pipeline, and enough monitoring to know when one of them breaks. Then you own all of it, including the parts the agent wrote and will not remember writing.',
     workflow: [
@@ -67,7 +67,7 @@ const LIST: UseCaseData[] = [
       {
         label: 'Read',
         title: 'Your agent grounds itself in the real schema',
-        body: 'read_backend_state for the project, get_table_schema for one table — which returns column types, foreign keys with their ON DELETE behaviour, indexes, and CHECK constraints with their permitted values. An agent that has not read those writes an insert that looks correct and fails on a constraint it had no way to see.',
+        body: 'read_backend_state for the project, get_table_schema for one table, which returns column types, foreign keys with their ON DELETE behaviour, indexes, and CHECK constraints with their permitted values. An agent that has not read those writes an insert that looks correct and fails on a constraint it had no way to see.',
       },
       {
         label: 'Write',
@@ -77,7 +77,7 @@ const LIST: UseCaseData[] = [
       {
         label: 'Refuse',
         title: 'Destructive operations never execute over MCP',
-        body: 'They are absent from the advertised surface. A request to drop a table parks in the Review Queue with an approval id; the dashboard card shows the target and the live row count. Your agent polls check_approval, whose terminal statuses distinguish failed — nothing applied, safe to retry — from partial.',
+        body: 'They are absent from the advertised surface. A request to drop a table parks in the Review Queue with an approval id; the dashboard card shows the target and the live row count. Your agent polls check_approval, whose terminal statuses distinguish failed (nothing applied, safe to retry) from partial.',
       },
       {
         label: 'Type',
@@ -89,16 +89,16 @@ const LIST: UseCaseData[] = [
       language: 'text',
       label: 'What agent-to-backend looks like',
       code: `You:   What tables does this project have?
-Agent: (read_backend_state) users, recipes, follows, favorites —
+Agent: (read_backend_state) users, recipes, follows, favorites,
        with columns, types, and relations from the live schema.
 
 You:   Add a saved_searches table with user_id and query.
 Agent: (apply_migration) Applied. The table is served at
-       /db/saved_searches immediately — no generation step.
+       /db/saved_searches immediately, no generation step.
 
 You:   Drop the users table.
 Agent: Not available over MCP. Sent to the Review Queue as
-       approval a1f3… — 1,284 live rows. Approve in the dashboard.`,
+       approval a1f3…, 1,284 live rows. Approve in the dashboard.`,
     },
     result:
       'A backend that outlives the session and a record of how it got there. The agent reads real field names, so its integration code compiles against something that exists; the change ledger explains what happened last Tuesday and why, whether you or the agent did it.',
@@ -110,7 +110,7 @@ Agent: Not available over MCP. Sent to the Review Queue as
         'Keeps the schema, the change history, and the verification evidence after the session ends.',
       ],
       you: [
-        'Restart the MCP host after installing — the tools do not exist until it reconnects.',
+        'Restart the MCP host after installing. The tools do not exist until it reconnects.',
         'Approve or reject anything that reaches the Review Queue.',
         'Own the frontend, the product decisions, and whether a proposed schema is the right one.',
         'Keep the scoped key out of the repository.',
@@ -125,8 +125,8 @@ Agent: Not available over MCP. Sent to the Review Queue as
       { name: 'Read-only keys', detail: 'A reduced manifest; a write call is refused with READ_ONLY_KEY before anything runs.' },
     ],
     limitations: [
-      'MCP hosts read their manifest at process start. Tools are absent from the session that installed them until the host restarts — this is the single most common "it did not work" report, and it is not a bug.',
-      'The advertised surface is capped at 23 tools on purpose. Capabilities beyond it — preview-branch discard, vector search, schema adoption — are reached by describing them to backend_chat rather than by a named tool.',
+      'MCP hosts read their manifest at process start. Tools are absent from the session that installed them until the host restarts. This is the single most common "it did not work" report, and it is not a bug.',
+      'The advertised surface is capped at 23 tools on purpose. Capabilities beyond it (preview-branch discard, vector search, schema adoption) are reached by describing them to backend_chat rather than by a named tool.',
       'There is no raw-SQL path for mutating structure. Operations the migration parser cannot map are refused rather than passed through.',
       'Backenly exposes no SQL functions, so there is no rpc() surface. Custom logic runs as an event, cron, or HTTP function.',
     ],
@@ -141,7 +141,7 @@ Agent: Not available over MCP. Sent to the Review Queue as
       },
       {
         q: 'What happens to my types when the schema changes?',
-        a: 'Regenerate them with generate_types or the CLI. If you commit generated types, wire `backenly diff` into CI — it exits non-zero when the committed types no longer match the live schema, which turns silent drift into a failed build.',
+        a: 'Regenerate them with generate_types or the CLI. If you commit generated types, wire `backenly diff` into CI: it exits non-zero when the committed types no longer match the live schema, which turns silent drift into a failed build.',
       },
     ],
   },
@@ -150,12 +150,12 @@ Agent: Not available over MCP. Sent to the Review Queue as
   {
     slug: 'founders',
     label: 'Adopting an existing backend',
-    metaTitle: 'Put governance under a backend your AI tools already built — Backenly',
+    metaTitle: 'Put governance under a backend your AI tools already built',
     metaDescription:
       'Bring an existing PostgreSQL backend under governance without rebuilding it: direct connection strings, drift adoption that registers tables without executing DDL, verified isolation, and a monitoring loop.',
     headline: 'Your prototype has users. Nobody is operating it.',
     subheadline:
-      'Bring an existing schema under governance — REST, policies, monitoring, and an audit trail — without a rewrite and without giving up direct database access.',
+      'Bring an existing schema under governance (REST, policies, monitoring and an audit trail) without a rewrite and without giving up direct database access.',
     who: 'Teams whose AI-built product now has real users',
     alreadyHave: 'A working product and live data',
     need: 'An operator, not a rebuild',
@@ -191,7 +191,7 @@ Agent: Not available over MCP. Sent to the Review Queue as
       },
     ],
     result:
-      'The same PostgreSQL, now with a REST surface derived from the catalog, policies you can read, verified isolation, monitoring on real traffic, and a change ledger. When an engineer joins, they inherit standard Postgres and REST with a history — not a mystery. `pg_dump` still works, in both directions.',
+      'The same PostgreSQL, now with a REST surface derived from the catalog, policies you can read, verified isolation, monitoring on real traffic, and a change ledger. When an engineer joins, they inherit standard Postgres and REST with a history, not a mystery. `pg_dump` still works, in both directions.',
     responsibility: {
       platform: [
         'Provisions scoped Postgres roles through SECURITY DEFINER functions, read-write only after a human arms it.',
@@ -203,12 +203,12 @@ Agent: Not available over MCP. Sent to the Review Queue as
         'The data migration itself, and choosing when to cut over.',
         'Re-authoring access rules that were previously enforced in application code.',
         'Approving anything the loop queues rather than letting it sit.',
-        'Product decisions — the loop fixes operational problems, not product ones.',
+        'Product decisions. The loop fixes operational problems, not product ones.',
       ],
     },
     capabilities: [
       { name: 'get_database_credentials', detail: 'Read-only on demand; read-write only after the owner arms it in the dashboard. Carries readWriteArmed and an arming URL.' },
-      { name: 'adopt_external_schema', detail: 'Registers, refreshes, and prunes to match reality. Never emits DDL. Dispatchable but not advertised — ask for it by name.' },
+      { name: 'adopt_external_schema', detail: 'Registers, refreshes, and prunes to match reality. Never emits DDL. Dispatchable but not advertised: ask for it by name.' },
       { name: 'Drift watch', detail: 'Observes schema changes made outside the governed path so they can be reconciled rather than silently diverging.' },
       { name: 'Behavioural verification', detail: 'CRUD lifecycle, auth flow, two-user RLS isolation, and live HTTP checks, each returned with its evidence.' },
       { name: 'Autonomy loop', detail: 'One-minute cadence on every plan, uncapped, applying only reversible snapshotted changes on its own.' },
@@ -219,7 +219,7 @@ Agent: Not available over MCP. Sent to the Review Queue as
       'adopt_external_schema is not on the advertised 20-tool surface. Reach it through backend_chat by name.',
       'Structure mutates only through governed actions afterwards. If your workflow depends on arbitrary DDL from application code, that path is closed by design.',
       'Deployment rollback and full deployment history are plan-gated and not available on Free. Check the pricing page before relying on them.',
-      'The autonomy loop sweeps a project that shows a sign of life within 30 days — traffic, a governed change, or a conversation. A completely dormant project is not being checked.',
+      'The autonomy loop sweeps a project that shows a sign of life within 30 days: traffic, a governed change, or a conversation. A completely dormant project is not being checked.',
     ],
     faq: [
       {
@@ -290,7 +290,7 @@ const supabase = createClient(
   BACKENLY_ANON_KEY,
 )
 
-// unchanged — this is PostgREST on both sides
+// unchanged: this is PostgREST on both sides
 const { data, error } = await supabase
   .from('posts')
   .select('*, author(*)')
@@ -298,7 +298,7 @@ const { data, error } = await supabase
   .order('createdAt', { ascending: false })`,
     },
     result:
-      'The same query grammar, the same { data, error } contract, and the same realtime subscription shape — over a backend where structural change is governed, verified, and reversible, and where a loop is watching between your deploys.',
+      'The same query grammar, the same { data, error } contract, and the same realtime subscription shape, over a backend where structural change is governed, verified, and reversible, and where a loop is watching between your deploys.',
     responsibility: {
       platform: [
         'Serves PostgREST\'s grammar verbatim on the v2 surface, embeds included.',
@@ -309,16 +309,16 @@ const { data, error } = await supabase
       you: [
         'The data migration and the cutover window.',
         'Re-authoring policies into the claim form, and testing them.',
-        'Replacing any rpc() call sites — there is no SQL-function surface.',
+        'Replacing any rpc() call sites. There is no SQL-function surface.',
         'Deciding whether the governance trade is worth it for your team.',
       ],
     },
     capabilities: [
       { name: '@backenly/sdk/supabase', detail: 'Compatibility entry point emitting PostgREST directly, with { data, error } semantics and no throws.' },
-      { name: '/api/v2/{projectId}/{table}', detail: 'PostgREST grammar passed through untouched — filters, ordering, embeds, Prefer headers, Content-Range counts.' },
+      { name: '/api/v2/{projectId}/{table}', detail: 'PostgREST grammar passed through untouched: filters, ordering, embeds, Prefer headers, Content-Range counts.' },
       { name: 'set_rls', detail: 'Policies as exact SQL, installed verbatim, read back from pg_policies. No model in the path.' },
       { name: 'pg_dump', detail: 'Full schema export in either direction, so the move is reversible.' },
-      { name: 'Autonomy loop', detail: 'Continuous monitoring and repair of the reversible safe band — the capability that has no Supabase equivalent.' },
+      { name: 'Autonomy loop', detail: 'Continuous monitoring and repair of the reversible safe band, the capability that has no Supabase equivalent.' },
     ],
     limitations: [
       'rpc() is refused. Backenly exposes no SQL functions by design, so any stored-procedure call sites need re-homing as event, cron, or HTTP functions.',
@@ -346,29 +346,29 @@ const { data, error } = await supabase
   {
     slug: 'ai-product-backends',
     label: 'AI product backends',
-    metaTitle: 'Backend infrastructure for AI products — Backenly',
+    metaTitle: 'Backend infrastructure for AI products',
     metaDescription:
       'Conversation storage under verified isolation, pgvector retrieval inside the same policies, event and cron functions instead of a queue, job status as a row you subscribe to, and per-key rate limits.',
     headline: 'Prompts are private data. Store them like it.',
     subheadline:
-      'Conversation history, retrieval, async pipelines, and live job status — as backend features under one access model rather than four systems you operate.',
+      'Conversation history, retrieval, async pipelines, and live job status, as backend features under one access model rather than four systems you operate.',
     who: 'Teams shipping products with an inference layer',
     alreadyHave: 'Model access and a product idea',
     need: 'Storage, retrieval, pipelines, and cost control',
     problem:
       'An AI product has backend requirements a CRUD tutorial never covers, and each one is a separate infrastructure project by default: a queue for asynchronous inference, a vector store for retrieval, a socket layer so users are not staring at a frozen spinner, and rate limiting so one enthusiastic user does not spend your monthly inference budget in an afternoon. Meanwhile the most sensitive table in the product is the one holding every prompt your users have ever written.',
     normallyBuild:
-      'A queue and workers, a standalone vector database with its own copy of sensitive data and its own sync bugs, a WebSocket server, a rate limiter, and the glue between them — before shipping the model behaviour that actually differentiates you.',
+      'A queue and workers, a standalone vector database with its own copy of sensitive data and its own sync bugs, a WebSocket server, a rate limiter, and the glue between them, all before shipping the model behaviour that actually differentiates you.',
     workflow: [
       {
         label: 'Model',
         title: 'Conversations and runs, with isolation proven',
-        body: 'Describe the shape — documents, runs, a status, an owner — and the isolation rule. The post-build check signs in as a second user and asserts they receive zero rows of the first user\'s data. On a table holding prompts, that is the check you most want to exist and least want to write.',
+        body: 'Describe the shape (documents, runs, a status, an owner) and the isolation rule. The post-build check signs in as a second user and asserts they receive zero rows of the first user\'s data. On a table holding prompts, that is the check you most want to exist and least want to write.',
       },
       {
         label: 'Retrieve',
         title: 'Vectors beside the rows they describe',
-        body: 'pgvector columns live in the same schema, and similarity queries run under the same user context as any other read. A retrieval that ignores row-level security is a breach with extra steps — user A\'s question surfacing user B\'s documents as context. Keeping vectors in the policy-enforced database is the structural fix.',
+        body: 'pgvector columns live in the same schema, and similarity queries run under the same user context as any other read. A retrieval that ignores row-level security is a breach with extra steps: user A\'s question surfacing user B\'s documents as context. Keeping vectors in the policy-enforced database is the structural fix.',
       },
       {
         label: 'Process',
@@ -378,7 +378,7 @@ const { data, error } = await supabase
       {
         label: 'Stream',
         title: 'Job status is a row',
-        body: 'Make status a column and subscribe to changes on it over Server-Sent Events. Every writer — your inference layer, a trigger function, the dashboard — feeds the same stream, and there is no socket server to run.',
+        body: 'Make status a column and subscribe to changes on it over Server-Sent Events. Every writer (your inference layer, a trigger function, the dashboard) feeds the same stream, and there is no socket server to run.',
       },
       {
         label: 'Bound',
@@ -409,7 +409,7 @@ const { data, error } = await supabase
       ],
       you: [
         'Model choice, prompts, evaluation, and inference cost.',
-        'Chunking and embedding strategy — the platform stores and queries vectors, it does not design your retrieval.',
+        'Chunking and embedding strategy. The platform stores and queries vectors; it does not design your retrieval.',
         'Deciding what the pipeline should actually do at each step.',
         'Handling provider failures and retries inside your function logic.',
       ],
@@ -417,7 +417,7 @@ const { data, error } = await supabase
     capabilities: [
       { name: 'pgvector', detail: 'Embedding columns in your workspace schema; similarity queries run under the same user context as any other read.' },
       { name: 'Functions', detail: 'on_signup, on_db_insert / on_db_update / on_db_delete, cron, http, and manual triggers.' },
-      { name: 'Invocation quota', detail: 'Metered per plan and enforced at execution — 10,000 function runs a month on Free, 2 million on Pro.' },
+      { name: 'Invocation quota', detail: 'Metered per plan and enforced at execution: 10,000 function runs a month on Free, 2 million on Pro.' },
       { name: 'Realtime SSE', detail: 'PostgreSQL LISTEN/NOTIFY through a shared listener hub, with auto-reconnect. Row change events.' },
       { name: 'Rate limits', detail: 'Per-key limits on the runtime API, with the ceiling set by plan.' },
       { name: 'Behavioural verification', detail: 'Two-user isolation asserted against the live runtime after a build.' },
@@ -425,7 +425,7 @@ const { data, error } = await supabase
     limitations: [
       'Realtime carries row change events, not token streams. Stream tokens from your own inference endpoint; use SSE for status transitions.',
       'Vector search is not on the advertised 20-tool surface. Ask for it through backend_chat rather than a named tool.',
-      'Event triggers are a paid capability — the Free plan seeds zero triggers per project. Check the pricing page before designing a pipeline around them.',
+      'Event triggers are a paid capability: the Free plan seeds zero triggers per project. Check the pricing page before designing a pipeline around them.',
       'Function invocations are metered and enforced. A hot pipeline hits the plan quota and is refused rather than silently billed.',
       'The platform does not manage your inference spend. Rate limits bound request volume; they do not know what a request costs you.',
     ],
@@ -449,7 +449,7 @@ const { data, error } = await supabase
   {
     slug: 'multi-tenant-saas',
     label: 'Multi-tenant SaaS',
-    metaTitle: 'Organizations, members, and tenant isolation — Backenly',
+    metaTitle: 'Organizations, members, and tenant isolation',
     metaDescription:
       'Provision the organization data model in your app, scope every row by membership with the org_members policy, and have the isolation proven behaviourally instead of assumed from policy text.',
     headline: 'Tenant isolation you can demonstrate',
@@ -459,19 +459,19 @@ const { data, error } = await supabase
     alreadyHave: 'A product where customers have teammates',
     need: 'Per-tenant data isolation that holds',
     problem:
-      'Multi-tenancy is where authorization bugs become incidents. The rule is simple to state — a member sees their organization\'s rows and nothing else — and easy to get subtly wrong: an endpoint that forgets the tenant filter, a policy that grants one side of a join, a query written before the rule existed. Nothing fails loudly. One customer sees another customer\'s data, and you find out from them.',
+      'Multi-tenancy is where authorization bugs become incidents. The rule is simple to state (a member sees their organization\'s rows and nothing else) and easy to get subtly wrong: an endpoint that forgets the tenant filter, a policy that grants one side of a join, a query written before the rule existed. Nothing fails loudly. One customer sees another customer\'s data, and you find out from them.',
     normallyBuild:
-      'An organizations and members model, an invitation flow with expiring tokens, a role system, and a tenant filter applied at every single query site — plus the discipline to never miss one, forever, across everyone who joins the team.',
+      'An organizations and members model, an invitation flow with expiring tokens, a role system, and a tenant filter applied at every single query site, plus the discipline to never miss one, forever, across everyone who joins the team.',
     workflow: [
       {
         label: 'Provision',
         title: 'The organization model as real tables',
-        body: 'enable_teams ensures end-user auth is on, then creates organizations (name, unique slug, owner), organization_members (organization, user, role defaulting to member, joined_at), and organization_invitations (email, role, unique token, inviter, expiry, accepted_at) — with CRUD endpoints and the lookup indexes membership checks need. It is idempotent, so re-running it is safe.',
+        body: 'enable_teams ensures end-user auth is on, then creates organizations (name, unique slug, owner), organization_members (organization, user, role defaulting to member, joined_at), and organization_invitations (email, role, unique token, inviter, expiry, accepted_at), with CRUD endpoints and the lookup indexes membership checks need. It is idempotent, so re-running it is safe.',
       },
       {
         label: 'Scope',
         title: 'Membership decides row access, in the database',
-        body: 'The org_members policy grants access to rows whose organization_id matches an organization the calling user belongs to. It requires the table to have an organization_id column and teams to be enabled — a precondition it checks rather than assumes.',
+        body: 'The org_members policy grants access to rows whose organization_id matches an organization the calling user belongs to. It requires the table to have an organization_id column and teams to be enabled, a precondition it checks rather than assumes.',
       },
       {
         label: 'Refine',
@@ -481,7 +481,7 @@ const { data, error } = await supabase
       {
         label: 'Prove',
         title: 'Sign in as the other tenant',
-        body: 'The isolation check creates a second end-user and asserts they receive zero rows. This is the difference between a policy that reads correctly and a boundary that holds — and it is the evidence to show a customer who asks how you separate their data.',
+        body: 'The isolation check creates a second end-user and asserts they receive zero rows. This is the difference between a policy that reads correctly and a boundary that holds, and it is the evidence to show a customer who asks how you separate their data.',
       },
     ],
     result:
@@ -494,38 +494,38 @@ const { data, error } = await supabase
         'Asserts cross-user isolation behaviourally and returns the evidence.',
       ],
       you: [
-        'The invitation UX — sending the email, and the accept screen.',
+        'The invitation UX: sending the email, and the accept screen.',
         'What each role is allowed to do in your product; the schema seeds owner, admin, and member as values, not as behaviour.',
         'Billing and seat logic.',
         'Adding organization_id to the tables that should be tenant-scoped.',
       ],
     },
     capabilities: [
-      { name: 'enable_teams', detail: 'Creates organizations, organization_members, and organization_invitations with CRUD APIs and membership indexes. Idempotent. Dispatchable but not advertised — reach it through backend_chat.' },
+      { name: 'enable_teams', detail: 'Creates organizations, organization_members, and organization_invitations with CRUD APIs and membership indexes. Idempotent. Dispatchable but not advertised: reach it through backend_chat.' },
       { name: 'org_members policy', detail: 'Row access where organization_id matches an org the caller belongs to. Requires the column and enabled teams.' },
       { name: 'set_rls', detail: 'Exact SQL per command, installed verbatim, read back from pg_policies. Scoped edits leave other commands untouched.' },
       { name: 'Behavioural verification', detail: 'A second end-user is created and signed in; the check passes only on zero rows.' },
       { name: 'Schema isolation', detail: 'Each project has its own PostgreSQL schema; cross-project isolation is a grant, not a filter.' },
     ],
     limitations: [
-      'This is your application\'s team model. It is unrelated to Backenly account seats, which are how many people can log into your Backenly dashboard — a separate, plan-limited thing.',
+      'This is your application\'s team model. It is unrelated to Backenly account seats, which are how many people can log into your Backenly dashboard, a separate and plan-limited thing.',
       'enable_teams provisions the data model and endpoints. Sending invitation emails and building the accept flow are yours.',
       'Roles are seeded as values (owner, admin, member). What each one may do is your policy work, expressed with set_rls.',
       'The org_members template requires an organization_id column on each scoped table and teams already enabled. It refuses rather than guessing.',
-      'Cross-organization reporting needs deliberate design — the policies that make isolation hold also make aggregate queries across tenants intentionally hard.',
+      'Cross-organization reporting needs deliberate design: the policies that make isolation hold also make aggregate queries across tenants intentionally hard.',
     ],
     faq: [
       {
         q: 'Is this the same as inviting teammates to Backenly?',
-        a: 'No, and the distinction matters. Backenly account seats control who can open your dashboard and are limited by plan. This use case is about organizations inside the product you are building — your customers\' teams, living in your project\'s own schema, with their own users and policies.',
+        a: 'No, and the distinction matters. Backenly account seats control who can open your dashboard and are limited by plan. This use case is about organizations inside the product you are building: your customers\' teams, living in your project\'s own schema, with their own users and policies.',
       },
       {
         q: 'How do I prove tenant isolation to a customer?',
-        a: 'Point at the isolation check. It creates a second end-user, signs in, and asserts zero rows are returned — a behavioural result rather than a claim about policy text. Combined with per-project schema isolation enforced by Postgres grants, that is a concrete answer to a question most teams answer with an architecture diagram.',
+        a: 'Point at the isolation check. It creates a second end-user, signs in, and asserts zero rows are returned, a behavioural result rather than a claim about policy text. Combined with per-project schema isolation enforced by Postgres grants, that is a concrete answer to a question most teams answer with an architecture diagram.',
       },
       {
         q: 'Can a tenant have nested teams or custom roles?',
-        a: 'The provisioned model is organizations, members with a role string, and invitations. Anything beyond that — nested groups, per-resource permissions — is schema you add and policies you write with set_rls, which takes arbitrary predicates including EXISTS lookups against a parent row.',
+        a: 'The provisioned model is organizations, members with a role string, and invitations. Anything beyond that (nested groups, per-resource permissions) is schema you add and policies you write with set_rls, which takes arbitrary predicates including EXISTS lookups against a parent row.',
       },
     ],
   },

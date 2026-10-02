@@ -1,23 +1,27 @@
-import { Metadata } from 'next'
-import { safeJsonLd } from '@/lib/security/safe-jsonld'
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { safeJsonLd } from '@/lib/security/safe-jsonld'
 import { SiteShell } from '@/components/site/SiteShell'
 import { CodeBlock } from '@/components/site/CodeBlock'
-import { USE_CASES, USE_CASE_LIST } from '../data'
 import {
-  Breadcrumb,
-  InlineArrow,
+  ButtonLink,
+  DataTable,
+  GlyphList,
+  HorizonClose,
+  JsonLd,
+  NextLinks,
+  Page,
   PageHero,
-  PrimaryButton,
-  SecondaryButton,
   Section,
-  SectionHeading,
-  Lead,
-  FaqList,
-  CtaSection,
-  ChipRow,
-  ChipLink,
+  SectionHead,
+  Steps,
+  withCode,
 } from '@/components/site/kit'
+import { Faq } from '@/components/site/Faq'
+import { Reveal } from '@/components/site/Reveal'
+import { StartButton } from '@/components/site/StartButton'
+import { HEADING, PANEL, TITLE } from '@/components/site/tokens'
+import { USE_CASES, USE_CASE_LIST } from '../data'
 
 const APP_URL = 'https://backenly.com'
 
@@ -25,9 +29,7 @@ export function generateStaticParams() {
   return USE_CASE_LIST.map((uc) => ({ slug: uc.slug }))
 }
 
-export async function generateMetadata(props: {
-  params: Promise<{ slug: string }>
-}): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params
   const uc = USE_CASES[params.slug]
   if (!uc) return { title: 'Not Found' }
@@ -45,6 +47,19 @@ export async function generateMetadata(props: {
     alternates: { canonical: `${APP_URL}/use-cases/${uc.slug}` },
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   A use case, read top to bottom as an argument:
+
+     who it is for          three facts under the hero
+     the situation          the problem beside what you would normally build
+     the mechanism          the sequence Backenly runs, with the session or
+                            code it produces pinned beside it
+     the outcome            one statement
+     the division of labour what Backenly does, what you own
+     the evidence           the named capabilities it is built on
+     the boundary           known limitations, given a section of their own
+───────────────────────────────────────────────────────────── */
 
 export default async function UseCaseSlugPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params
@@ -71,218 +86,195 @@ export default async function UseCaseSlugPage(props: { params: Promise<{ slug: s
     ],
   }
 
+  const profile = [
+    { label: 'Who this is for', value: uc.who },
+    { label: 'What you already have', value: uc.alreadyHave },
+    { label: 'What you need', value: uc.need },
+  ]
+
   return (
     <SiteShell>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(faqSchema) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbSchema) }}
-      />
-      <main className="relative z-20">
-        <Breadcrumb
-          items={[
+      <JsonLd json={safeJsonLd(faqSchema)} />
+      <JsonLd json={safeJsonLd(breadcrumbSchema)} />
+      <Page>
+        <PageHero
+          trail={[
             { label: 'Home', href: '/' },
-            { label: 'Use Cases', href: '/use-cases' },
+            { label: 'Use cases', href: '/use-cases' },
             { label: uc.label },
           ]}
-        />
-
-        <PageHero
-          eyebrow={uc.label}
           title={uc.headline}
-          subtitle={uc.subheadline}
+          lede={uc.subheadline}
           actions={
             <>
-              <PrimaryButton href="/auth/signup">
-                Start free
-                <InlineArrow />
-              </PrimaryButton>
-              <SecondaryButton href="/resources">Read the docs</SecondaryButton>
+              <StartButton />
+              <ButtonLink href="/resources" variant="secondary">
+                Read the docs
+              </ButtonLink>
             </>
           }
-          proof={[
-            { label: 'Who this is for', value: uc.who },
-            { label: 'What you already have', value: uc.alreadyHave },
-            { label: 'What you need', value: uc.need },
-          ]}
         />
 
-        {/* The situation: problem first, then the honest cost of the default path. */}
-        <Section width="prose" className="!pt-0">
-          <div className="flex flex-col gap-10">
-            <div>
-              <SectionHeading className="!text-xl mb-3">The problem</SectionHeading>
-              <Lead>{uc.problem}</Lead>
+        <Section flush aria-label="Who this is for">
+          <Reveal>
+            <dl className="grid gap-x-8 gap-y-8 md:grid-cols-3">
+              {profile.map((item) => (
+                <div key={item.label} className="min-w-0 border-t border-white/[0.10] pt-5">
+                  <dt className="text-[13px] text-zinc-500">{item.label}</dt>
+                  <dd className="mt-2 text-[17px] font-medium leading-[1.45] tracking-[-0.014em] text-white">
+                    {item.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Reveal>
+        </Section>
+
+        {/* The situation: the problem, beside the honest cost of the default path. */}
+        <Section aria-label="The situation">
+          <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
+            <Reveal>
+              <h2 className={`text-[26px] text-white md:text-[34px] ${TITLE}`}>The problem</h2>
+              <p className="mt-5 max-w-[60ch] text-[17px] leading-[1.75] tracking-[-0.01em] text-zinc-300 [text-wrap:pretty]">
+                {withCode(uc.problem)}
+              </p>
+            </Reveal>
+            <Reveal delay={0.06}>
+              <h2 className={`text-[26px] text-white md:text-[34px] ${TITLE}`}>What you would normally build</h2>
+              <p className="mt-5 max-w-[60ch] text-[17px] leading-[1.75] tracking-[-0.01em] text-zinc-400 [text-wrap:pretty]">
+                {withCode(uc.normallyBuild)}
+              </p>
+            </Reveal>
+          </div>
+        </Section>
+
+        {/* The mechanism: the substance of the page. A sequence, with the
+            session it produces pinned beside it while the steps scroll. */}
+        <Section aria-labelledby="what-backenly-does">
+          <Reveal>
+            <SectionHead id="what-backenly-does" title="What Backenly does" />
+          </Reveal>
+          <div
+            className={`mt-12 grid gap-12 ${uc.code ? 'lg:grid-cols-[minmax(0,6fr)_minmax(0,6fr)] lg:gap-16' : ''}`}
+          >
+            <Reveal>
+              <Steps steps={uc.workflow} />
+            </Reveal>
+            {uc.code && (
+              <Reveal delay={0.08} className="lg:sticky lg:top-28 lg:self-start">
+                <CodeBlock code={uc.code.code} label={uc.code.label} language={uc.code.language} />
+              </Reveal>
+            )}
+          </div>
+        </Section>
+
+        {/* The outcome, as one statement under a lit edge. */}
+        <Section aria-labelledby="end-up-with">
+          <Reveal className="relative border-t border-white/[0.10] pt-12">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -top-px left-0 h-px w-[40%] bg-[linear-gradient(to_right,rgba(196,181,253,0.7),transparent)]"
+            />
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-16">
+              <h2 id="end-up-with" className={`text-[22px] text-white md:text-[26px] ${TITLE}`}>
+                What you end up with
+              </h2>
+              <p className="max-w-[58ch] text-[20px] leading-[1.6] tracking-[-0.018em] text-zinc-200 [text-wrap:pretty] md:text-[24px] md:leading-[1.5]">
+                {withCode(uc.result)}
+              </p>
             </div>
-            <div>
-              <SectionHeading className="!text-xl mb-3">
-                What you would normally build
-              </SectionHeading>
-              <Lead>{uc.normallyBuild}</Lead>
+          </Reveal>
+        </Section>
+
+        {/* Division of labour: the question every one of these pages exists to answer. */}
+        <Section aria-labelledby="who-owns-what">
+          <Reveal>
+            <SectionHead id="who-owns-what" title="Who owns what" />
+          </Reveal>
+          <Reveal delay={0.06} className="mt-12 grid gap-3 md:grid-cols-2">
+            <div className={`p-6 md:p-8 ${PANEL}`}>
+              <h3 className={`text-[19px] text-white ${HEADING}`}>Backenly does</h3>
+              <GlyphList className="mt-6" glyph="check" items={uc.responsibility.platform.map(withCode)} />
             </div>
-          </div>
-        </Section>
-
-        {/* The workflow, the substance of the page. A sequence, not a card grid. */}
-        <Section width="prose">
-          <SectionHeading className="mb-8">What Backenly does</SectionHeading>
-          <ol className="relative flex flex-col gap-7 border-l border-white/10 pl-6">
-            {uc.workflow.map((step) => (
-              <li key={step.title} className="relative">
-                <span
-                  aria-hidden
-                  className="absolute -left-[27px] top-1.5 h-2 w-2 rounded-full border border-white/25 bg-black"
-                />
-                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-neutral-500">
-                  {step.label}
-                </p>
-                <p className="mt-1 text-[15px] font-medium text-white">{step.title}</p>
-                <p className="mt-1.5 text-[15px] font-light leading-7 text-neutral-400">
-                  {step.body}
-                </p>
-              </li>
-            ))}
-          </ol>
-
-          {uc.code && (
-            <div className="mt-8">
-              <CodeBlock code={uc.code.code} label={uc.code.label} language={uc.code.language} />
+            <div className={`p-6 md:p-8 ${PANEL}`}>
+              <h3 className={`text-[19px] text-white ${HEADING}`}>You own</h3>
+              <GlyphList className="mt-6" glyph="dash" items={uc.responsibility.you.map(withCode)} />
             </div>
-          )}
+          </Reveal>
+        </Section>
 
-          <div className="mt-10">
-            <SectionHeading className="!text-xl mb-3">What you end up with</SectionHeading>
-            <Lead>{uc.result}</Lead>
+        {/* Named, checkable capabilities rather than adjectives. */}
+        <Section aria-labelledby="built-on">
+          <Reveal>
+            <SectionHead
+              id="built-on"
+              title="What this is built on"
+              lede="The tools, routes and modules involved, by name, so you can go and check each one."
+            />
+          </Reveal>
+          <Reveal delay={0.06} className="mt-12">
+            <DataTable
+              caption={`Capabilities used in ${uc.label}`}
+              columns={['Capability', 'What it does here']}
+              codeFirstColumn
+              rows={uc.capabilities.map((cap) => [cap.name, withCode(cap.detail)])}
+            />
+          </Reveal>
+        </Section>
+
+        {/* Limitations get a real section, not a footnote. */}
+        <Section aria-labelledby="limitations">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-16">
+            <Reveal>
+              <SectionHead
+                id="limitations"
+                title="Known limitations"
+                lede="Where this workflow stops. If one of these is load-bearing for you, it should decide it."
+              />
+            </Reveal>
+            <Reveal delay={0.06}>
+              <GlyphList glyph="dash" items={uc.limitations.map(withCode)} className="lg:pt-3" />
+            </Reveal>
           </div>
         </Section>
 
-        {/* Division of labour, the question every one of these pages exists to answer. */}
-        <Section width="prose">
-          <SectionHeading className="mb-8">Who owns what</SectionHeading>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {(
-              [
-                {
-                  title: 'Backenly does',
-                  items: uc.responsibility.platform,
-                  dot: 'bg-violet-300/70',
-                },
-                { title: 'You own', items: uc.responsibility.you, dot: 'bg-zinc-500' },
-              ] as const
-            ).map((col) => (
-              <div
-                key={col.title}
-                className="rounded-lg border border-white/10 bg-white/[0.02] p-5"
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-neutral-400">
-                  {col.title}
-                </p>
-                <ul className="mt-4 flex flex-col gap-3">
-                  {col.items.map((item) => (
-                    <li
-                      key={item}
-                      className="flex gap-2.5 text-sm font-light leading-6 text-neutral-300"
-                    >
-                      <span
-                        aria-hidden
-                        className={`mt-2 h-1 w-1 shrink-0 rounded-full ${col.dot}`}
-                      />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+        <Section aria-labelledby="use-case-faq">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-16">
+            <Reveal className="lg:sticky lg:top-28 lg:self-start">
+              <SectionHead id="use-case-faq" title="Common questions" />
+            </Reveal>
+            <Reveal delay={0.06}>
+              <Faq items={uc.faq} />
+            </Reveal>
           </div>
         </Section>
 
-        {/*
-          What this is built on: named, checkable capabilities rather than
-          adjectives. Deliberately at `prose`, matching every other section on
-          the page: at `wide-prose` this two-column table ran ~400px wider than
-          the prose above and below it, and the jump read as a broken column
-          rather than as emphasis.
-        */}
-        <Section aria-label="Capabilities used" width="prose">
-          <SectionHeading className="mb-8">What this is built on</SectionHeading>
-          <div className="-mx-1 overflow-x-auto rounded-lg border border-white/10">
-            <table className="w-full min-w-[34rem] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/[0.03]">
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-neutral-400"
-                  >
-                    Capability
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-neutral-400"
-                  >
-                    What it does here
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {uc.capabilities.map((cap) => (
-                  <tr key={cap.name} className="border-b border-white/[0.06] last:border-0">
-                    <td className="px-4 py-3 align-top font-mono text-[13px] leading-6 text-zinc-200">
-                      {cap.name}
-                    </td>
-                    <td className="px-4 py-3 align-top text-sm font-light leading-6 text-neutral-400">
-                      {cap.detail}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <Section aria-labelledby="other-workflows">
+          <Reveal>
+            <h2 id="other-workflows" className={`text-[22px] text-white md:text-[26px] ${TITLE}`}>
+              Other workflows
+            </h2>
+            <NextLinks
+              className="mt-8"
+              items={USE_CASE_LIST.filter((u) => u.slug !== uc.slug).map((u) => ({
+                href: `/use-cases/${u.slug}`,
+                meta: u.label,
+                title: u.headline,
+              }))}
+            />
+          </Reveal>
         </Section>
 
-        {/*
-          Limitations get a real section, not a footnote. A use-case page that
-          cannot say where it stops is a brochure.
-        */}
-        <Section width="prose">
-          <SectionHeading className="mb-6">Known limitations</SectionHeading>
-          <ul className="flex flex-col gap-3">
-            {uc.limitations.map((item) => (
-              <li
-                key={item}
-                className="flex gap-3 text-[15px] font-light leading-7 text-neutral-300"
-              >
-                <span aria-hidden className="mt-3 h-1 w-1 shrink-0 rounded-full bg-zinc-500" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-
-        <Section aria-label="Frequently asked questions" width="prose">
-          <SectionHeading className="mb-8">Common questions</SectionHeading>
-          <FaqList items={uc.faq} />
-        </Section>
-
-        <Section aria-label="Other use cases" className="!py-12">
-          <ChipRow label="Other workflows:">
-            {USE_CASE_LIST.filter((u) => u.slug !== uc.slug).map((u) => (
-              <ChipLink key={u.slug} href={`/use-cases/${u.slug}`}>
-                {u.label}
-              </ChipLink>
-            ))}
-          </ChipRow>
-        </Section>
-
-        <CtaSection
+        <HorizonClose
           title="Try it on one free project"
-          body="No credit card. Connect your agent over MCP and judge it by the verification evidence."
+          lede="No credit card. Connect your agent over MCP and judge it by the verification evidence."
         >
-          <PrimaryButton href="/auth/signup">Start free</PrimaryButton>
-        </CtaSection>
-      </main>
+          <StartButton />
+          <ButtonLink href="/resources/connect-your-coding-agent" variant="secondary">
+            Connect your agent
+          </ButtonLink>
+        </HorizonClose>
+      </Page>
     </SiteShell>
   )
 }

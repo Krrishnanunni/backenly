@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { registerSiteIcons } from '@/lib/icons/registry'
 import { BrandMark } from '@/components/site/BrandMark'
+import { LaunchBar } from '@/components/site/LaunchBar'
 import { SmoothScroll } from '@/components/site/SmoothScroll'
 import { useUserSession } from '@/lib/hooks/useUserSession'
 
@@ -39,8 +40,8 @@ export const ROUTES = {
    * Product Hunt.
    *
    * INTERIM AND DELIBERATE: this is Product Hunt's own home page, not a
-   * Backenly page. Founder's call, so the hero launch chip has somewhere
-   * valid to point while Backenly's upcoming page does not exist yet.
+   * Backenly page. Founder's call, so the launch bar above the navbar has
+   * somewhere valid to point while Backenly's upcoming page does not exist yet.
    * It is not a defect and does not block a release.
    *
    * Swap for Backenly's coming-soon URL once it exists
@@ -74,6 +75,13 @@ export const ROUTES = {
  * navbar and the mobile menu at once, without hunting through the JSX.
  */
 const SHOW_DISCORD = true
+
+/**
+ * One switch for the Product Hunt launch bar above the navbar (see
+ * components/site/LaunchBar.tsx). Flip to false to pull it from every
+ * marketing page at once.
+ */
+const SHOW_LAUNCH_BAR = true
 
 const NAV_LINKS = [
   { label: 'Product', href: '/#capabilities', activePath: '/' },
@@ -113,7 +121,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
     <div>
       <SmoothScroll />
       <div
-        className="bg-[#08090a] text-white antialiased relative min-h-screen overflow-x-hidden selection:bg-violet-500/30 selection:text-white font-light flex flex-col items-center"
+        // overflow-x-CLIP, not hidden. `hidden` makes this wrapper a scroll
+        // container (overflow-y computes to auto), and a sticky descendant
+        // then sticks to a box that never scrolls, i.e. never sticks at all:
+        // every `sticky` on the marketing pages was silently inert. `clip`
+        // crops the same overflow without creating a scroll container.
+        className="bg-[#08090a] text-white antialiased relative min-h-screen overflow-x-clip selection:bg-violet-500/30 selection:text-white font-light flex flex-col items-center"
         style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
       >
         <div className="relative w-full min-h-screen flex flex-col z-20">
@@ -130,6 +143,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           >
             Skip to content
           </a>
+          {SHOW_LAUNCH_BAR && <LaunchBar href={ROUTES.productHunt} />}
           <NavBar />
           {children}
           <SiteFooter />

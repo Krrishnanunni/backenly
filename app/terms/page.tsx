@@ -1,7 +1,6 @@
-import Link from 'next/link'
-import { Mail } from 'lucide-react'
 import { SiteShell } from '@/components/site/SiteShell'
-import { Card, PageHero, Section, SecondaryButton, Tag } from '@/components/site/kit'
+import { Page, PageHero } from '@/components/site/kit'
+import { LEGAL_TEXT, LegalBody, LegalFooter, LegalList, LegalSection as Clause } from '@/components/site/legal'
 
 type LegalSection = {
   id: string
@@ -129,99 +128,42 @@ const sections: LegalSection[] = [
   },
 ]
 
+/**
+ * Anchors stay `#section-N`: they are what external links to a clause already
+ * point at. The words above are the Terms as published; only the setting moved.
+ */
 export default function TermsPage() {
   return (
     <SiteShell>
-      <main className="relative z-20">
+      <Page>
         <PageHero
-          eyebrow="Legal"
+          size="compact"
+          trail={[{ label: 'Home', href: '/' }, { label: 'Terms of Service' }]}
           title="Terms of Service"
-          subtitle="Please read these terms carefully before using Backenly. By using the service, you agree to be bound by them."
-          proof={[
-            { label: 'Last updated', value: 'September 28, 2026' },
-            { label: 'Scope', value: 'Backenly platform' },
-            { label: 'Contact', value: 'support@backenly.com' },
-          ]}
-        />
+          lede="Please read these terms carefully before using Backenly. By using the service, you agree to be bound by them."
+        >
+          <p className="mt-7 text-[14px] text-zinc-500">
+            Last updated <span className="text-zinc-300">September 28, 2026</span>
+          </p>
+        </PageHero>
 
-        <Section width="wide-prose" className="!pt-0">
-          <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
-            <aside className="lg:sticky lg:top-8 lg:self-start">
-              <Card>
-                <Tag>Contents</Tag>
-                <div className="mt-5 grid gap-2">
-                  {sections.map((section) => (
-                    <a
-                      key={section.id}
-                      href={`#section-${section.id}`}
-                      className="flex gap-3 rounded-md px-2 py-2 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"
-                    >
-                      <span className="w-5 shrink-0 text-zinc-600">{section.id}.</span>
-                      <span>{section.title}</span>
-                    </a>
-                  ))}
-                </div>
-              </Card>
-            </aside>
+        <LegalBody numbered toc={sections.map((section) => ({ id: `section-${section.id}`, label: section.title }))}>
+          {sections.map((section) => (
+            <Clause key={section.id} id={`section-${section.id}`} number={Number(section.id)} title={section.title}>
+              <p className={LEGAL_TEXT}>{section.content}</p>
+              {section.list && <LegalList items={section.list} />}
+              {section.extra && <p className={LEGAL_TEXT}>{section.extra}</p>}
+            </Clause>
+          ))}
 
-            <div className="space-y-5">
-              {sections.map((section) => (
-                <LegalBlock key={section.id} section={section} />
-              ))}
-            </div>
-          </div>
-        </Section>
-
-        <Section width="default" className="!pt-0">
-          <Card className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-white">Questions about these terms?</h2>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-                We reply to legal and account questions at support@backenly.com.
-              </p>
-            </div>
-            <SecondaryButton href="mailto:support@backenly.com" external>
-              <Mail className="h-4 w-4" />
-              Contact support
-            </SecondaryButton>
-          </Card>
-          <div className="mt-6 flex flex-wrap gap-4 text-sm text-zinc-500">
-            <Link href="/privacy" className="hover:text-white">
-              Privacy Policy
-            </Link>
-            <Link href="/refund-policy" className="hover:text-white">
-              Refund Policy
-            </Link>
-          </div>
-        </Section>
-      </main>
+          <LegalFooter
+            current="terms"
+            title="Questions about these terms?"
+            body="We reply to legal and account questions at support@backenly.com."
+            email="support@backenly.com"
+          />
+        </LegalBody>
+      </Page>
     </SiteShell>
-  )
-}
-
-function LegalBlock({ section }: { section: LegalSection }) {
-  return (
-    <section id={`section-${section.id}`} className="rounded-lg border border-white/10 bg-white/[0.035] p-6">
-      <div className="flex items-start gap-4">
-        <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/30 text-xs font-semibold text-zinc-400">
-          {section.id}
-        </span>
-        <div>
-          <h2 className="text-lg font-semibold text-white">{section.title}</h2>
-          <p className="mt-3 text-sm leading-7 text-zinc-400">{section.content}</p>
-          {section.list && (
-            <ul className="mt-4 space-y-2">
-              {section.list.map((item) => (
-                <li key={item} className="flex gap-3 text-sm leading-6 text-zinc-400">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-300" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {section.extra && <p className="mt-4 text-sm leading-7 text-zinc-500">{section.extra}</p>}
-        </div>
-      </div>
-    </section>
   )
 }

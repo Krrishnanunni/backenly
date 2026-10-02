@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import { ArrowRight, BookOpen, Calendar, GitBranch, Plug, Plus, ShieldCheck, Terminal, Users } from 'lucide-react'
 import { Icon } from '@iconify/react'
-import { AutonomyFilm } from '@/components/site/AutonomyFilm'
 import {
   AuthDiagram,
   DatabaseDiagram,
@@ -37,11 +36,12 @@ import { useUserSession } from '@/lib/hooks/useUserSession'
 
      Hero            what it is, and the real product on film
      Agent strip     it plugs into the agent you already use
-     Change path     THE centrepiece: one change, planned, gated, applied,
-                     verified, recorded (components/landing/ChangePath)
+     Change path     THE centrepiece: one day and night on production, with
+                     a key, a receipt and three time-keyed explanations
+                     (components/landing/ChangePath). It also carries what
+                     the separate autonomy section used to, which is gone.
      Primitives      what you get, as a bento with one lead cell
      Connect         how you point your agent at it, per host
-     Autonomy        what happens when nobody is at the keyboard
      FAQ             the trust questions, answered plainly
      Closing         one ask
 
@@ -129,7 +129,6 @@ export default function LandingPage() {
         <ChangeSection />
         <PrimitivesSection />
         <ConnectSection />
-        <AutonomySection />
         <FaqSection />
         <ClosingSection />
       </main>
@@ -156,61 +155,9 @@ function Grain() {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Launch chip  ·  TEMPORARY, comes out after the Product Hunt launch
-
-   Flip SHOW_LAUNCH_PILL to false to pull it in one edit. To remove it for
-   good, delete this block, its call site in `Hero`, `ROUTES.productHunt`, and
-   the `.launch-sweep` rules in app/globals.css.
-
-   Founder decisions, do not "improve" them back:
-   - No Product Hunt brand mark and no hard date in the chip (rejected).
-   - No dismissible site-wide bar above the navbar (#138, rejected). The
-     announcement is this small chip in the hero.
-   - The badge is white on black, the page's primary surface recipe. Never
-     Product Hunt orange, which would be a third colour.
-   - The sweep is a CSS keyframe, not framer-motion: nested in the hero's
-     variant tree, a repeating motion.span froze after one pass.
-   - It is not a second signup CTA; it is an external link.
-───────────────────────────────────────────────────────────── */
-
-const SHOW_LAUNCH_PILL = true
-
-function LaunchPill({ quiet }: { quiet: boolean }) {
-  return (
-    <motion.div variants={heroItem} transition={{ duration: quiet ? 0 : 0.9, ease: EASE_OUT }} className="mb-8">
-      <Link
-        href={ROUTES.productHunt}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Launching soon on Product Hunt. Opens in a new tab."
-        className="group relative inline-flex items-stretch overflow-hidden rounded-lg border border-white/[0.10] bg-white/[0.03] text-[14px] font-medium text-zinc-300 shadow-[0_16px_50px_-24px_rgba(139,92,246,0.55)] backdrop-blur-sm transition-[border-color,background-color,color,box-shadow] duration-200 hover:border-violet-400/30 hover:bg-white/[0.06] hover:text-white hover:shadow-[0_18px_60px_-22px_rgba(139,92,246,0.8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#08090a]"
-      >
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px overflow-hidden">
-          <span className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-300/70 to-transparent" />
-          <span className="launch-sweep absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-violet-100 to-transparent" />
-        </span>
-        <span className="flex items-center gap-2.5 py-2 pl-2.5 pr-3.5">
-          <span className="rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-black">
-            New
-          </span>
-          <span className="tracking-[-0.006em]">Launching soon on Product Hunt</span>
-        </span>
-        <span aria-hidden className="w-px shrink-0 bg-white/[0.10] transition-colors duration-200 group-hover:bg-white/25" />
-        <span className="flex items-center px-2.5">
-          <ArrowRight
-            aria-hidden
-            className="h-3.5 w-3.5 shrink-0 text-zinc-500 transition-[color,transform] duration-200 group-hover:translate-x-0.5 group-hover:text-zinc-300"
-          />
-        </span>
-      </Link>
-    </motion.div>
-  )
-}
-
-/* ─────────────────────────────────────────────────────────────
    Hero
 
-   Left-aligned, stacked: chip, headline, subline, actions, then the film. The
+   Left-aligned, stacked: headline, subline, actions, then the film. The
    old layout pushed the one CTA to the far right edge, where it read as
    belonging to nothing. Actions now sit directly under the sentence they act
    on, the way Linear and Vercel set theirs.
@@ -246,8 +193,6 @@ function Hero() {
       />
 
       <div className={CONTAINER}>
-        {SHOW_LAUNCH_PILL && <LaunchPill quiet={quiet} />}
-
         <motion.h1
           variants={heroItem}
           transition={{ duration: quiet ? 0 : 0.95, ease: EASE_OUT }}
@@ -353,8 +298,8 @@ function ChangeSection() {
       <div className={CONTAINER}>
         <Reveal>
           <SectionHead
-            title="Your agent builds it by day. Backenly keeps it healthy by night."
-            body="Every change your agent makes is planned, verified, and reversible, and anything destructive waits for you. When something degrades at 3am, Backenly fixes it, proves the fix, and tells you in the morning."
+            title="Every change tested and reversible, even at 3am"
+            body="One day on production. Your agent ships a feature and asks for something risky, then at 3am, with nobody online, Backenly fixes a slow query on its own."
           />
         </Reveal>
         <Reveal className="mt-[48px] md:mt-[64px]">
@@ -617,73 +562,6 @@ function ConnectSection() {
         </Reveal>
         <Reveal delay={0.08} className="lg:pt-2">
           <ConnectTabs />
-        </Reveal>
-      </div>
-    </section>
-  )
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Autonomy
-
-   The one centred section before the close, and the one place the ground
-   changes: a night band, because the claim is about what happens at 03:00.
-   The instrument is drawn, not filmed (components/site/AutonomyFilm), so it
-   cannot go stale behind the product.
-───────────────────────────────────────────────────────────── */
-
-const autonomyFacts = [
-  {
-    figure: 'Every minute',
-    body: 'The loop checks every project on every plan, Free included.',
-  },
-  {
-    figure: 'No model calls',
-    body: 'Healing is deterministic, so it never spends your AI credits.',
-  },
-  {
-    figure: 'Snapshot first',
-    body: 'Only reversible fixes apply on their own. Anything risky becomes a proposal for you.',
-  },
-]
-
-function AutonomySection() {
-  return (
-    // The band's lit top edge is a boundary of its own, so it needs clear
-    // ground above it: margin, then the section's usual top padding inside.
-    <section className={`${SECTION} mt-[88px] overflow-hidden md:mt-[144px]`}>
-      {/* Night: a deep violet dusk falling from the top edge. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[900px] bg-[radial-gradient(60%_60%_at_50%_0%,rgba(76,29,149,0.28),rgba(8,9,10,0))]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,transparent,rgba(196,181,253,0.35),transparent)]"
-      />
-
-      <div className={`${CONTAINER} relative`}>
-        <Reveal className="mx-auto max-w-[760px] text-center">
-          <h2 className={`text-[34px] text-white [text-wrap:balance] md:text-[56px] ${TITLE}`}>
-            It fixes problems while you sleep
-          </h2>
-          <p className={`mx-auto mt-5 max-w-[56ch] text-[17px] text-zinc-400 [text-wrap:pretty] md:text-[18px] ${LEDE}`}>
-            A resident loop watches every project: detect, fix safely, verify, and write down
-            what it did. No prompt, no session, nobody at the keyboard.
-          </p>
-        </Reveal>
-
-        <Reveal delay={0.06} className="mx-auto mt-[48px] w-full max-w-[1040px] md:mt-[64px]">
-          <AutonomyFilm />
-        </Reveal>
-
-        <Reveal className="mx-auto mt-[56px] grid max-w-[1040px] gap-px overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.07] md:grid-cols-3">
-          {autonomyFacts.map((fact) => (
-            <div key={fact.figure} className="bg-[#0a0b0d] p-6 md:p-8">
-              <p className="text-[24px] font-semibold tracking-[-0.03em] text-white md:text-[28px]">{fact.figure}</p>
-              <p className="mt-2 text-[15px] leading-[1.65] text-zinc-400">{fact.body}</p>
-            </div>
-          ))}
         </Reveal>
       </div>
     </section>

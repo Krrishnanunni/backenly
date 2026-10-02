@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
@@ -11,19 +10,21 @@ import {
   KeyRound,
   Layers,
   LifeBuoy,
-  Mail,
   Minus,
   Radio,
   RefreshCcw,
-  Rocket,
   ShieldCheck,
-  Sparkles,
   Terminal,
   UploadCloud,
   Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { ROUTES, SiteShell } from '@/components/site/SiteShell'
+import { HorizonClose, Page, PageHero, Section, SectionHead } from '@/components/site/kit'
+import { Faq } from '@/components/site/Faq'
+import { Reveal } from '@/components/site/Reveal'
+import { StartButton } from '@/components/site/StartButton'
+import { HEADING, INK, PANEL, PRIMARY_CTA, SECONDARY_CTA, TITLE } from '@/components/site/tokens'
 import { useUserSession } from '@/lib/hooks/useUserSession'
 import {
   PRO_INCLUDED,
@@ -32,12 +33,26 @@ import {
   type OverageAxis,
 } from '@/lib/pricing/catalog'
 
+/* ─────────────────────────────────────────────────────────────
+   /pricing, rebuilt 2026-09-30 on the landing page's system.
+
+   Unchanged on purpose: every number, every plan row, the catalog-driven
+   rates (a rate only appears once lib/pricing/catalog.ts publishes it), the
+   startup offer above the plan cards and its single action (founder
+   decisions, see #178), the portability line, and the FAQ text.
+
+   What moved: the plans stand on the lit stage under the hero; Pro carries the
+   page's one light instead of a "Most popular" badge nobody can verify; a
+   monthly / yearly switch shows the real annual price; the comparison table's
+   plan header sticks under the navbar so a long table never loses its columns.
+───────────────────────────────────────────────────────────── */
+
+type Cadence = 'monthly' | 'yearly'
+
 type Plan = {
   name: string
   price: string
   cadence: string
-  /** The annual price, where the plan has one. */
-  annual?: string
   summary: string
   bestFor: string
   cta: string
@@ -62,25 +77,24 @@ const plans: Plan[] = [
       { label: 'AI credits', value: '200 monthly' },
     ],
     features: [
-      'Self-healing every minute, repairing everything it safely can: never capped, never metered',
-      'PostgreSQL, auth, storage, realtime, and REST APIs: the full runtime, not a trial',
-      'Build over MCP with your own coding agent: the typed tools are never metered as AI',
+      'Self-healing every minute, repairing everything it safely can, never capped and never metered',
+      'PostgreSQL, auth, storage, realtime and REST APIs: the full runtime, not a trial',
+      'Build over MCP with your own coding agent; the typed tools are never metered as AI',
     ],
   },
   {
     name: 'Pro',
     price: '$25',
     cadence: 'per month',
-    annual: '$240 billed yearly: $20 a month',
     summary: 'Production capacity, plus a backend that heals itself every minute.',
-    bestFor: 'Founders with real users, agencies, and small teams',
+    bestFor: 'Founders with real users, agencies and small teams',
     cta: 'Get Pro',
     highlighted: true,
     limits: [
       { label: 'Users', value: `${PRO_INCLUDED.mau.toLocaleString('en-US')} MAU` },
       { label: 'Autonomy', value: 'Every minute, full dial' },
       { label: 'AI credits', value: '3,000 monthly' },
-      { label: 'Database + storage', value: `${PRO_INCLUDED.dbGib} GB Postgres · ${PRO_INCLUDED.fileGib} GB files` },
+      { label: 'Database and files', value: `${PRO_INCLUDED.dbGib}\u00a0GB Postgres, ${PRO_INCLUDED.fileGib}\u00a0GB files` },
     ],
     features: [
       'The same uncapped self-healing loop as Free: you pay for capacity, never for uptime',
@@ -92,7 +106,7 @@ const plans: Plan[] = [
     name: 'Enterprise',
     price: 'Custom',
     cadence: 'annual agreement',
-    summary: 'Run your company’s backend with custom limits, isolation, and an SLA.',
+    summary: 'Run your company’s backend with custom limits, isolation and an SLA.',
     bestFor: 'Companies replacing a backend hire or agency retainer',
     cta: 'Talk to us',
     ctaHref: `mailto:support@backenly.com?subject=Backenly%20Enterprise`,
@@ -110,15 +124,19 @@ const plans: Plan[] = [
   },
 ]
 
+/** Pro billed yearly: $240 a year, which is $20 a month. */
+const PRO_YEARLY_TOTAL = '$240'
+const PRO_YEARLY_MONTHLY = '$20'
+
 const included: { icon: LucideIcon; label: string; body: string }[] = [
-  { icon: Database, label: 'PostgreSQL', body: 'Project-scoped schemas, relations, indexes, and real data.' },
+  { icon: Database, label: 'PostgreSQL', body: 'Project-scoped schemas, relations, indexes and real data.' },
   { icon: KeyRound, label: 'Auth', body: 'JWT sessions and per-project end-user tables.' },
-  { icon: UploadCloud, label: 'Storage', body: 'Buckets, uploads, metadata, and signed URLs.' },
-  { icon: Radio, label: 'Realtime', body: 'SSE subscriptions, presence, and broadcast channels.' },
-  { icon: Zap, label: 'Triggers', body: 'Event workflows for inserts, updates, schedules, and integrations. On Pro and Enterprise.' },
+  { icon: UploadCloud, label: 'Storage', body: 'Buckets, uploads, metadata and signed URLs.' },
+  { icon: Radio, label: 'Realtime', body: 'SSE subscriptions, presence and broadcast channels.' },
+  { icon: Zap, label: 'Triggers', body: 'Event workflows for inserts, updates, schedules and integrations. On Pro and Enterprise.' },
   { icon: RefreshCcw, label: 'Rollback', body: 'Deployment history and restore paths when changes need reversing.' },
-  { icon: Bot, label: 'Autonomy', body: 'Watches your live backend every minute and repairs what is safe to repair. Included on every plan.' },
-  { icon: Terminal, label: 'Bring your own agent', body: 'Drive the backend from Claude Code or Cursor over MCP. Typed tools carry no AI charge: your agent, your tokens.' },
+  { icon: Bot, label: 'Autonomy', body: 'Watches your live backend every minute and repairs what is safe to repair. On every plan.' },
+  { icon: Terminal, label: 'Bring your own agent', body: 'Drive the backend from Claude Code or Cursor over MCP. Typed tools carry no AI charge.' },
 ]
 
 /**
@@ -176,8 +194,8 @@ function comparisonGroups(published: boolean): MatrixGroup[] {
       icon: UploadCloud,
       title: 'Storage',
       rows: [
-        { label: 'File storage', cells: ['1 GB', metered('file_bytes'), 'Custom'] },
-        { label: 'Egress', cells: ['5 GB', metered('egress_bytes'), 'Custom'] },
+        { label: 'File storage', cells: ['1\u00a0GB', metered('file_bytes'), 'Custom'] },
+        { label: 'Egress', cells: ['5\u00a0GB', metered('egress_bytes'), 'Custom'] },
       ],
     },
     {
@@ -268,7 +286,7 @@ const startupApplyHref = `mailto:${ROUTES.supportEmail}?subject=${encodeURICompo
 const startupSources = ['Supabase', 'Appwrite', 'Firebase', 'Self-hosted', 'Starting fresh']
 
 const startupPass = [
-  `${PRO_INCLUDED.mau.toLocaleString('en-US')} MAU, ${PRO_INCLUDED.dbGib} GB Postgres, ${PRO_INCLUDED.fileGib} GB files`,
+  `${PRO_INCLUDED.mau.toLocaleString('en-US')}\u00a0MAU, ${PRO_INCLUDED.dbGib}\u00a0GB Postgres, ${PRO_INCLUDED.fileGib}\u00a0GB files`,
   'Unlimited projects and API requests, 5 team seats',
   '3,000 AI credits every month',
   'Self-healing every minute, never metered',
@@ -296,19 +314,19 @@ const faqs = [
   },
   {
     q: 'Does driving the backend from my coding agent cost credits?',
-    a: 'Almost never, it depends which tool your agent calls. The typed MCP tools (create_table, add_column, set_rls, generate_types, run_query and the rest) compile straight to SQL with no model call, so they are free on every plan: your agent supplies the intelligence and you pay your own provider. The exception is the natural-language tools: backend_chat and generate_function: where Backenly runs its own model on your behalf, and those draw credits: you are billed the tokens the call actually burned, nothing more. Point your agent at the typed tools and the AI meter stays at zero.',
+    a: 'Almost never; it depends which tool your agent calls. The typed MCP tools (create_table, add_column, set_rls, generate_types, run_query and the rest) compile straight to SQL with no model call, so they are free on every plan: your agent supplies the intelligence and you pay your own provider. The exception is the natural-language tools, backend_chat and generate_function, where Backenly runs its own model on your behalf. Those draw credits, and you are billed the tokens the call actually burned, nothing more. Point your agent at the typed tools and the AI meter stays at zero.',
   },
   {
     q: 'Does autonomy spend my credits?',
-    a: 'Never. Detection and repair are deterministic: probes find drift, and each finding maps to a typed repair that compiles to SQL: no model in the repair path, so there is nothing to bill you for. When the loop cannot fix something and escalates it to you, a model may write up the diagnosis you read; that pass is on us, never your credits. Every plan gets the identical loop: checks every minute, repairs everything it safely can, with no per-window cap and no monthly limit, Free included. We do not meter healing: a backend that stops repairing itself once you hit a quota is the exact failure we built this to remove. Plans differ on capacity: projects, users, storage, AI credits, never on whether your backend is allowed to stay healthy.',
+    a: 'Never. Detection and repair are deterministic: probes find drift, and each finding maps to a typed repair that compiles to SQL, with no model in the repair path, so there is nothing to bill you for. When the loop cannot fix something and escalates it to you, a model may write up the diagnosis you read; that pass is on us, never your credits. Every plan gets the identical loop: checks every minute, repairs everything it safely can, with no per-window cap and no monthly limit, Free included. We do not meter healing: a backend that stops repairing itself once you hit a quota is the exact failure we built this to remove. Plans differ on capacity (projects, users, storage, AI credits), never on whether your backend is allowed to stay healthy.',
   },
   {
-    q: 'Are database, auth, storage, and realtime paid add-ons?',
-    a: 'No. Core backend primitives are included on every plan. Paid tiers increase capacity, support, rollback windows, and advanced controls.',
+    q: 'Are database, auth, storage and realtime paid add-ons?',
+    a: 'No. Core backend primitives are included on every plan. Paid tiers increase capacity, support, rollback windows and advanced controls.',
   },
   {
     q: 'Am I locked in? Can I get my data out?',
-    a: 'Your backend is standard PostgreSQL, and it stays yours. Every plan: including Free: gets a real read-only connection string (psql, TablePlus, any BI tool), an optional read-write one, and one-click pg_dump exports that restore on any Postgres: RDS, Neon, your own server. The platform is open source too, so a full self-hosted Backenly is always an exit path. Schema, data, constraints, indexes: everything leaves with you, anytime, with no exit fee.',
+    a: 'Your backend is standard PostgreSQL, and it stays yours. Every plan, Free included, gets a real read-only connection string (psql, TablePlus, any BI tool), an optional read-write one, and one-click pg_dump exports that restore on any Postgres: RDS, Neon, your own server. The platform is open source too, so a full self-hosted Backenly is always an exit path. Schema, data, constraints, indexes: everything leaves with you, anytime, with no exit fee.',
   },
   {
     q: 'Can I cancel anytime?',
@@ -326,6 +344,7 @@ export default function PricingPage() {
   const router = useRouter()
   const { isLoggedIn } = useUserSession()
   const published = usagePricingPublished()
+  const [cadence, setCadence] = useState<Cadence>('monthly')
 
   function handleCta() {
     if (!isLoggedIn) {
@@ -342,245 +361,238 @@ export default function PricingPage() {
 
   return (
     <SiteShell>
-      <main className="relative z-20">
-        <section className="px-6 pt-12 pb-16 md:pt-20 md:pb-20">
-          <div className="mx-auto max-w-7xl 2xl:max-w-[100rem]">
-            <div className="max-w-3xl">
-              {/* Matches kit's <Eyebrow>: no status dot. A green dot here put
-                  a second accent colour on the page, and the neutral-first
-                  palette keeps violet as the only one. */}
-              <p className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400">
-                Pricing
-              </p>
-              <h1 className="mt-6 max-w-3xl text-4xl font-semibold leading-[1.04] text-white md:text-5xl">
-                Start free, then scale the backend when usage proves it.
-              </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-400 md:text-[17px]">
-                Every plan includes the real Backenly runtime: PostgreSQL, generated REST APIs,
-                auth, storage, realtime, monitoring, and restore points, plus a self-healing
-                loop that never touches your credits. Prefer to run it yourself? Backenly is
-                open source under Apache-2.0 and free to self-host.
-              </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <ActionButton onClick={handleCta} variant="primary">
-                  Start free
-                  <ArrowRight className="h-4 w-4" />
-                </ActionButton>
-                <a
-                  href={`mailto:${ROUTES.supportEmail}?subject=Backenly%20pricing%20question`}
-                  className="inline-flex h-12 items-center justify-center rounded-md border border-white/12 bg-white/[0.03] px-5 text-sm font-semibold text-white transition hover:border-white/25 hover:bg-white/[0.06]"
-                >
-                  <Mail className="mr-2 h-4 w-4" />
-                  Contact support
-                </a>
-              </div>
-            </div>
+      <Page>
+        <PageHero
+          trail={[{ label: 'Home', href: '/' }, { label: 'Pricing' }]}
+          title="Start free, scale when usage proves it"
+          lede="Every plan runs the full backend and the same self-healing loop. Paid plans add capacity, never uptime."
+        />
 
-            <StartupProgram />
+        <Section flush aria-label="Plans">
+          <StartupProgram />
 
-            {/* 1 -> 3, never 2 + 1. At md:grid-cols-2 a three-tier table put Free and
-                Pro side by side and orphaned Enterprise on a second row at half
-                width, across 768-1279px (12" tablet portrait included). Three
-                columns at lg gives each card ~312px there, the same width it
-                has on a 1440px desktop. */}
-            <div className="mt-12 grid gap-5 lg:grid-cols-3">
-              {plans.map((plan) => (
-                <PlanCard key={plan.name} plan={plan} onCta={handleCta} />
-              ))}
-            </div>
-
-            {/* Portability guarantee: stated where buying decisions happen, not
-                buried in the FAQ. Flat by design (locked pricing-page language). */}
-            <div className="mt-6 rounded-lg border border-white/10 bg-white/[0.03] px-5 py-4">
-              <p className="text-sm leading-6 text-zinc-400">
-                <span className="font-semibold text-zinc-200">No lock-in, on every plan:</span>{' '}
-                your backend is standard PostgreSQL with a real connection string, connect psql or any
-                BI tool, and export a full <span className="font-mono text-[13px]">pg_dump</span> backup
-                that restores on any Postgres. And the platform itself is open source (Apache-2.0), so the
-                exit path includes running Backenly on your own servers. Your data leaves with you,
-                anytime, free plan included.
-              </p>
-            </div>
+          <div className="mt-[72px] flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between md:mt-[96px]">
+            <h2 className={`text-[26px] text-white md:text-[34px] ${TITLE}`}>Plans</h2>
+            <CadenceSwitch value={cadence} onChange={setCadence} />
           </div>
-        </section>
 
-        <section className="border-t border-white/[0.06] px-6 py-16 md:py-20">
-          <div className="mx-auto max-w-7xl 2xl:max-w-[100rem]">
-            <div className="grid gap-10 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-              <div>
-                <p className="text-sm font-semibold text-zinc-500">Included runtime</p>
-                <h2 className="mt-3 text-3xl font-semibold leading-tight text-white md:text-4xl">
-                  The backend foundation is not split into add-ons.
-                </h2>
-                <p className="mt-5 text-base leading-7 text-zinc-400">
-                  Paid plans increase capacity and support. The primitives you need to build a
-                  real backend are available from the first project.
-                </p>
-              </div>
+          {/* 1 -> 3, never 2 + 1: at two columns Enterprise orphans on a
+              second row at half width across tablet widths. */}
+          <div className="mt-8 grid gap-3 lg:grid-cols-3">
+            {plans.map((plan) => (
+              <PlanCard key={plan.name} plan={plan} cadence={cadence} onCta={handleCta} />
+            ))}
+          </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+          {/* Portability guarantee: stated where buying decisions happen, not
+              buried in the FAQ. Flat by design (locked pricing-page language). */}
+          <p className="mt-6 max-w-[96ch] text-[14px] leading-[1.7] text-zinc-400">
+            <span className="font-medium text-zinc-200">No lock-in, on every plan:</span>{' '}
+            your backend is standard PostgreSQL with a real connection string, connect psql or any BI
+            tool, and export a full <code className="font-mono text-[13px] text-zinc-300">pg_dump</code>{' '}
+            backup that restores on any Postgres. And the platform itself is open source (Apache-2.0),
+            so the exit path includes running Backenly on your own servers. Your data leaves with you,
+            anytime, free plan included.
+          </p>
+        </Section>
+
+        <Section aria-labelledby="included-title">
+          <div className="grid gap-12 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-16">
+            <Reveal>
+              <SectionHead
+                id="included-title"
+                title="The backend is not split into add-ons"
+                lede="Paid plans increase capacity and support. The primitives you need to build a real backend are there from the first project."
+              />
+            </Reveal>
+            <Reveal delay={0.06}>
+              <ul className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
                 {included.map((item) => {
-                  const Icon = item.icon
+                  const ItemIcon = item.icon
                   return (
-                    <div
-                      key={item.label}
-                      className="flex gap-4 rounded-lg border border-white/10 bg-white/[0.035] p-5"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/35">
-                        <Icon className="h-5 w-5 text-zinc-200" strokeWidth={1.75} />
+                    <li key={item.label} className="flex min-w-0 gap-4 border-t border-white/[0.08] pt-6">
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.09] bg-white/[0.03]">
+                        <ItemIcon aria-hidden className="h-4 w-4 text-zinc-300" strokeWidth={1.75} />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className={`text-[15px] text-white ${HEADING}`}>{item.label}</h3>
+                        <p className="mt-1.5 text-[14px] leading-[1.6] text-zinc-400">{item.body}</p>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-white">{item.label}</h3>
-                        <p className="mt-1 text-sm leading-6 text-zinc-400">{item.body}</p>
-                      </div>
-                    </div>
+                    </li>
                   )
                 })}
-              </div>
-            </div>
+              </ul>
+            </Reveal>
           </div>
-        </section>
+        </Section>
 
         <ComparisonSection published={published} onCta={handleCta} />
 
-        <section className="border-t border-white/[0.06] px-6 py-16 md:py-20">
-          <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[360px_minmax(0,1fr)]">
-            <div>
-              <p className="text-sm font-semibold text-zinc-500">FAQ</p>
-              <h2 className="mt-3 text-3xl font-semibold text-white">Straight answers before you choose.</h2>
-            </div>
-            <div className="divide-y divide-white/10 rounded-lg border border-white/10 bg-white/[0.03]">
-              {[...faqs, ...(published ? [usageFaq] : [])].map((item) => (
-                <div key={item.q} className="p-6">
-                  <h3 className="text-sm font-semibold text-white">{item.q}</h3>
-                  <p className="mt-3 text-sm leading-6 text-zinc-400">{item.a}</p>
-                </div>
-              ))}
-            </div>
+        <Section aria-labelledby="pricing-faq">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-16">
+            <Reveal className="lg:sticky lg:top-28 lg:self-start">
+              <SectionHead
+                id="pricing-faq"
+                title="Straight answers before you choose"
+                lede="Anything else, ask the people who run it."
+              />
+              <a
+                href={`mailto:${ROUTES.supportEmail}?subject=Backenly%20pricing%20question`}
+                className="group mt-7 inline-flex items-center gap-1.5 rounded-sm text-[15px] font-medium text-zinc-300 transition-colors duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              >
+                Email a pricing question
+                <ArrowRight aria-hidden className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </a>
+            </Reveal>
+            <Reveal delay={0.06}>
+              <Faq items={[...faqs, ...(published ? [usageFaq] : [])]} />
+            </Reveal>
           </div>
-        </section>
+        </Section>
 
-        <section className="border-t border-white/[0.06] px-6 py-16 md:py-24">
-          <div className="mx-auto max-w-4xl rounded-lg border border-white/10 bg-white/[0.04] p-8 text-center md:p-12">
-            <Sparkles className="mx-auto h-6 w-6 text-zinc-300" strokeWidth={1.75} />
-            <h2 className="mt-5 text-3xl font-semibold text-white md:text-4xl">
-              Build the first backend for free.
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-zinc-400">
-              No credit card. One live project. Upgrade only when your product needs more capacity.
-            </p>
-            <ActionButton onClick={handleCta} variant="primary" className="mt-7">
-              Start free
-              <ArrowRight className="h-4 w-4" />
-            </ActionButton>
-          </div>
-        </section>
-      </main>
+        <HorizonClose
+          title="Build the first backend for free"
+          lede="No credit card. One live project. Upgrade only when your product needs more capacity."
+        >
+          <StartButton />
+        </HorizonClose>
+      </Page>
     </SiteShell>
   )
 }
 
-function PlanCard({ plan, onCta }: { plan: Plan; onCta: () => void }) {
+/* ── Plans ───────────────────────────────────────────────────────────────── */
+
+function CadenceSwitch({ value, onChange }: { value: Cadence; onChange: (next: Cadence) => void }) {
+  const options: { id: Cadence; label: string; note?: string }[] = [
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'yearly', label: 'Yearly', note: 'Save 20%' },
+  ]
+  return (
+    <div role="radiogroup" aria-label="Billing period" className="inline-flex self-start rounded-lg border border-white/[0.10] bg-white/[0.03] p-1">
+      {options.map((option) => {
+        const selected = value === option.id
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(option.id)}
+            className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-md px-3.5 text-[14px] font-medium tracking-[-0.006em] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+              selected ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            {option.label}
+            {option.note && (
+              <span className={`text-[12px] font-medium ${selected ? 'text-violet-700' : 'text-violet-300'}`}>
+                {option.note}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PlanCard({ plan, cadence, onCta }: { plan: Plan; cadence: Cadence; onCta: () => void }) {
+  const yearlyPro = plan.name === 'Pro' && cadence === 'yearly'
+  const price = yearlyPro ? PRO_YEARLY_MONTHLY : plan.price
+  const cadenceLabel = yearlyPro ? 'per month' : plan.cadence
+  const priceNote =
+    plan.name === 'Pro'
+      ? yearlyPro
+        ? `${PRO_YEARLY_TOTAL} billed yearly`
+        : `or ${PRO_YEARLY_MONTHLY} a month, billed yearly`
+      : plan.name === 'Free'
+        ? 'No credit card'
+        : 'Custom limits, invoiced'
+
+  const ctaClass = `${plan.highlighted ? PRIMARY_CTA : SECONDARY_CTA} mt-8 w-full`
+
   return (
     <article
-      className={`relative flex h-full flex-col rounded-lg border p-6 ${
-        plan.highlighted
-          ? 'border-white/25 bg-white/[0.07] shadow-[0_34px_110px_-80px_rgba(255,255,255,0.65)]'
-          : 'border-white/10 bg-white/[0.035]'
+      className={`relative flex h-full flex-col overflow-hidden p-7 md:p-8 ${PANEL} ${
+        plan.highlighted ? 'border-violet-300/25 shadow-[0_40px_120px_-60px_rgba(139,92,246,0.6)]' : ''
       }`}
     >
       {plan.highlighted && (
-        <span className="absolute right-5 top-5 rounded-md border border-violet-400/25 bg-violet-500/[0.12] px-2.5 py-1 text-xs font-semibold text-violet-200">
-          Most popular
-        </span>
+        <>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,transparent,rgba(196,181,253,0.9),rgba(255,255,255,0.9),rgba(196,181,253,0.9),transparent)]"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_45%_at_50%_0%,rgba(139,92,246,0.14),transparent)]"
+          />
+        </>
       )}
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{plan.name}</p>
-      <div className="mt-5 flex items-end gap-2">
-        <span className="text-5xl font-semibold tracking-tight text-white">{plan.price}</span>
-        <span className="pb-1 text-sm text-zinc-500">{plan.cadence}</span>
+      <div className="relative flex h-full flex-col">
+        <h3 className={`text-[18px] text-white ${HEADING}`}>{plan.name}</h3>
+        <p className="mt-2 min-h-[48px] text-[14px] leading-[1.65] text-zinc-400">{plan.summary}</p>
+
+        <p className="mt-7 flex items-baseline gap-2">
+          <span className="text-[48px] font-semibold leading-none tracking-[-0.04em] text-white tabular-nums">{price}</span>
+          <span className="text-[14px] text-zinc-500">{cadenceLabel}</span>
+        </p>
+        <p className="mt-3 text-[13px] text-zinc-500" aria-live="polite">
+          {priceNote}
+        </p>
+
+        {plan.ctaHref ? (
+          <a href={plan.ctaHref} className={ctaClass}>
+            {plan.cta}
+          </a>
+        ) : (
+          <button type="button" onClick={onCta} className={ctaClass}>
+            {plan.cta}
+            <ArrowRight aria-hidden className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+          </button>
+        )}
+
+        <dl className="mt-8 border-t border-white/[0.08]">
+          {plan.limits.map((limit) => (
+            <div key={limit.label} className="flex items-baseline justify-between gap-4 border-b border-white/[0.06] py-3">
+              <dt className="text-[14px] text-zinc-500">{limit.label}</dt>
+              <dd className="text-right text-[14px] font-medium text-zinc-200">{limit.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <ul className="mt-7 flex flex-col gap-3.5">
+          {plan.features.map((feature) => (
+            <li key={feature} className="flex gap-3 text-[14px] leading-[1.6] text-zinc-300">
+              <Check aria-hidden className={`mt-[3px] h-4 w-4 shrink-0 ${plan.highlighted ? 'text-violet-300' : 'text-zinc-500'}`} strokeWidth={2} />
+              <span>{feature}</span>
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-auto pt-8 text-[13px] leading-[1.6] text-zinc-500">
+          Best for <span className="text-zinc-300">{plan.bestFor.charAt(0).toLowerCase() + plan.bestFor.slice(1)}</span>
+        </p>
       </div>
-      {plan.annual && <p className="mt-2 text-xs text-zinc-500">{plan.annual}</p>}
-      <p className="mt-4 min-h-[52px] text-sm leading-6 text-zinc-400">{plan.summary}</p>
-
-      <div className="mt-6 border-y border-white/10">
-        {plan.limits.map((limit) => (
-          <div key={limit.label} className="flex items-center justify-between gap-4 border-b border-white/10 py-3 last:border-b-0">
-            <span className="text-sm text-zinc-500">{limit.label}</span>
-            <span className="text-right text-sm font-medium text-zinc-200">{limit.value}</span>
-          </div>
-        ))}
-      </div>
-
-      {plan.ctaHref ? (
-        <a
-          href={plan.ctaHref}
-          className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-md border border-white/12 bg-white/[0.03] px-5 text-sm font-semibold text-white transition hover:border-white/25 hover:bg-white/[0.06]"
-        >
-          {plan.cta}
-        </a>
-      ) : (
-        <ActionButton onClick={onCta} variant={plan.highlighted ? 'primary' : 'secondary'} className="mt-6 w-full">
-          {plan.cta}
-        </ActionButton>
-      )}
-
-      <div className="mt-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Best for</p>
-        <p className="mt-2 text-sm text-zinc-300">{plan.bestFor}</p>
-      </div>
-
-      <ul className="mt-6 space-y-3">
-        {plan.features.map((feature) => (
-          <li key={feature} className="flex gap-3 text-sm leading-6 text-zinc-400">
-            <span aria-hidden className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-zinc-600" />
-            <span>{feature}</span>
-          </li>
-        ))}
-      </ul>
     </article>
   )
 }
 
-function ActionButton({
-  onClick,
-  variant,
-  className = '',
-  children,
-}: {
-  onClick: () => void
-  variant: 'primary' | 'secondary'
-  className?: string
-  children: ReactNode
-}) {
-  const style =
-    variant === 'primary'
-      ? 'bg-white text-black hover:bg-zinc-200'
-      : 'border border-white/12 bg-white/[0.03] text-white hover:border-white/25 hover:bg-white/[0.06]'
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex h-12 items-center justify-center gap-2 rounded-md px-5 text-sm font-semibold transition ${style} ${className}`}
-    >
-      {children}
-    </button>
-  )
-}
+/* ── Startups ────────────────────────────────────────────────────────────── */
 
 /**
  * The startup program, first thing under the hero and above the plan cards, so
  * a founder meets the offer before comparing tiers. The pitch and the pass sit
- * side by side at lg, the three steps run along the bottom, and the only colour
- * is violet (one edge-light and a faint top wash), matching the rest of the page.
+ * side by side at lg and the three steps run along the bottom. Violet is the
+ * only colour, as light: an edge along the top and a wash falling from it.
  */
 function StartupProgram() {
   return (
     <section
       id="startups"
       aria-labelledby="startups-title"
-      className="relative mt-12 scroll-mt-[92px] overflow-hidden rounded-xl border border-violet-400/20 bg-[#0a0a0d]"
+      className={`relative scroll-mt-[92px] overflow-hidden rounded-2xl border border-violet-300/[0.18] ${INK}`}
     >
       <span
         aria-hidden
@@ -588,52 +600,43 @@ function StartupProgram() {
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_25%_0%,rgba(139,92,246,0.13),transparent_70%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_25%_0%,rgba(139,92,246,0.12),transparent_70%)]"
       />
 
       <div className="relative grid gap-10 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:gap-14 lg:p-12">
-        <div>
-          <p className="inline-flex items-center gap-2 rounded-md border border-violet-400/25 bg-violet-500/[0.1] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200">
-            <Rocket className="h-3.5 w-3.5" strokeWidth={2} />
-            Backenly for Startups
-          </p>
+        <div className="min-w-0">
+          <p className="text-[14px] font-medium tracking-[-0.006em] text-violet-200">Backenly for Startups</p>
           <h2
             id="startups-title"
-            className="mt-6 max-w-xl text-3xl font-semibold leading-[1.1] text-white md:text-4xl md:leading-[1.08]"
+            className={`mt-4 max-w-[20ch] text-[30px] text-white [text-wrap:balance] md:text-[40px] ${TITLE}`}
           >
-            Startups get Pro{' '}
-            <span className="block bg-gradient-to-r from-violet-200 to-violet-400 bg-clip-text text-transparent">
-              free for {STARTUP_MONTHS} months.
-            </span>
+            Startups get Pro free for {STARTUP_MONTHS} months
           </h2>
-          <p className="mt-5 max-w-xl text-base leading-7 text-zinc-400">
-            Switching from Supabase, Appwrite, Firebase, or a backend you run yourself? Apply
-            once and your team gets the complete Pro plan at no cost: enough time to move a real
-            product over and judge Backenly on production traffic, not a demo.
+          <p className="mt-5 max-w-[58ch] text-[16px] leading-[1.7] text-zinc-400">
+            Switching from Supabase, Appwrite, Firebase, or a backend you run yourself? Apply once and
+            your team gets the complete Pro plan at no cost: enough time to move a real product over
+            and judge Backenly on production traffic, not a demo.
           </p>
 
-          <p className="mt-8 text-xs font-semibold uppercase tracking-wide text-zinc-500">Coming from</p>
+          <p className="mt-8 text-[13px] text-zinc-500">Coming from</p>
           <ul className="mt-3 flex flex-wrap gap-2">
             {startupSources.map((source) => (
               <li
                 key={source}
-                className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-zinc-300"
+                className="rounded-md border border-white/[0.10] bg-white/[0.03] px-3 py-1.5 text-[14px] text-zinc-300"
               >
                 {source}
               </li>
             ))}
           </ul>
 
-          <div className="mt-8 flex flex-col sm:flex-row">
-            <a
-              href={startupApplyHref}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-white px-5 text-sm font-semibold text-black transition hover:bg-zinc-200"
-            >
+          <div className="mt-9">
+            <a href={startupApplyHref} className={PRIMARY_CTA}>
               Apply for startup access
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight aria-hidden className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
             </a>
           </div>
-          <p className="mt-4 max-w-xl text-xs leading-5 text-zinc-500">
+          <p className="mt-4 max-w-[58ch] text-[13px] leading-[1.6] text-zinc-500">
             For early-stage teams, bootstrapped through Series A. One pass per company, and every
             application is read by the founding team.
           </p>
@@ -642,12 +645,13 @@ function StartupProgram() {
         <StartupPass />
       </div>
 
-      <ol className="relative grid divide-y divide-white/10 border-t border-white/10 md:grid-cols-3 md:divide-x md:divide-y-0">
+      {/* A real sequence, so it is numbered. */}
+      <ol className="relative grid divide-y divide-white/[0.08] border-t border-white/[0.08] md:grid-cols-3 md:divide-x md:divide-y-0">
         {startupSteps.map((step, i) => (
           <li key={step.title} className="p-6 sm:px-8 lg:px-12 lg:py-8">
-            <p className="font-mono text-xs text-violet-300">{String(i + 1).padStart(2, '0')}</p>
-            <h3 className="mt-3 text-sm font-semibold text-white">{step.title}</h3>
-            <p className="mt-1.5 text-sm leading-6 text-zinc-400">{step.body}</p>
+            <p className="text-[13px] tabular-nums text-violet-300">Step {i + 1}</p>
+            <h3 className={`mt-2 text-[16px] text-white ${HEADING}`}>{step.title}</h3>
+            <p className="mt-1.5 text-[14px] leading-[1.6] text-zinc-400">{step.body}</p>
           </li>
         ))}
       </ol>
@@ -658,17 +662,17 @@ function StartupProgram() {
 /** The offer itself, drawn as a pass: a price you keep, torn from what it is worth. */
 function StartupPass() {
   return (
-    <div className="relative self-start rounded-lg border border-white/[0.12] bg-black/50 shadow-[0_40px_120px_-60px_rgba(139,92,246,0.55)]">
+    <div className="relative self-start rounded-2xl border border-white/[0.12] bg-black/50 shadow-[0_40px_120px_-60px_rgba(139,92,246,0.55)]">
       <div className="p-6 sm:p-7">
         <div className="flex items-center justify-between gap-4">
-          <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-violet-300">Startup pass</p>
-          <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs font-medium text-zinc-300">
+          <p className="text-[14px] font-medium text-violet-200">Startup pass</p>
+          <span className="rounded-md border border-white/[0.10] bg-white/[0.04] px-2 py-1 text-[12px] font-medium text-zinc-300">
             Pro plan
           </span>
         </div>
         <div className="mt-6 flex items-end gap-3">
-          <span className="text-6xl font-semibold tracking-tight text-white">$0</span>
-          <div className="pb-1.5 text-sm">
+          <span className="text-[60px] font-semibold leading-none tracking-[-0.04em] text-white">$0</span>
+          <div className="pb-1 text-[14px]">
             <p className="text-zinc-500">
               <s className="decoration-zinc-500">
                 <span className="sr-only">Regular price </span>${PRO_MONTHLY_USD * STARTUP_MONTHS}
@@ -678,31 +682,30 @@ function StartupPass() {
             <p className="text-zinc-300">for your first {STARTUP_MONTHS} months</p>
           </div>
         </div>
-        <p className="mt-3 text-xs text-zinc-500">
+        <p className="mt-4 text-[13px] text-zinc-500">
           Normally ${PRO_MONTHLY_USD} a month. Nothing to pay while the pass runs.
         </p>
       </div>
 
       {/* The tear line: a dashed rule with a notch bitten out of each edge. The
-          notches are filled with the band's own background, so they read as
-          holes rather than dots. */}
+          notches are filled with the band's own ink, so they read as holes. */}
       <div aria-hidden className="relative h-px">
         <span className="absolute inset-x-6 top-0 border-t border-dashed border-white/15" />
-        <span className="absolute -left-[11px] -top-[11px] h-[22px] w-[22px] rounded-full border border-white/[0.12] bg-[#0a0a0d] [clip-path:inset(0_0_0_50%)]" />
-        <span className="absolute -right-[11px] -top-[11px] h-[22px] w-[22px] rounded-full border border-white/[0.12] bg-[#0a0a0d] [clip-path:inset(0_50%_0_0)]" />
+        <span className="absolute -left-[11px] -top-[11px] h-[22px] w-[22px] rounded-full border border-white/[0.12] bg-[#0a0b0d] [clip-path:inset(0_0_0_50%)]" />
+        <span className="absolute -right-[11px] -top-[11px] h-[22px] w-[22px] rounded-full border border-white/[0.12] bg-[#0a0b0d] [clip-path:inset(0_50%_0_0)]" />
       </div>
 
       <div className="p-6 sm:p-7">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Included on the pass</p>
-        <ul className="mt-4 space-y-3">
+        <p className="text-[13px] text-zinc-500">Included on the pass</p>
+        <ul className="mt-4 flex flex-col gap-3">
           {startupPass.map((item) => (
-            <li key={item} className="flex gap-3 text-sm leading-6 text-zinc-300">
-              <Check aria-hidden className="mt-1 h-4 w-4 shrink-0 text-violet-300" strokeWidth={2.25} />
+            <li key={item} className="flex gap-3 text-[14px] leading-[1.6] text-zinc-300">
+              <Check aria-hidden className="mt-[3px] h-4 w-4 shrink-0 text-violet-300" strokeWidth={2.25} />
               <span>{item}</span>
             </li>
           ))}
         </ul>
-        <p className="mt-6 border-t border-white/10 pt-5 text-xs leading-5 text-zinc-500">
+        <p className="mt-6 border-t border-white/[0.08] pt-5 text-[13px] leading-[1.6] text-zinc-500">
           When the {STARTUP_MONTHS} months end, you choose: stay on Pro at ${PRO_MONTHLY_USD} a month,
           or return to Free and keep your project. Nothing renews without your say.
         </p>
@@ -711,10 +714,16 @@ function StartupPass() {
   )
 }
 
+/* ── Comparison ──────────────────────────────────────────────────────────── */
+
 /**
  * The plan comparison, grouped the way people compare backends: each row states
  * what a plan includes and, for Pro's metered quantities, the rate past it.
- * On small screens every row becomes a card with the three plans side by side.
+ *
+ * The plan header sticks under the navbar (68px), so row 30 still says which
+ * column is which. That needs the table's ancestors to have no overflow set,
+ * which is why the frame is a border and not an overflow-hidden card. On small
+ * screens every row becomes a card with the three plans side by side.
  */
 function ComparisonSection({ published, onCta }: { published: boolean; onCta: () => void }) {
   const groups = comparisonGroups(published)
@@ -724,130 +733,137 @@ function ComparisonSection({ published, onCta }: { published: boolean; onCta: ()
     { name: 'Enterprise', price: 'Custom', cadence: 'annual', cta: 'Talk to us' },
   ]
   return (
-    <section className="border-t border-white/[0.06] px-6 py-16 md:py-20">
-      <div className="mx-auto max-w-6xl 2xl:max-w-7xl">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <p className="text-sm font-semibold text-zinc-500">Compare plans</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Capacity changes. Core runtime stays.</h2>
-          </div>
-          <p className="max-w-xl text-sm leading-6 text-zinc-500">
-            {published
+    <Section aria-labelledby="compare-title">
+      <Reveal>
+        <SectionHead
+          id="compare-title"
+          title="Capacity changes. The core runtime stays."
+          lede={
+            published
               ? 'Pro’s quotas are shared by every project on your account. Past them, nothing is billed unless you set a spend limit; with one, usage continues at the rates shown, never past it.'
-              : 'Running at company scale? Enterprise adds custom limits, SSO, onboarding and migration help, and a 12-hour SLA.'}
-          </p>
-        </div>
+              : 'Running at company scale? Enterprise adds custom limits, SSO, onboarding and migration help, and a 12-hour SLA.'
+          }
+        />
+      </Reveal>
 
-        <div className="mt-8 space-y-8 md:hidden">
-          {groups.map((group) => (
-            <div key={group.title}>
-              <GroupTitle group={group} />
-              <div className="mt-3 grid gap-3">
-                {group.rows.map((row) => (
-                  <div key={row.label} className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                    <h3 className="text-sm font-semibold text-white">{row.label}</h3>
-                    {row.hint && <p className="mt-1 text-xs text-zinc-500">{row.hint}</p>}
-                    <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                      {row.cells.map((cell, i) => (
-                        <div key={heads[i].name}>
-                          <p className="text-xs text-zinc-600">{heads[i].name}</p>
-                          <div className="mt-1">
-                            <CellView cell={cell} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-8 hidden rounded-lg border border-white/10 bg-white/[0.02] md:block">
-          <table className="w-full table-fixed text-left text-sm">
-            <colgroup>
-              <col className="w-[31%]" />
-              <col />
-              <col className="bg-white/[0.025]" />
-              <col />
-            </colgroup>
-            <thead>
-              <tr className="border-b border-white/10">
-                <th className="px-5 py-5"><span className="sr-only">Feature</span></th>
-                {heads.map((head) => (
-                  <th key={head.name} className="px-5 py-5 align-top font-normal">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{head.name}</p>
-                    <p className="mt-1">
-                      <span className="text-xl font-semibold text-white">{head.price}</span>
-                      <span className="ml-1.5 text-xs text-zinc-500">{head.cadence}</span>
-                    </p>
-                    {head.name === 'Enterprise' ? (
-                      <a
-                        href="mailto:support@backenly.com?subject=Backenly%20Enterprise"
-                        className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-md border border-white/12 bg-white/[0.03] text-xs font-semibold text-white transition hover:border-white/25 hover:bg-white/[0.06]"
-                      >
-                        {head.cta}
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={onCta}
-                        className={`mt-3 inline-flex h-9 w-full items-center justify-center rounded-md text-xs font-semibold transition ${
-                          head.name === 'Pro'
-                            ? 'bg-white text-black hover:bg-zinc-200'
-                            : 'border border-white/12 bg-white/[0.03] text-white hover:border-white/25 hover:bg-white/[0.06]'
-                        }`}
-                      >
-                        {head.cta}
-                      </button>
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            {groups.map((group) => (
-              <tbody key={group.title} className="border-b border-white/10 last:border-b-0">
-                <tr>
-                  <th colSpan={4} scope="colgroup" className="px-5 pb-3 pt-7 text-left font-normal">
-                    <GroupTitle group={group} />
-                  </th>
-                </tr>
-                {group.rows.map((row) => (
-                  <tr key={row.label} className="border-t border-white/[0.06]">
-                    <th scope="row" className="px-5 py-4 align-top font-normal">
-                      <p className="font-medium text-zinc-200">{row.label}</p>
-                      {row.hint && <p className="mt-1 text-xs leading-5 text-zinc-500">{row.hint}</p>}
-                    </th>
+      <div className="mt-10 flex flex-col gap-10 md:hidden">
+        {groups.map((group) => (
+          <div key={group.title}>
+            <GroupTitle group={group} />
+            <div className="mt-4 grid gap-3">
+              {group.rows.map((row) => (
+                <div key={row.label} className={`p-5 ${PANEL}`}>
+                  <h3 className="text-[15px] font-medium text-white">{row.label}</h3>
+                  {row.hint && <p className="mt-1 text-[13px] text-zinc-500">{row.hint}</p>}
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-[14px]">
                     {row.cells.map((cell, i) => (
-                      <td key={heads[i].name} className="px-5 py-4 align-top">
-                        <CellView cell={cell} />
-                      </td>
+                      <div key={heads[i].name} className="min-w-0">
+                        <p className="text-[12px] text-zinc-500">{heads[i].name}</p>
+                        <div className="mt-1">
+                          <CellView cell={cell} />
+                        </div>
+                      </div>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            ))}
-          </table>
-        </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
-    </section>
+
+      <div className="mt-12 hidden rounded-2xl border border-white/[0.08] md:block">
+        <table className="w-full table-fixed border-separate border-spacing-0 text-left">
+          <caption className="sr-only">Backenly plans compared, feature by feature</caption>
+          <colgroup>
+            <col className="w-[31%]" />
+            <col />
+            <col className="bg-[linear-gradient(180deg,rgba(139,92,246,0.06),rgba(139,92,246,0.015))]" />
+            <col />
+          </colgroup>
+          <thead>
+            <tr>
+              <th className="sticky top-[68px] z-10 rounded-tl-2xl border-b border-white/[0.08] bg-[#0a0b0d] px-6 py-5">
+                <span className="sr-only">Feature</span>
+              </th>
+              {heads.map((head, i) => (
+                <th
+                  key={head.name}
+                  scope="col"
+                  className={`sticky top-[68px] z-10 border-b border-white/[0.08] bg-[#0a0b0d] px-6 py-5 align-top font-normal ${
+                    i === heads.length - 1 ? 'rounded-tr-2xl' : ''
+                  }`}
+                >
+                  <p className={`text-[15px] font-semibold ${head.name === 'Pro' ? 'text-violet-200' : 'text-white'}`}>{head.name}</p>
+                  <p className="mt-1">
+                    <span className="text-[20px] font-semibold tracking-[-0.02em] text-white tabular-nums">{head.price}</span>
+                    <span className="ml-1.5 text-[13px] text-zinc-500">{head.cadence}</span>
+                  </p>
+                  {head.name === 'Enterprise' ? (
+                    <a
+                      href="mailto:support@backenly.com?subject=Backenly%20Enterprise"
+                      className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-lg border border-white/[0.12] bg-white/[0.03] text-[13px] font-semibold text-zinc-200 transition-colors duration-200 hover:border-white/25 hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                    >
+                      {head.cta}
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onCta}
+                      className={`mt-4 inline-flex h-9 w-full cursor-pointer items-center justify-center rounded-lg text-[13px] font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                        head.name === 'Pro'
+                          ? 'bg-white text-black hover:bg-zinc-200'
+                          : 'border border-white/[0.12] bg-white/[0.03] text-zinc-200 hover:border-white/25 hover:bg-white/[0.07] hover:text-white'
+                      }`}
+                    >
+                      {head.cta}
+                    </button>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          {groups.map((group) => (
+            <tbody key={group.title}>
+              <tr>
+                <th colSpan={4} scope="colgroup" className="px-6 pb-3 pt-9 text-left font-normal">
+                  <GroupTitle group={group} />
+                </th>
+              </tr>
+              {group.rows.map((row) => (
+                <tr key={row.label}>
+                  <th scope="row" className="border-t border-white/[0.06] px-6 py-4 align-top font-normal">
+                    <p className="text-[14px] font-medium text-zinc-200">{row.label}</p>
+                    {row.hint && <p className="mt-1 text-[13px] leading-[1.5] text-zinc-500">{row.hint}</p>}
+                  </th>
+                  {row.cells.map((cell, i) => (
+                    <td key={heads[i].name} className="border-t border-white/[0.06] px-6 py-4 align-top text-[14px]">
+                      <CellView cell={cell} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+      </div>
+    </Section>
   )
 }
 
 function GroupTitle({ group }: { group: MatrixGroup }) {
-  const Icon = group.icon
+  const GroupIcon = group.icon
   return (
     <span className="inline-flex items-center gap-3">
-      <span className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-black/35">
-        <Icon className="h-4 w-4 text-zinc-200" strokeWidth={1.75} />
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.09] bg-white/[0.03]">
+        <GroupIcon aria-hidden className="h-4 w-4 text-zinc-300" strokeWidth={1.75} />
       </span>
-      <span className="text-base font-semibold text-white">{group.title}</span>
+      <span className={`text-[16px] text-white ${HEADING}`}>{group.title}</span>
     </span>
   )
 }
 
-function CellView({ cell }: { cell: Cell }) {
+function CellView({ cell }: { cell: Cell }): ReactNode {
   if (cell === true) {
     return (
       <span className="inline-flex">
@@ -868,7 +884,7 @@ function CellView({ cell }: { cell: Cell }) {
   return (
     <div>
       <p className="text-zinc-200">{cell.value}</p>
-      {cell.then && <p className="mt-1 text-xs leading-5 text-zinc-500">{cell.then}</p>}
+      {cell.then && <p className="mt-1 text-[13px] leading-[1.5] text-zinc-500">{cell.then}</p>}
     </div>
   )
 }
