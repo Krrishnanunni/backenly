@@ -23,10 +23,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Loader2, Plus, Shapes, Trash2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react'
 import {
-  KitButton, KitNote, KitModal, KitField, KitInput, KitBadge, KitConfirmDialog,
+  KitButton, KitNote, KitModal, KitField, KitInput, KitConfirmDialog, Skeleton, Tag,
 } from '@/components/inspector/kit'
+import { EDGE, RULE, R_PANEL } from '@/components/console/tokens'
 
 interface EnumType { name: string; values: string[]; usedBy: string[] }
 interface DomainType {
@@ -110,132 +111,153 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-6 text-[12px] text-zinc-500">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Reading types…
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-      <div className="max-w-[78ch]">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Shapes className="h-3.5 w-3.5 text-zinc-500" />
-            <h2 className="text-[12px] font-medium text-zinc-200">Types</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <KitButton variant="secondary" size="sm" icon={Plus} onClick={() => setCreatingEnum(true)}>
-              New enum
-            </KitButton>
-            <KitButton variant="secondary" size="sm" icon={Plus} onClick={() => setCreatingDomain(true)}>
-              New domain
-            </KitButton>
-          </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className={`flex h-[44px] flex-shrink-0 items-center justify-between gap-3 border-b ${RULE} pl-4 pr-2 sm:pl-5`}>
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          <h2 className="text-[13px] font-medium text-zinc-100">Types</h2>
+          {!loading && (
+            <span className="text-[12px] tabular-nums text-zinc-500">
+              {enums.length} {enums.length === 1 ? 'enum' : 'enums'} · {domains.length}{' '}
+              {domains.length === 1 ? 'domain' : 'domains'}
+            </span>
+          )}
         </div>
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          <KitButton size="sm" icon={Plus} onClick={() => setCreatingEnum(true)} disabled={loading}>
+            New enum
+          </KitButton>
+          <KitButton size="sm" icon={Plus} onClick={() => setCreatingDomain(true)} disabled={loading}>
+            New domain
+          </KitButton>
+        </div>
+      </div>
 
-        <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
-          Enums and domains in this project&rsquo;s own schema. Each one lists the columns using
-          it, because that is what decides whether it can be changed.
-        </p>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="w-full max-w-[860px] space-y-6 px-4 py-5 sm:px-5">
+          <p className="max-w-[72ch] text-[13px] leading-[20px] text-zinc-400 [text-wrap:pretty]">
+            Enums and domains in this project&rsquo;s own schema. Each one lists the columns using it, because that
+            decides whether it can be changed.
+          </p>
 
-        {loadError && <div className="mt-4"><KitNote icon={AlertTriangle} tone="danger">{loadError}</KitNote></div>}
-        {message && (
-          <div className="mt-4">
+          {loadError && (
+            <KitNote icon={AlertTriangle} tone="danger">
+              {loadError}
+            </KitNote>
+          )}
+          {message && (
             <KitNote icon={message.tone === 'success' ? CheckCircle2 : AlertTriangle} tone={message.tone}>
               {message.text}
             </KitNote>
-          </div>
-        )}
+          )}
 
-        {/* ── Enums ─────────────────────────────────────────────── */}
-        <h3 className="mt-6 text-[12px] font-medium text-zinc-500">Enums</h3>
-        {enums.length === 0 ? (
-          <p className="mt-2 text-[12.5px] text-zinc-500">
-            No enum types in this project yet.
-          </p>
-        ) : (
-          <div className="mt-2 space-y-2">
-            {enums.map(t => (
-              <div key={t.name} className="rounded-lg border border-white/[0.06] bg-white/[0.015] px-3.5 py-3">
-                <div className="flex items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-mono text-[12px] text-zinc-200">{t.name}</p>
-                    <p className="mt-1 flex flex-wrap gap-1.5">
-                      {t.values.map(v => (
-                        <span key={v} className="rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[12px] text-zinc-300">
-                          {v}
-                        </span>
-                      ))}
-                    </p>
-                    <UsedBy usedBy={t.usedBy} />
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-1.5">
-                    <KitButton variant="ghost" size="sm" icon={Plus} disabled={busy !== null} onClick={() => setAddingTo(t)}>
-                      Add value
-                    </KitButton>
-                    <KitButton
-                      variant="ghost"
-                      size="sm"
-                      icon={busy === t.name ? Loader2 : Trash2}
-                      disabled={busy !== null}
-                      onClick={() => setConfirmDrop({ name: t.name, usedBy: t.usedBy })}
-                    >
-                      Drop
-                    </KitButton>
-                  </div>
+          {loading ? (
+            <div className={`overflow-hidden border ${EDGE} ${R_PANEL}`} aria-hidden>
+              {[0, 1].map((i) => (
+                <div key={i} className={`space-y-2 px-4 py-3.5 ${i > 0 ? `border-t ${RULE}` : ''}`}>
+                  <Skeleton className="h-[12px] w-32" />
+                  <Skeleton className="h-[18px] w-1/2" />
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          ) : (
+            <>
+              {/* ── Enums ─────────────────────────────────────────────── */}
+              <section aria-labelledby="types-enums">
+                <h3 id="types-enums" className="mb-2.5 text-[14px] font-semibold tracking-[-0.01em] text-zinc-100">
+                  Enums
+                </h3>
+                {enums.length === 0 ? (
+                  <p className={`border border-dashed ${EDGE} ${R_PANEL} px-4 py-4 text-[13px] text-zinc-500`}>
+                    No enum types in this project yet. An enum fixes a column to a set of values, like an order
+                    status.
+                  </p>
+                ) : (
+                  <ul className={`overflow-hidden border ${EDGE} ${R_PANEL}`}>
+                    {enums.map((t, i) => (
+                      <li key={t.name} className={`flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start ${i > 0 ? `border-t ${RULE}` : ''}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-[12.5px] font-medium text-zinc-100">{t.name}</p>
+                          <p className="mt-1.5 flex flex-wrap gap-1">
+                            {t.values.map((v) => (
+                              <Tag key={v} mono>
+                                {v}
+                              </Tag>
+                            ))}
+                          </p>
+                          <UsedBy usedBy={t.usedBy} />
+                        </div>
+                        <div className="flex flex-shrink-0 items-center gap-1">
+                          <KitButton variant="ghost" size="sm" icon={Plus} disabled={busy !== null} onClick={() => setAddingTo(t)}>
+                            Add value
+                          </KitButton>
+                          <KitButton
+                            variant="ghost"
+                            size="sm"
+                            icon={Trash2}
+                            loading={busy === t.name}
+                            disabled={busy !== null && busy !== t.name}
+                            onClick={() => setConfirmDrop({ name: t.name, usedBy: t.usedBy })}
+                          >
+                            Drop
+                          </KitButton>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-        {/* ── Domains ───────────────────────────────────────────── */}
-        <h3 className="mt-6 text-[12px] font-medium text-zinc-500">Domains</h3>
-        {domains.length === 0 ? (
-          <p className="mt-2 text-[12.5px] text-zinc-500">No domains in this project yet.</p>
-        ) : (
-          <div className="mt-2 space-y-2">
-            {domains.map(d => (
-              <div key={d.name} className="rounded-lg border border-white/[0.06] bg-white/[0.015] px-3.5 py-3">
-                <div className="flex items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-mono text-[12px] text-zinc-200">
-                      {d.name}
-                      <span className="ml-2 text-[12px] text-zinc-500">{d.baseType}</span>
-                      {d.notNull && <KitBadge tone="attention" className="ml-2">not null</KitBadge>}
-                    </p>
-                    {d.constraints.length > 0 && (
-                      <p className="mt-1 font-mono text-[12px] leading-snug text-zinc-500">
-                        {d.constraints.join(' ')}
-                      </p>
-                    )}
-                    <UsedBy usedBy={d.usedBy} />
-                  </div>
-                  <KitButton
-                    variant="ghost"
-                    size="sm"
-                    icon={busy === d.name ? Loader2 : Trash2}
-                    disabled={busy !== null}
-                    onClick={() => setConfirmDrop({ name: d.name, usedBy: d.usedBy })}
-                  >
-                    Drop
-                  </KitButton>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              {/* ── Domains ───────────────────────────────────────────── */}
+              <section aria-labelledby="types-domains">
+                <h3 id="types-domains" className="mb-2.5 text-[14px] font-semibold tracking-[-0.01em] text-zinc-100">
+                  Domains
+                </h3>
+                {domains.length === 0 ? (
+                  <p className={`border border-dashed ${EDGE} ${R_PANEL} px-4 py-4 text-[13px] text-zinc-500`}>
+                    No domains in this project yet. A domain is a base type with rules attached, like an email
+                    address that must contain an @.
+                  </p>
+                ) : (
+                  <ul className={`overflow-hidden border ${EDGE} ${R_PANEL}`}>
+                    {domains.map((d, i) => (
+                      <li key={d.name} className={`flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start ${i > 0 ? `border-t ${RULE}` : ''}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-[12.5px] font-medium text-zinc-100">{d.name}</span>
+                            <span className="font-mono text-[12px] text-zinc-500">{d.baseType}</span>
+                            {d.notNull && <Tag mono>not null</Tag>}
+                          </p>
+                          {d.constraints.length > 0 && (
+                            <p className="mt-1 font-mono text-[12px] leading-[18px] text-zinc-400">{d.constraints.join(' ')}</p>
+                          )}
+                          <UsedBy usedBy={d.usedBy} />
+                        </div>
+                        <KitButton
+                          variant="ghost"
+                          size="sm"
+                          icon={Trash2}
+                          loading={busy === d.name}
+                          disabled={busy !== null && busy !== d.name}
+                          onClick={() => setConfirmDrop({ name: d.name, usedBy: d.usedBy })}
+                        >
+                          Drop
+                        </KitButton>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-        <p className="mt-6 text-[12.5px] leading-relaxed text-zinc-500">
-          There is no &ldquo;remove value&rdquo; for an enum. PostgreSQL has no{' '}
-          <span className="font-mono">ALTER TYPE &hellip; DROP VALUE</span> at any version;
-          removing one means creating a replacement type, converting every column that uses it
-          and dropping the old one &mdash; a migration that rewrites data, not a settings change.
-        </p>
+              <p className="max-w-[72ch] text-[12.5px] leading-[19px] text-zinc-500">
+                There is no &ldquo;remove value&rdquo; for an enum. PostgreSQL has no{' '}
+                <span className="font-mono text-zinc-400">ALTER TYPE &hellip; DROP VALUE</span> at any version. Removing
+                one means creating a replacement type, converting every column that uses it and dropping the old one:
+                a migration that rewrites data, not a settings change.
+              </p>
+            </>
+          )}
+        </div>
       </div>
 
       {creatingEnum && (
@@ -254,7 +276,7 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
           enumName={addingTo.name}
           existing={addingTo.values}
           onClose={() => setAddingTo(null)}
-          onSubmit={async value => {
+          onSubmit={async (value) => {
             if (await act({ action: 'add_enum_value', name: addingTo.name, value }, `${value} added to ${addingTo.name}.`)) {
               setAddingTo(null)
             }
@@ -266,7 +288,7 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
         <DomainForm
           baseTypes={baseTypes}
           onClose={() => setCreatingDomain(false)}
-          onSubmit={async spec => {
+          onSubmit={async (spec) => {
             if (await act({ action: 'create_domain', ...spec }, `${spec.name} created.`)) {
               setCreatingDomain(false)
             }
@@ -274,24 +296,26 @@ export function EnumsPanel({ projectId }: { projectId: string }) {
         />
       )}
 
-      {confirmDrop && (
-        <KitConfirmDialog
-          open
-          danger
-          busy={busy !== null}
-          title={`Drop ${confirmDrop.name}?`}
-          description={
-            confirmDrop.usedBy.length > 0
-              ? `${confirmDrop.name} is still used by ${confirmDrop.usedBy.join(', ')}. ` +
-                `Dropping it will be refused: the columns would have to go with it, and that is ` +
-                `data. Change those columns first.`
-              : `Nothing uses ${confirmDrop.name}, so dropping it affects no data. This cannot be undone.`
-          }
-          confirmLabel={busy ? 'Dropping…' : 'Drop'}
-          onConfirm={() => drop(confirmDrop.name)}
-          onCancel={() => setConfirmDrop(null)}
-        />
-      )}
+      <KitConfirmDialog
+        open={!!confirmDrop}
+        danger
+        busy={busy !== null}
+        title={confirmDrop ? `Drop ${confirmDrop.name}?` : 'Drop type'}
+        description={
+          !confirmDrop
+            ? undefined
+            : confirmDrop.usedBy.length > 0
+            ? `${confirmDrop.name} is still used by ${confirmDrop.usedBy.join(', ')}. ` +
+              `Dropping it will be refused: the columns would have to go with it, and that is ` +
+              `data. Change those columns first.`
+            : `Nothing uses ${confirmDrop.name}, so dropping it affects no data. This cannot be undone.`
+        }
+        confirmLabel="Drop"
+        onConfirm={() => confirmDrop && drop(confirmDrop.name)}
+        onCancel={() => {
+          if (busy === null) setConfirmDrop(null)
+        }}
+      />
     </div>
   )
 }
@@ -329,7 +353,7 @@ function EnumForm({
           <KitButton
             variant="primary"
             size="sm"
-            icon={busy ? Loader2 : undefined}
+            loading={!!busy}
             disabled={busy || !name.trim() || values.length === 0}
             onClick={async () => { setBusy(true); try { await onSubmit(name.trim(), values) } finally { setBusy(false) } }}
           >
@@ -375,7 +399,7 @@ function AddValueForm({
           <KitButton
             variant="primary"
             size="sm"
-            icon={busy ? Loader2 : undefined}
+            loading={!!busy}
             disabled={busy || !value.trim()}
             onClick={async () => { setBusy(true); try { await onSubmit(value.trim()) } finally { setBusy(false) } }}
           >
@@ -416,7 +440,7 @@ function DomainForm({
           <KitButton
             variant="primary"
             size="sm"
-            icon={busy ? Loader2 : undefined}
+            loading={!!busy}
             disabled={busy || !name.trim()}
             onClick={async () => {
               setBusy(true)

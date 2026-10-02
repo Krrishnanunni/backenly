@@ -22,7 +22,7 @@ test.setTimeout(90_000)
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`/app/projects/${projectId()}/database`)
-  const sqlTab = page.getByRole('button', { name: 'SQL', exact: true })
+  const sqlTab = page.getByRole('tab', { name: 'SQL', exact: true })
   await expect(sqlTab).toBeVisible({ timeout: 60_000 })
   await sqlTab.click()
   await expect(page.getByLabel('SQL query')).toBeVisible({ timeout: 30_000 })

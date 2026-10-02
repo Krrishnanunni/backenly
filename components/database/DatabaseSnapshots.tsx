@@ -9,9 +9,10 @@
  * "Backup", concluding their server is safe, and finding out otherwise on the
  * only day it matters.
  *
- * That is why this is never labelled "Backup" on its own, and why it names its
- * sibling: deployment recovery lives in Settings and covers the machine. A
- * snapshot covers a project.
+ * That is why this is never labelled "Backup" on its own. On a self-hosted
+ * deployment it names its sibling: deployment recovery lives in account
+ * Settings and covers the machine. A snapshot covers a project. Backenly Cloud
+ * has no Recovery page, so there the panel does not point at one.
  *
  * ── Restore states what it replaces, in the dialog ──────────────────────────
  *
@@ -22,10 +23,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Camera, Loader2, RotateCcw, CheckCircle2, XCircle,
-} from 'lucide-react'
-import { KitButton, KitNote, KitConfirmDialog } from '@/components/inspector/kit'
+import { AlertTriangle, Camera, CheckCircle2, Info, RotateCcw } from 'lucide-react'
+import { EmptyState, KitButton, KitConfirmDialog, KitNote, Skeleton, StatusDot } from '@/components/inspector/kit'
+import { EDGE, RULE, R_PANEL } from '@/components/console/tokens'
+import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 
 interface Snapshot {
   id: string
@@ -39,7 +40,18 @@ interface Snapshot {
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`
+}
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
 export function DatabaseSnapshots({ projectId }: { projectId: string }) {
@@ -63,7 +75,9 @@ export function DatabaseSnapshots({ projectId }: { projectId: string }) {
     }
   }, [projectId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+  }, [load])
 
   async function takeSnapshot() {
     setTaking(true)
@@ -104,110 +118,110 @@ export function DatabaseSnapshots({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">
-        <div className="flex items-center gap-2">
-          <Camera className="h-3.5 w-3.5 text-zinc-500" />
-          <span className="text-[12px] font-medium text-zinc-200">Database snapshots</span>
+      <div className={`flex h-[44px] flex-shrink-0 items-center justify-between gap-3 border-b ${RULE} pl-4 pr-2 sm:pl-5`}>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="text-[13px] font-medium text-zinc-100">Snapshots</h2>
+          {!loading && snapshots.length > 0 && (
+            <span className="text-[12px] tabular-nums text-zinc-500">{snapshots.length}</span>
+          )}
         </div>
-        <KitButton
-          variant="secondary"
-          size="sm"
-          icon={taking ? Loader2 : Camera}
-          onClick={takeSnapshot}
-          disabled={taking}
-        >
-          {taking ? 'Taking…' : 'Take snapshot'}
+        <KitButton size="sm" icon={Camera} onClick={takeSnapshot} loading={taking}>
+          {taking ? 'Taking snapshot…' : 'Take snapshot'}
         </KitButton>
       </div>
 
-      <div className="flex-1 px-4 py-4">
-        <p className="max-w-[70ch] text-[12.5px] leading-relaxed text-zinc-400">
-          A snapshot captures this project&rsquo;s tables, rows, indexes, constraints and
-          RLS policies. It does <span className="text-zinc-200">not</span> capture stored
-          files, platform accounts, API keys, project configuration or function source, so
-          it is for rolling a schema back or moving a project &mdash; not for recovering a
-          server. That is <span className="text-zinc-200">Settings &rarr; Recovery</span>.
-        </p>
+      <div className="w-full max-w-[860px] flex-1 space-y-5 px-4 py-5 sm:px-5">
+        <KitNote icon={Info} title="What a snapshot holds">
+          This project&rsquo;s tables, rows, indexes, constraints and row-level security policies, end users
+          included. Not its stored files, Backenly account data, API keys, project configuration or function
+          source. Use it to roll a project back or move it, not as a whole-server backup.
+          {!CLOUD_CONTROL_PLANE && (
+            <> Recovering the whole deployment is in account Settings, under Recovery.</>
+          )}
+        </KitNote>
 
         {message && (
-          <div className="mt-4 max-w-[70ch]">
-            <KitNote tone={message.tone}>{message.text}</KitNote>
-          </div>
+          <KitNote tone={message.tone} icon={message.tone === 'success' ? CheckCircle2 : AlertTriangle}>
+            {message.text}
+          </KitNote>
         )}
 
-        <div className="mt-5">
-          {loading ? (
-            <div className="flex items-center gap-2 text-[12px] text-zinc-500">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Loading snapshots…
-            </div>
-          ) : snapshots.length === 0 ? (
-            <p className="text-[12.5px] text-zinc-500">
-              No snapshots yet. Taking one reads the project&rsquo;s schema as it is now.
-            </p>
-          ) : (
-            <div className="max-w-[70ch] overflow-hidden rounded-lg border border-white/[0.06]">
-              <table className="w-full text-[12px]">
-                <tbody>
-                  {snapshots.map(snapshot => (
-                    <tr key={snapshot.id} className="border-b border-white/[0.04] last:border-0">
-                      <td className="px-3 py-2.5">
-                        {snapshot.status === 'completed' ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/70" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5 text-rose-500/70" />
-                        )}
-                      </td>
-                      <td className="px-1 py-2.5 text-zinc-300">
-                        {new Date(snapshot.createdAt).toLocaleString()}
-                        {snapshot.error && (
-                          <span className="ml-2 text-[12px] text-rose-400/80">{snapshot.error}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-zinc-500">
-                        {formatBytes(snapshot.sizeBytes)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        {snapshot.status === 'completed' && (
-                          <KitButton
-                            variant="secondary"
-                            size="sm"
-                            icon={restoring === snapshot.id ? Loader2 : RotateCcw}
-                            onClick={() => setConfirmRestore(snapshot)}
-                            disabled={restoring !== null}
-                          >
-                            Restore
-                          </KitButton>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {loading ? (
+          <div className={`overflow-hidden border ${EDGE} ${R_PANEL}`} aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={`flex items-center gap-4 px-4 py-3.5 ${i > 0 ? `border-t ${RULE}` : ''}`}>
+                <Skeleton className="h-[12px] w-40" />
+                <Skeleton className="ml-auto h-[12px] w-16" />
+              </div>
+            ))}
+          </div>
+        ) : snapshots.length === 0 ? (
+          <div className={`border ${EDGE} ${R_PANEL}`}>
+            <EmptyState
+              icon={Camera}
+              title="No snapshots yet"
+              description="A snapshot reads the project's schema and rows as they are now. Take one before a risky change."
+              action={
+                <KitButton size="sm" icon={Camera} onClick={takeSnapshot} loading={taking}>
+                  Take snapshot
+                </KitButton>
+              }
+            />
+          </div>
+        ) : (
+          <ul className={`overflow-hidden border ${EDGE} ${R_PANEL}`}>
+            {snapshots.map((snapshot, i) => {
+              const ok = snapshot.status === 'completed'
+              return (
+                <li
+                  key={snapshot.id}
+                  className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 ${i > 0 ? `border-t ${RULE}` : ''}`}
+                >
+                  <StatusDot tone={ok ? 'operational' : 'failed'} label={ok ? 'Completed' : 'Failed'} className="w-[92px]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] tabular-nums text-zinc-200">{formatWhen(snapshot.createdAt)}</p>
+                    {snapshot.error && <p className="mt-0.5 text-[12px] text-rose-300/90">{snapshot.error}</p>}
+                  </div>
+                  <span className="text-[12.5px] tabular-nums text-zinc-500">{formatBytes(snapshot.sizeBytes)}</span>
+                  {ok && (
+                    <KitButton
+                      size="sm"
+                      variant="ghost"
+                      icon={RotateCcw}
+                      onClick={() => setConfirmRestore(snapshot)}
+                      disabled={restoring !== null}
+                      loading={restoring === snapshot.id}
+                    >
+                      Restore
+                    </KitButton>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
 
-      {confirmRestore && (
-        <KitConfirmDialog
-          open
-          danger
-          busy={restoring !== null}
-          title="Restore this snapshot?"
-          // Named plainly. Everything in the project's schema is replaced by
-          // what the snapshot held, and rows written since are not merged in.
-          description={
-            `Every table in this project is replaced by the snapshot taken on ` +
-            `${new Date(confirmRestore.createdAt).toLocaleString()}. Rows written since ` +
-            `then are not kept. The live schema is renamed aside first, so a restore ` +
-            `that fails leaves the current data in place.`
-          }
-          confirmLabel={restoring ? 'Restoring…' : 'Restore'}
-          onConfirm={() => restore(confirmRestore)}
-          onCancel={() => setConfirmRestore(null)}
-        />
-      )}
+      <KitConfirmDialog
+        open={!!confirmRestore}
+        danger
+        busy={restoring !== null}
+        title="Restore this snapshot?"
+        // Named plainly. Everything in the project's schema is replaced by
+        // what the snapshot held, and rows written since are not merged in.
+        description={
+          confirmRestore
+            ? `Every table in this project is replaced by the snapshot taken ${formatWhen(confirmRestore.createdAt)}. ` +
+              `Rows written since then are not kept. The live schema is renamed aside first, so a restore ` +
+              `that fails leaves the current data in place.`
+            : undefined
+        }
+        confirmLabel="Restore"
+        onConfirm={() => confirmRestore && restore(confirmRestore)}
+        onCancel={() => {
+          if (restoring === null) setConfirmRestore(null)
+        }}
+      />
     </div>
   )
 }

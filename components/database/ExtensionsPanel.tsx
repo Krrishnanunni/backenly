@@ -29,8 +29,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Loader2, Puzzle, Download } from 'lucide-react'
-import { KitButton, KitNote, KitBadge } from '@/components/inspector/kit'
+import { AlertTriangle, CheckCircle2, Download } from 'lucide-react'
+import { KitButton, KitNote, Skeleton, StatusDot } from '@/components/inspector/kit'
+import { EDGE, RULE, R_PANEL } from '@/components/console/tokens'
 
 interface ExtensionRow {
   name: string
@@ -101,94 +102,104 @@ export function ExtensionsPanel({ projectId }: { projectId: string }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-6 text-[12px] text-zinc-500">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Reading the extension catalog…
-      </div>
-    )
-  }
+  const installedCount = rows.filter((r) => r.installed).length
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-      <div className="max-w-[78ch]">
-        <div className="flex items-center gap-2">
-          <Puzzle className="h-3.5 w-3.5 text-zinc-500" />
-          <h2 className="text-[12px] font-medium text-zinc-200">PostgreSQL extensions</h2>
-        </div>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
-          Backenly installs from a fixed list. An extension runs its own install script with
-          the privileges of whoever installs it, so the list is a code change rather than a
-          text box &mdash; the same reason there is no SQL editor here.
-        </p>
-
-        {loadError && (
-          <div className="mt-4"><KitNote icon={AlertTriangle} tone="danger">{loadError}</KitNote></div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className={`flex h-[44px] flex-shrink-0 items-center gap-2.5 border-b ${RULE} px-4 sm:px-5`}>
+        <h2 className="text-[13px] font-medium text-zinc-100">Extensions</h2>
+        {!loading && rows.length > 0 && (
+          <span className="text-[12px] tabular-nums text-zinc-500">
+            {installedCount} of {rows.length} installed
+          </span>
         )}
-        {message && (
-          <div className="mt-4">
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="w-full max-w-[860px] space-y-4 px-4 py-5 sm:px-5">
+          <p className="max-w-[72ch] text-[13px] leading-[20px] text-zinc-400 [text-wrap:pretty]">
+            Backenly installs from a fixed list. An extension runs its own install script with the privileges of
+            whoever installs it, so the list is a code change rather than a text box. Extensions are database-wide,
+            not per project.
+          </p>
+
+          {loadError && (
+            <KitNote icon={AlertTriangle} tone="danger">
+              {loadError}
+            </KitNote>
+          )}
+          {message && (
             <KitNote icon={message.tone === 'success' ? CheckCircle2 : AlertTriangle} tone={message.tone}>
               {message.text}
             </KitNote>
-          </div>
-        )}
+          )}
 
-        <div className="mt-5 space-y-2">
-          {rows.map(ext => (
-            <div
-              key={ext.name}
-              className="flex items-start gap-3 rounded-lg border border-white/[0.06] bg-white/[0.015] px-3.5 py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 font-mono text-[12px] text-zinc-200">
-                  {ext.name}
-                  {ext.installed && (
-                    <span className="font-mono text-[12px] text-zinc-500">
-                      {ext.installedVersion}
-                      {ext.schema ? ` · ${ext.schema}` : ''}
-                    </span>
-                  )}
-                </p>
-                <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-500">{ext.purpose}</p>
-
-                {/* Why it cannot be installed, where that is the case. An
-                    unexplained disabled button is worse than no button. */}
-                {!ext.installed && ext.blockedReason && (
-                  <p className="mt-1.5 text-[12.5px] leading-snug text-amber-500/80">
-                    {ext.blockedReason}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-shrink-0 items-center gap-2">
-                {ext.installed ? (
-                  <KitBadge tone="operational">installed</KitBadge>
-                ) : ext.installable ? (
-                  <KitButton
-                    variant="secondary"
-                    size="sm"
-                    icon={busy === ext.name ? Loader2 : Download}
-                    disabled={busy !== null}
-                    onClick={() => install(ext.name)}
-                  >
-                    Install
-                  </KitButton>
-                ) : (
-                  <KitBadge tone={ext.available ? 'attention' : 'neutral'}>
-                    {ext.available ? 'needs superuser' : 'unavailable'}
-                  </KitBadge>
-                )}
-              </div>
+          {loading ? (
+            <div className={`overflow-hidden border ${EDGE} ${R_PANEL}`} aria-hidden>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className={`space-y-2 px-4 py-3.5 ${i > 0 ? `border-t ${RULE}` : ''}`}>
+                  <Skeleton className="h-[12px] w-36" />
+                  <Skeleton className="h-[11px] w-2/3" />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          ) : (
+            <ul className={`overflow-hidden border ${EDGE} ${R_PANEL}`}>
+              {rows.map((ext, i) => (
+                <li
+                  key={ext.name}
+                  className={`flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start ${i > 0 ? `border-t ${RULE}` : ''}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="font-mono text-[12.5px] font-medium text-zinc-100">{ext.name}</span>
+                      {ext.installed && (
+                        <span className="text-[12px] tabular-nums text-zinc-500">
+                          {ext.installedVersion}
+                          {ext.schema ? ` · ${ext.schema}` : ''}
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-[13px] leading-[19px] text-zinc-400">{ext.purpose}</p>
 
-        <p className="mt-6 text-[12.5px] leading-relaxed text-zinc-500">
-          There is no uninstall here. <span className="font-mono">DROP EXTENSION</span> cascades
-          into the columns and indexes that depend on it, and this page cannot show what that
-          would take with it. Removing one is a deliberate act at a psql prompt.
-        </p>
+                    {/* Why it cannot be installed, where that is the case. An
+                        unexplained disabled button is worse than no button. */}
+                    {!ext.installed && ext.blockedReason && (
+                      <p className="mt-1.5 text-[12.5px] leading-[18px] text-amber-200/80">{ext.blockedReason}</p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-shrink-0 items-center gap-2 sm:pt-0.5">
+                    {ext.installed ? (
+                      <StatusDot tone="operational" label="Installed" />
+                    ) : ext.installable ? (
+                      <KitButton
+                        size="sm"
+                        icon={Download}
+                        loading={busy === ext.name}
+                        disabled={busy !== null && busy !== ext.name}
+                        onClick={() => install(ext.name)}
+                      >
+                        Install
+                      </KitButton>
+                    ) : (
+                      <StatusDot
+                        tone={ext.available ? 'attention' : 'neutral'}
+                        label={ext.available ? 'Needs superuser' : 'Not available'}
+                      />
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <p className="max-w-[72ch] text-[12.5px] leading-[19px] text-zinc-500">
+            There is no uninstall here. <span className="font-mono text-zinc-400">DROP EXTENSION</span> cascades into the
+            columns and indexes that depend on it, and this page cannot show what that would take with it. Removing one
+            is a deliberate act at a psql prompt.
+          </p>
+        </div>
       </div>
     </div>
   )

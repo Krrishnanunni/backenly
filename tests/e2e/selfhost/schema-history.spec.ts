@@ -21,7 +21,7 @@ test.setTimeout(90_000)
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`/app/projects/${projectId()}/database`)
-  const tab = page.getByRole('button', { name: 'History', exact: true })
+  const tab = page.getByRole('tab', { name: 'History', exact: true })
   await expect(tab).toBeVisible({ timeout: 60_000 })
   await tab.click()
   await expect(page.getByText('Schema history')).toBeVisible({ timeout: 30_000 })
