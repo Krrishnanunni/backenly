@@ -61,7 +61,7 @@ test.beforeEach(async ({ page }) => {
 
   // The table list has to load and select a table first. `Structure` appears
   // once one is selected, so waiting on it covers both.
-  const structure = page.getByRole('button', { name: 'Structure', exact: true })
+  const structure = page.getByRole('radio', { name: 'Structure', exact: true })
   await expect(structure).toBeVisible({ timeout: 60_000 })
 
   // "Add column" lives in the STRUCTURE view. The page opens on Data, where

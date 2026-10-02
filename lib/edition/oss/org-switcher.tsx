@@ -24,17 +24,18 @@
 /**
  * `plan` is accepted and deliberately ignored.
  *
- * TopBar passes the literal "Free", which is a Cloud plan name. A self-hosted
- * deployment has no plan: `selfHostedEntitlements()` leaves every ceiling null,
- * so the chip was telling an operator with unlimited entitlements that they
+ * The shell passes the account's plan name (usePlanName), which is always
+ * empty here: a self-hosted deployment has no plan, because
+ * `selfHostedEntitlements()` leaves every ceiling null. The chip once printed
+ * a hardcoded "Free" and told an operator with unlimited entitlements that they
  * were on the free tier. Keeping the prop in the signature keeps this component
  * swappable with the Cloud switcher, which does render a real plan.
  */
 export function OrgSwitcher({ fallbackName }: { fallbackName: string; plan?: string }) {
   return (
     <div className="relative">
-      <div className="flex items-center gap-1.5 px-1.5 h-8 rounded-md">
-        <span className="text-[12.5px] text-zinc-300 truncate max-w-[140px]">{fallbackName}</span>
+      <div className="flex h-[32px] items-center gap-1.5 px-1.5">
+        <span className="max-w-[160px] truncate text-[13px] font-medium text-zinc-200">{fallbackName}</span>
       </div>
     </div>
   )

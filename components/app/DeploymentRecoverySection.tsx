@@ -124,7 +124,7 @@ export function DeploymentRecoverySection() {
               <h2 className="text-[13px] font-semibold text-white">
                 Recovery credential — shown once
               </h2>
-              <p className="text-[11.5px] text-zinc-500">
+              <p className="text-[12.5px] text-zinc-500">
                 Not stored anywhere. If you lose it, this bundle cannot be opened by anyone.
               </p>
             </div>
@@ -196,7 +196,7 @@ export function DeploymentRecoverySection() {
                       <td className="px-3 py-2 text-right font-mono text-zinc-500">
                         {formatBytes(component.bytes)}
                       </td>
-                      <td className="px-3 py-2 text-right text-[11px] text-zinc-600">
+                      <td className="px-3 py-2 text-right text-[12px] text-zinc-600">
                         {component.encrypted ? 'sealed' : 'plain'}
                       </td>
                     </tr>
@@ -214,7 +214,7 @@ export function DeploymentRecoverySection() {
             <div className="mt-4">
             <KitNote tone="warn">
               The bundle is on this server, at{' '}
-              <code className="font-mono text-[11.5px] text-zinc-300">{result.bundleDir}</code>.
+              <code className="font-mono text-[12.5px] text-zinc-300">{result.bundleDir}</code>.
               Copy it somewhere else. A backup that only exists on the machine it protects
               is not a backup.
             </KitNote>

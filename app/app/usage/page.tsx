@@ -20,9 +20,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { notFound, useRouter } from 'next/navigation'
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
-import { Database, HardDrive, Bot, Activity, Users, ArrowUpRight, Loader2, AlertTriangle, ShieldCheck, Sparkles, Globe, Wallet } from 'lucide-react'
+import { Database, HardDrive, Bot, Activity, Users, ArrowUpRight, AlertTriangle, ShieldCheck, Sparkles, Globe, Wallet, Info, RefreshCw } from 'lucide-react'
 import { OrgShell } from '@/components/shell/OrgShell'
-import { SectionTitle, KitButton, KitNote, KitCard, KitCardHeader, KitCardBody } from '@/components/inspector/kit'
+import { EmptyState, INPUT_BASE, KitButton, KitNote, KitCard, KitCardHeader, KitCardBody, PageHeader, Skeleton } from '@/components/inspector/kit'
+import { EDGE, PAGE_GUTTER, PAGE_WIDTH, PLATE, R_PANEL } from '@/components/console/tokens'
 
 interface UsageData {
   planName: string
@@ -122,38 +123,41 @@ function Meter({
   const p = pct(used, max)
   const over = max !== null && (used > max || max === 0)
   const warn = !over && p >= 75
-  const bar = over ? 'bg-rose-400' : warn ? 'bg-amber-400' : 'bg-violet-500'
+  const bar = over ? 'bg-rose-400' : warn ? 'bg-amber-400' : 'bg-violet-400'
 
   return (
-    <div className="relative rounded-xl border border-white/[0.07] bg-[#16171d] px-4 py-3.5 shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)]">
+    <div className={`relative ${PLATE} border ${EDGE} ${R_PANEL} px-4 py-3.5`}>
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Icon className="h-3 w-3 text-zinc-600 flex-shrink-0" />
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600 truncate">{label}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon className="h-3.5 w-3.5 flex-shrink-0 text-zinc-500" strokeWidth={1.75} />
+          <p className="truncate text-[12.5px] text-zinc-400">{label}</p>
         </div>
-        {over && (
-          <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-rose-300 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-full">
-            Over
-          </span>
-        )}
+        {over && <span className="text-[12px] font-medium text-rose-300">Over the limit</span>}
       </div>
 
-      <div className="mt-2.5 flex items-baseline gap-1.5">
-        <span className={`font-mono text-[20px] font-medium tabular-nums leading-none ${over ? 'text-rose-300' : warn ? 'text-amber-500' : 'text-white'}`}>
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <span className={`text-[20px] font-semibold leading-[26px] tracking-[-0.02em] tabular-nums ${over ? 'text-rose-300' : warn ? 'text-amber-200' : 'text-zinc-50'}`}>
           {format(used)}
         </span>
-        <span className="font-mono text-[12px] tabular-nums text-zinc-600">
-          / {max === null ? '∞' : format(max)}
+        <span className="text-[12.5px] tabular-nums text-zinc-500">
+          of {max === null ? 'unlimited' : format(max)}
         </span>
       </div>
 
       {max !== null && (
-        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
-          <div className={`h-full rounded-full ${bar} transition-[width] duration-700`} style={{ width: `${p}%` }} />
+        <div
+          className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-white/[0.06]"
+          role="meter"
+          aria-label={`${label} used`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={p}
+        >
+          <div className={`h-full rounded-full ${bar} transition-[width] duration-700`} style={{ width: `${Math.max(p, used > 0 ? 2 : 0)}%` }} />
         </div>
       )}
-      {note && <p className="mt-2 font-mono text-[10px] text-zinc-500">{note}</p>}
-      {resetNote && <p className="mt-2 font-mono text-[10px] text-zinc-600">{resetNote}</p>}
+      {note && <p className="mt-2 text-[12px] leading-[17px] text-zinc-500">{note}</p>}
+      {resetNote && <p className="mt-1.5 text-[12px] tabular-nums text-zinc-500">{resetNote}</p>}
     </div>
   )
 }
@@ -284,8 +288,8 @@ function OverageCard({ usage, onChanged }: { usage: AccountUsage; onChanged: () 
         }
         actions={
           <span className="inline-flex items-baseline gap-1.5">
-            <span className="font-mono text-[20px] font-medium tabular-nums leading-none text-white">{fmtCents(usage.overage.estimatedCents)}</span>
-            <span className="text-[11px] text-zinc-500">so far · ≈ {fmtCents(usage.overage.projectedCents)} by month end</span>
+            <span className="text-[20px] font-medium tabular-nums leading-none text-white">{fmtCents(usage.overage.estimatedCents)}</span>
+            <span className="text-[12px] text-zinc-500">so far · ≈ {fmtCents(usage.overage.projectedCents)} by month end</span>
           </span>
         }
       />
@@ -294,7 +298,8 @@ function OverageCard({ usage, onChanged }: { usage: AccountUsage; onChanged: () 
           <Wallet className="h-3.5 w-3.5 text-zinc-500" />
           <span className="text-[12.5px] text-zinc-300">Spend limit</span>
           <select
-            className="rounded-md border border-white/[0.08] bg-[#0e0f13] px-2 py-1 font-mono text-[12px] text-zinc-200"
+            className={`${INPUT_BASE} h-[32px] w-auto px-2.5 tabular-nums`}
+            aria-label="Spend limit"
             value={choice}
             onChange={(e) => setChoice(e.target.value)}
             disabled={busy || !!pending}
@@ -306,7 +311,8 @@ function OverageCard({ usage, onChanged }: { usage: AccountUsage; onChanged: () 
           </select>
           {choice === 'custom' && (
             <input
-              className="w-24 rounded-md border border-white/[0.08] bg-[#0e0f13] px-2 py-1 font-mono text-[12px] text-zinc-200"
+              className={`${INPUT_BASE} h-[32px] w-24 px-2.5 tabular-nums`}
+              aria-label="Custom spend limit in US dollars"
               placeholder="USD"
               inputMode="numeric"
               value={custom}
@@ -314,10 +320,10 @@ function OverageCard({ usage, onChanged }: { usage: AccountUsage; onChanged: () 
               disabled={busy || !!pending}
             />
           )}
-          <KitButton variant="secondary" size="sm" onClick={save} disabled={busy || !!pending}>
-            {busy && !pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+          <KitButton variant="secondary" size="sm" onClick={save} disabled={!!pending} loading={busy && !pending}>
+Save
           </KitButton>
-          <span className="text-[11px] text-zinc-600">Current: {usage.overage.spendLimitCents === 0 ? 'Off' : fmtCents(usage.overage.spendLimitCents)}</span>
+          <span className="text-[12.5px] text-zinc-500">Current: {usage.overage.spendLimitCents === 0 ? 'Off' : fmtCents(usage.overage.spendLimitCents)}</span>
         </div>
         {pending && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -325,7 +331,8 @@ function OverageCard({ usage, onChanged }: { usage: AccountUsage; onChanged: () 
               We sent a code to {pending.sentTo} to confirm raising the limit to {fmtCents(pending.requestedCents)}.
             </span>
             <input
-              className="w-24 rounded-md border border-white/[0.08] bg-[#0e0f13] px-2 py-1 font-mono text-[12px] tracking-[0.2em] text-zinc-200"
+              className={`${INPUT_BASE} h-[32px] w-28 px-2.5 font-mono tracking-[0.2em]`}
+              aria-label="Six-digit code from your email"
               placeholder="000000"
               inputMode="numeric"
               maxLength={7}
@@ -337,8 +344,8 @@ function OverageCard({ usage, onChanged }: { usage: AccountUsage; onChanged: () 
             </KitButton>
           </div>
         )}
-        {message && <p className="mt-2 text-[11.5px] text-zinc-400">{message}</p>}
-        <p className="mt-3 text-[11px] leading-relaxed text-zinc-600">
+        {message && <p className="mt-2 text-[12.5px] text-zinc-400">{message}</p>}
+        <p className="mt-3 max-w-[72ch] text-[12.5px] leading-[19px] text-zinc-500">
           With the limit off, every quota is a hard cap. Limits are checked every few minutes, so usage can run a little past one.
           Only you can raise it, from this page and your email; agents and API keys can read it but never change it.
         </p>
@@ -408,22 +415,37 @@ export default function UsagePage() {
 
   return (
     <OrgShell>
-      <div className="mx-auto w-full max-w-[1000px] px-6 py-8 lg:px-10">
-        <SectionTitle
+      <div className={`${PAGE_WIDTH} ${PAGE_GUTTER} pb-16`}>
+        <PageHeader
+          className="!px-0"
           title="Usage"
-          description="Everything your account has used this billing cycle, across all projects."
-          actions={<KitButton variant="primary" size="sm" iconRight={ArrowUpRight} onClick={() => router.push('/app/billing')}>Upgrade</KitButton>}
+          meta={usage ? <span className="text-[13px] text-zinc-500">{usage.planName} plan</span> : undefined}
+          description="Everything this account has used in the current billing cycle, pooled across all of its projects."
+          actions={
+            <KitButton variant="secondary" iconRight={ArrowUpRight} onClick={() => router.push('/app/billing')}>
+              Plans and billing
+            </KitButton>
+          }
         />
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-24 text-zinc-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-[12.5px]">Loading usage…</span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-hidden>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-[104px] w-full rounded-[10px]" />
+            ))}
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-rose-500/15 bg-rose-500/[0.04] py-16 text-center">
-            <AlertTriangle className="h-5 w-5 text-rose-400/70" />
-            <p className="text-[13px] text-rose-300/70">{error}</p>
+          <div className={`${PLATE} border ${EDGE} ${R_PANEL}`}>
+            <EmptyState
+              icon={AlertTriangle}
+              title="Usage did not load"
+              description="The usage service did not answer. Your quotas and limits are still enforced."
+              action={
+                <KitButton icon={RefreshCw} onClick={() => location.reload()}>
+                  Try again
+                </KitButton>
+              }
+            />
           </div>
         ) : usage ? (
           <>
@@ -467,8 +489,8 @@ export default function UsagePage() {
                   description="Included on every plan. Detection and repair run no model, so it never draws your credits"
                   actions={
                     <span className="inline-flex items-baseline gap-1.5">
-                      <span className="font-mono text-[20px] font-medium tabular-nums leading-none text-white">{fmtNum(activity.runsThisCycle)}</span>
-                      <span className="text-[11px] text-zinc-500">runs this cycle</span>
+                      <span className="text-[20px] font-medium tabular-nums leading-none text-white">{fmtNum(activity.runsThisCycle)}</span>
+                      <span className="text-[12px] text-zinc-500">runs this cycle</span>
                     </span>
                   }
                 />
@@ -479,15 +501,15 @@ export default function UsagePage() {
             )}
 
             <div className="mt-5">
-              <KitNote tone="info" title="Usage refreshes periodically">
+              <KitNote tone="info" icon={Info} title="Counters lag a little">
                 Counters can take up to an hour to reflect the latest activity. Autonomy runs never draw from your credits;
                 keeping backends alive is included.
               </KitNote>
             </div>
 
-            <p className="mt-4 text-[12px] text-zinc-500">
+            <p className="mt-4 text-[12.5px] text-zinc-500">
               Need more headroom?{' '}
-              <Link href="/app/billing" className="text-violet-300 hover:text-violet-200 underline underline-offset-2">
+              <Link href="/app/billing" className="font-medium text-zinc-200 underline-offset-2 hover:underline">
                 Compare plans
               </Link>
               .
@@ -536,14 +558,14 @@ function AutonomyChart({ perDay }: { perDay: { date: string; count: number }[] }
               className="flex min-w-[2px] flex-1 items-end"
             >
               <div
-                className={`w-full rounded-[2px] ${d.count > 0 ? 'bg-violet-500/80' : 'bg-white/[0.06]'}`}
+                className={`w-full rounded-[2px] ${d.count > 0 ? 'bg-violet-400/80' : 'bg-white/[0.06]'}`}
                 style={{ height: h }}
               />
             </div>
           )
         })}
       </div>
-      <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-zinc-600">
+      <div className="mt-2 flex items-center justify-between text-[12px] tabular-nums text-zinc-500">
         <span>{label}</span>
         <span>Today</span>
       </div>

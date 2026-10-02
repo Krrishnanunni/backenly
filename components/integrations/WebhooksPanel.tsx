@@ -31,12 +31,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Webhook, Loader2, Plus, Trash2, Send, KeyRound, Power,
-  CheckCircle2, XCircle, AlertTriangle, Clock, ChevronRight, Pencil, Ban,
+  Webhook, Plus, Trash2, Send, KeyRound, Power,
+  CheckCircle2, AlertTriangle, ChevronRight, Pencil,
 } from 'lucide-react'
 import {
-  KitButton, KitNote, KitConfirmDialog, KitModal, KitField, KitInput, KitBadge, EmptyState,
+  CopyButton, EmptyState, KitBadge, KitButton, KitConfirmDialog, KitField, KitInput, KitModal, KitNote,
+  OverflowMenu, PageHeader, Skeleton, Tag,
 } from '@/components/inspector/kit'
+import { FOCUS, PAGE_GUTTER, PAGE_WIDTH } from '@/components/console/tokens'
 import { WEBHOOK_EVENT_TYPES, EVENT_DESCRIPTIONS, type WebhookEventType } from '@/lib/webhooks/events'
 
 interface WebhookRow {
@@ -80,11 +82,13 @@ const STATUS_TONE: Record<string, 'operational' | 'failed' | 'attention' | 'neut
   CANCELLED: 'neutral',
 }
 
-function StatusIcon({ status }: { status: string }) {
-  if (status === 'SUCCESS') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/70" />
-  if (status === 'RETRYING' || status === 'PENDING') return <Clock className="h-3.5 w-3.5 text-amber-500/70" />
-  if (status === 'CANCELLED') return <Ban className="h-3.5 w-3.5 text-zinc-500" />
-  return <XCircle className="h-3.5 w-3.5 text-rose-500/70" />
+const STATUS_LABEL: Record<string, string> = {
+  SUCCESS: 'Delivered',
+  FAILED: 'Failed',
+  DEAD_LETTER: 'Gave up',
+  RETRYING: 'Retrying',
+  PENDING: 'Pending',
+  CANCELLED: 'Cancelled',
 }
 
 export function WebhooksPanel({ projectId }: { projectId: string }) {
@@ -256,222 +260,213 @@ export function WebhooksPanel({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">
-        <div className="flex items-center gap-2">
-          <Webhook className="h-3.5 w-3.5 text-zinc-500" />
-          <span className="text-[12px] font-medium text-zinc-200">Outbound webhooks</span>
-        </div>
-        <KitButton variant="secondary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
-          Add endpoint
-        </KitButton>
-      </div>
+    <div className={`${PAGE_WIDTH} ${PAGE_GUTTER} pb-16`}>
+      <PageHeader
+        className="!px-0"
+        title="Webhooks"
+        description="Send signed events to your own services when rows change or an end user signs up. Row events are captured in PostgreSQL, so they fire for every writer: the REST data plane, functions and the table editor alike."
+        meta={
+          !loading && webhooks.length > 0 ? (
+            <span className="text-[13px] tabular-nums text-zinc-500">
+              {webhooks.length} {webhooks.length === 1 ? 'endpoint' : 'endpoints'}
+            </span>
+          ) : undefined
+        }
+        actions={
+          // The empty state carries this action itself; one button per intent.
+          loading || webhooks.length > 0 ? (
+            <KitButton variant="primary" icon={Plus} onClick={() => setCreating(true)}>
+              Add endpoint
+            </KitButton>
+          ) : undefined
+        }
+      />
 
-      <div className="flex-1 px-4 py-4">
-        <p className="max-w-[70ch] text-[12.5px] leading-relaxed text-zinc-400">
-          Backenly POSTs a signed JSON body to your endpoint when the event happens. Row
-          events are captured in PostgreSQL, so they fire for every writer &mdash; the REST
-          data plane, functions and the table editor alike &mdash; not only for changes made
-          in this dashboard.
-        </p>
-
-        {loadError && (
-          <div className="mt-4 max-w-[70ch]">
-            <KitNote icon={AlertTriangle} tone="danger">{loadError}</KitNote>
-          </div>
-        )}
+      <div className="space-y-3">
+        {loadError && <KitNote icon={AlertTriangle} tone="danger">{loadError}</KitNote>}
 
         {message && (
-          <div className="mt-4 max-w-[70ch]">
-            <KitNote
-              icon={message.tone === 'success' ? CheckCircle2 : AlertTriangle}
-              tone={message.tone}
-            >
-              {message.text}
-            </KitNote>
-          </div>
+          <KitNote icon={message.tone === 'success' ? CheckCircle2 : AlertTriangle} tone={message.tone}>
+            {message.text}
+          </KitNote>
         )}
 
         {/* Ground truth from information_schema, not a stored flag. */}
         {capture?.required && !capture.healthy && (
-          <div className="mt-4 max-w-[70ch]">
-            <KitNote icon={AlertTriangle} tone="warn" title="Row events are not being captured">
-              {capture.readable
-                ? 'This project subscribes to row events, but no table in its schema carries a capture trigger. Those webhooks will not fire. Re-saving an endpoint reinstalls capture.'
-                : 'This project’s workspace schema could not be read, so whether row events are captured is unknown. Treat these endpoints as not firing until this resolves.'}
-            </KitNote>
-          </div>
+          <KitNote icon={AlertTriangle} tone="warn" title="Row events are not being captured">
+            {capture.readable
+              ? 'This project subscribes to row events, but no table in its schema carries a capture trigger. Those webhooks will not fire. Re-saving an endpoint reinstalls capture.'
+              : 'This project’s workspace schema could not be read, so whether row events are captured is unknown. Treat these endpoints as not firing until this resolves.'}
+          </KitNote>
         )}
+      </div>
 
-        <div className="mt-5">
-          {loading ? (
-            <div className="flex items-center gap-2 text-[12px] text-zinc-500">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Loading endpoints…
-            </div>
-          ) : webhooks.length === 0 ? (
+      <div className={loadError || message || (capture?.required && !capture.healthy) ? 'mt-5' : ''}>
+        {loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-[64px] w-full rounded-[10px]" />
+            <Skeleton className="h-[64px] w-full rounded-[10px]" />
+          </div>
+        ) : webhooks.length === 0 ? (
+          <div className="rounded-[10px] border border-dashed border-white/[0.10]">
             <EmptyState
               icon={Webhook}
               title="No endpoints yet"
-              description="Add a URL and Backenly will POST a signed body to it when the event happens."
+              description="Add a URL and Backenly POSTs a signed JSON body to it when the event happens, with retries and a delivery log."
               action={
-                <KitButton variant="primary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
+                <KitButton variant="primary" icon={Plus} onClick={() => setCreating(true)}>
                   Add endpoint
                 </KitButton>
               }
             />
-          ) : (
-            <div className="max-w-[80ch] space-y-2">
-              {webhooks.map(webhook => (
-                <div
-                  key={webhook.id}
-                  className="overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.015]"
-                >
-                  <div className="flex items-center gap-3 px-3.5 py-3">
+          </div>
+        ) : (
+          <ul className="overflow-hidden rounded-[10px] border border-white/[0.08] bg-[#0f1012] divide-y divide-white/[0.06]">
+            {webhooks.map(webhook => {
+              const expanded = openLogs === webhook.id
+              return (
+                <li key={webhook.id}>
+                  <div className="flex items-center gap-3 px-4 py-3">
                     <button
+                      type="button"
                       onClick={() => toggleLogs(webhook.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                      aria-expanded={openLogs === webhook.id}
+                      className={`flex min-w-0 flex-1 items-center gap-3 rounded-[6px] text-left ${FOCUS}`}
+                      aria-expanded={expanded}
                     >
                       <ChevronRight
-                        className={`h-3.5 w-3.5 flex-shrink-0 text-zinc-600 transition-transform ${
-                          openLogs === webhook.id ? 'rotate-90' : ''
-                        }`}
+                        className={`h-4 w-4 flex-shrink-0 text-zinc-600 transition-transform duration-150 ${expanded ? 'rotate-90 text-zinc-300' : ''}`}
                       />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-mono text-[12px] text-zinc-200">{webhook.targetUrl}</p>
-                        <p className="mt-0.5 text-[11px] text-zinc-500">
-                          <span className="font-mono">{webhook.eventType}</span>
-                          {' · '}
-                          {webhook.logCount === 0
-                            ? 'never delivered'
-                            : `${webhook.logCount} ${webhook.logCount === 1 ? 'delivery' : 'deliveries'}`}
-                        </p>
-                      </div>
+                      <span
+                        className={`h-[7px] w-[7px] flex-shrink-0 rounded-full ${webhook.active ? 'bg-emerald-400' : 'bg-zinc-600'}`}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-mono text-[12.5px] text-zinc-100">{webhook.targetUrl}</span>
+                        <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-zinc-500">
+                          <Tag mono>{webhook.eventType}</Tag>
+                          <span>{webhook.active ? 'Enabled' : 'Disabled'}</span>
+                          <span className="tabular-nums">
+                            {webhook.logCount === 0
+                              ? 'Never delivered'
+                              : `${webhook.logCount.toLocaleString()} ${webhook.logCount === 1 ? 'delivery' : 'deliveries'}`}
+                          </span>
+                        </span>
+                      </span>
                     </button>
 
-                    <KitBadge tone={webhook.active ? 'operational' : 'paused'}>
-                      {webhook.active ? 'enabled' : 'disabled'}
-                    </KitBadge>
-
-                    <div className="flex flex-shrink-0 items-center gap-1.5">
+                    <div className="flex flex-shrink-0 items-center gap-1">
                       <KitButton
-                        variant="ghost"
+                        variant="secondary"
                         size="sm"
-                        icon={busyId === webhook.id ? Loader2 : Send}
+                        icon={Send}
+                        loading={busyId === webhook.id}
                         disabled={busyId !== null}
                         onClick={() => sendTest(webhook)}
                       >
-                        Test
+                        <span className="hidden sm:inline">Send test</span>
+                        <span className="sm:hidden">Test</span>
                       </KitButton>
-                      <KitButton
-                        variant="ghost"
-                        size="sm"
-                        icon={Pencil}
+                      <OverflowMenu
+                        label={`More actions for ${webhook.targetUrl}`}
                         disabled={busyId !== null}
-                        onClick={() => setEditing(webhook)}
-                      >
-                        Edit
-                      </KitButton>
-                      <KitButton
-                        variant="ghost"
-                        size="sm"
-                        icon={Power}
-                        disabled={busyId !== null}
-                        onClick={() => setActive(webhook, !webhook.active)}
-                      >
-                        {webhook.active ? 'Disable' : 'Enable'}
-                      </KitButton>
-                      <KitButton
-                        variant="ghost"
-                        size="sm"
-                        icon={KeyRound}
-                        disabled={busyId !== null}
-                        onClick={() => setConfirmRotate(webhook)}
-                      >
-                        Rotate
-                      </KitButton>
-                      <KitButton
-                        variant="ghost"
-                        size="sm"
-                        icon={Trash2}
-                        disabled={busyId !== null}
-                        onClick={() => setConfirmDelete(webhook)}
-                      >
-                        Delete
-                      </KitButton>
+                        items={[
+                          { label: 'Edit endpoint…', icon: Pencil, onClick: () => setEditing(webhook) },
+                          { label: webhook.active ? 'Disable' : 'Enable', icon: Power, onClick: () => setActive(webhook, !webhook.active) },
+                          { label: 'Rotate secret…', icon: KeyRound, onClick: () => setConfirmRotate(webhook) },
+                          { separator: true },
+                          { label: 'Delete endpoint…', icon: Trash2, danger: true, onClick: () => setConfirmDelete(webhook) },
+                        ]}
+                      />
                     </div>
                   </div>
 
-                  {openLogs === webhook.id && (
-                    <div className="border-t border-white/[0.05] bg-black/20 px-3.5 py-3">
+                  {expanded && (
+                    <div className="border-t border-white/[0.06] bg-[#0a0b0d] px-4 py-3">
                       {logsLoading === webhook.id ? (
-                        <div className="flex items-center gap-2 text-[11.5px] text-zinc-500">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Loading deliveries…
+                        <div className="space-y-2 py-1">
+                          <Skeleton className="h-[16px] w-3/4" />
+                          <Skeleton className="h-[16px] w-2/3" />
                         </div>
                       ) : (logs[webhook.id] ?? []).length === 0 ? (
-                        <p className="text-[11.5px] text-zinc-500">
+                        <p className="py-1 text-[13px] text-zinc-500">
                           No deliveries recorded. This endpoint has not fired yet.
                         </p>
                       ) : (
-                        <table className="w-full text-[11.5px]">
-                          <tbody>
-                            {(logs[webhook.id] ?? []).map(log => (
-                              <tr key={log.id} className="border-b border-white/[0.04] last:border-0">
-                                <td className="py-1.5 pr-2 align-top">
-                                  <StatusIcon status={log.status} />
-                                </td>
-                                <td className="py-1.5 pr-3 align-top text-zinc-400">
-                                  {new Date(log.createdAt).toLocaleString()}
-                                </td>
-                                <td className="py-1.5 pr-3 align-top">
-                                  <KitBadge tone={STATUS_TONE[log.status] ?? 'neutral'}>
-                                    {log.status.toLowerCase()}
-                                  </KitBadge>
-                                </td>
-                                <td className="py-1.5 pr-3 align-top font-mono text-zinc-500">
-                                  {log.statusCode ?? '—'}
-                                </td>
-                                <td className="py-1.5 pr-3 align-top text-zinc-500">
-                                  {log.attemptCount > 1 ? `${log.attemptCount} attempts` : ''}
-                                </td>
-                                <td className={`py-1.5 align-top ${log.status === 'CANCELLED' ? 'text-zinc-500' : 'text-rose-400/80'}`}>
-                                  {log.status === 'CANCELLED' && log.error === 'project_paused'
-                                    ? 'not sent: the project was paused'
-                                    : log.error ?? ''}
-                                </td>
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[620px] text-left text-[12.5px]">
+                            <thead>
+                              <tr className="text-[12px] text-zinc-500">
+                                <th scope="col" className="pb-2 pr-4 font-medium">Status</th>
+                                <th scope="col" className="pb-2 pr-4 font-medium">Time</th>
+                                <th scope="col" className="pb-2 pr-4 font-medium">Response</th>
+                                <th scope="col" className="pb-2 pr-4 font-medium">Attempts</th>
+                                <th scope="col" className="pb-2 font-medium">Detail</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-white/[0.05]">
+                              {(logs[webhook.id] ?? []).map(log => (
+                                <tr key={log.id}>
+                                  <td className="py-2 pr-4 align-top">
+                                    <KitBadge tone={STATUS_TONE[log.status] ?? 'neutral'}>{STATUS_LABEL[log.status] ?? log.status}</KitBadge>
+                                  </td>
+                                  <td className="whitespace-nowrap py-2 pr-4 align-top tabular-nums text-zinc-400">
+                                    {new Date(log.createdAt).toLocaleString()}
+                                  </td>
+                                  <td className="py-2 pr-4 align-top font-mono text-[12px] text-zinc-400">{log.statusCode ?? '—'}</td>
+                                  <td className="py-2 pr-4 align-top tabular-nums text-zinc-500">{log.attemptCount}</td>
+                                  <td className={`py-2 align-top ${log.status === 'CANCELLED' ? 'text-zinc-500' : 'text-rose-300/90'}`}>
+                                    {log.status === 'CANCELLED' && log.error === 'project_paused'
+                                      ? 'Not sent: the project was paused'
+                                      : log.error ?? ''}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       )}
                     </div>
                   )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-8 max-w-[70ch]">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-            Verifying a delivery
-          </p>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
-            Each request carries <span className="font-mono text-zinc-300">X-Webhook-Signature</span>{' '}
-            as <span className="font-mono text-zinc-300">sha256=&lt;hex&gt;</span>, the HMAC-SHA256 of
-            the raw request body keyed with the endpoint&rsquo;s signing secret. Compute the same
-            HMAC over the bytes you received and compare in constant time. Reject anything that does
-            not match &mdash; the signature is what tells you the request came from Backenly.
-          </p>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-zinc-400">
-            <span className="font-mono text-zinc-300">X-Webhook-Delivery</span> is unique per
-            delivery and repeats when a retry re-sends the same event. Delivery is at-least-once, so
-            use it to discard duplicates rather than assuming each request is new.
-          </p>
-        </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
+
+      {/* How a receiver verifies what it got: the contract, and a snippet
+          that implements it exactly (lib/webhooks/index.ts signs
+          'sha256=' + hex HMAC-SHA256 of the raw body). */}
+      <section aria-labelledby="verify-heading" className="mt-12 grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10">
+        <div>
+          <h2 id="verify-heading" className="text-[15px] font-semibold leading-[22px] tracking-[-0.012em] text-zinc-100">
+            Verifying a delivery
+          </h2>
+          <div className="mt-2 space-y-3 text-[13px] leading-[21px] text-zinc-400">
+            <p>
+              Each request carries <code className="font-mono text-[12px] text-zinc-200">X-Webhook-Signature</code> as{' '}
+              <code className="font-mono text-[12px] text-zinc-200">sha256=&lt;hex&gt;</code>, the HMAC-SHA256 of the raw
+              request body keyed with the endpoint’s signing secret. Compute the same HMAC over the bytes you received
+              and compare in constant time. Reject anything that does not match: the signature is what tells you the
+              request came from Backenly.
+            </p>
+            <p>
+              <code className="font-mono text-[12px] text-zinc-200">X-Webhook-Delivery</code> is unique per delivery and
+              repeats when a retry re-sends the same event. Delivery is at-least-once, so use it to discard duplicates
+              rather than assuming each request is new.
+            </p>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-[10px] border border-white/[0.08] bg-[#08090a]">
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2">
+            <span className="text-[12px] text-zinc-500">verify.js</span>
+            <CopyButton value={VERIFY_SNIPPET} label="Copy snippet" />
+          </div>
+          <pre className="overflow-x-auto px-4 py-3.5 font-mono text-[12px] leading-[20px] text-zinc-300">
+            <code>{VERIFY_SNIPPET}</code>
+          </pre>
+        </div>
+      </section>
 
       <WebhookForm
         open={creating}
@@ -497,18 +492,21 @@ export function WebhooksPanel({ projectId }: { projectId: string }) {
         <KitModal
           open
           title="Signing secret"
-          description="This is shown once and cannot be retrieved later. Store it with your receiver now."
+          description="Shown once and cannot be retrieved later. Store it with your receiver now."
           onClose={() => setRevealedSecret(null)}
           footer={
-            <KitButton variant="primary" size="sm" onClick={() => setRevealedSecret(null)}>
+            <KitButton variant="primary" onClick={() => setRevealedSecret(null)}>
               Done
             </KitButton>
           }
         >
-          <p className="mb-3 truncate font-mono text-[11.5px] text-zinc-500">{revealedSecret.url}</p>
-          <code className="block break-all rounded-md border border-white/10 bg-[#0f1015] px-3 py-2.5 font-mono text-[12px] text-zinc-100">
-            {revealedSecret.secret}
-          </code>
+          <p className="mb-2 truncate font-mono text-[12px] text-zinc-500">{revealedSecret.url}</p>
+          <div className="flex items-start gap-2 rounded-[8px] border border-white/[0.08] bg-[#08090a] p-3">
+            <code className="min-w-0 flex-1 select-all break-all font-mono text-[12.5px] leading-[20px] text-zinc-100">
+              {revealedSecret.secret}
+            </code>
+            <CopyButton value={revealedSecret.secret} label="Copy secret" showLabel />
+          </div>
         </KitModal>
       )}
 
@@ -523,7 +521,7 @@ export function WebhooksPanel({ projectId }: { projectId: string }) {
             `Any receiver still verifying with the old one will reject them until you update its ` +
             `configuration. The new secret is shown once.`
           }
-          confirmLabel={busyId ? 'Rotating…' : 'Rotate'}
+          confirmLabel={busyId ? 'Rotating…' : 'Rotate secret'}
           onConfirm={() => rotate(confirmRotate)}
           onCancel={() => setConfirmRotate(null)}
         />
@@ -539,7 +537,7 @@ export function WebhooksPanel({ projectId }: { projectId: string }) {
             `${confirmDelete.targetUrl} stops receiving events immediately, and its delivery ` +
             `history is removed with it. Undelivered retries for this endpoint are abandoned.`
           }
-          confirmLabel={busyId ? 'Deleting…' : 'Delete'}
+          confirmLabel={busyId ? 'Deleting…' : 'Delete endpoint'}
           onConfirm={() => remove(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
         />
@@ -547,6 +545,17 @@ export function WebhooksPanel({ projectId }: { projectId: string }) {
     </div>
   )
 }
+
+const VERIFY_SNIPPET = `import crypto from 'node:crypto'
+
+// rawBody: the exact bytes received, before any JSON parsing.
+export function isFromBackenly(rawBody, signatureHeader, secret) {
+  const expected =
+    'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
+  const a = Buffer.from(expected)
+  const b = Buffer.from(signatureHeader ?? '')
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}`
 
 /**
  * The create/edit form.
@@ -599,15 +608,9 @@ function WebhookForm({
       onClose={onClose}
       footer={
         <>
-          <KitButton variant="ghost" size="sm" onClick={onClose}>Cancel</KitButton>
-          <KitButton
-            variant="primary"
-            size="sm"
-            icon={busy ? Loader2 : undefined}
-            disabled={busy || url.trim() === ''}
-            onClick={submit}
-          >
-            {busy ? 'Saving…' : 'Save'}
+          <KitButton variant="ghost" onClick={onClose}>Cancel</KitButton>
+          <KitButton variant="primary" loading={busy} disabled={url.trim() === ''} onClick={submit}>
+            {busy ? 'Saving…' : 'Save endpoint'}
           </KitButton>
         </>
       }
@@ -618,10 +621,15 @@ function WebhookForm({
           hint="Must be https:// or http:// and reachable from this deployment. Private and loopback addresses are refused unless the operator has enabled them."
         >
           <KitInput
+            type="url"
+            inputMode="url"
+            name="webhook-url"
+            autoComplete="off"
+            spellCheck={false}
             value={url}
             onChange={e => setUrl(e.target.value)}
-            placeholder="https://example.com/hooks/backenly"
-            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter' && url.trim()) submit() }}
+            placeholder="https://example.com/hooks/backenly…"
           />
         </KitField>
 
@@ -630,10 +638,10 @@ function WebhookForm({
             {WEBHOOK_EVENT_TYPES.map(type => (
               <label
                 key={type}
-                className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 transition-colors ${
+                className={`flex cursor-pointer items-start gap-2.5 rounded-[8px] border px-3 py-2.5 transition-colors focus-within:ring-2 focus-within:ring-violet-300/60 ${
                   event === type
-                    ? 'border-violet-400/30 bg-violet-400/[0.06]'
-                    : 'border-white/[0.06] hover:border-white/15'
+                    ? 'border-violet-300/40 bg-violet-400/[0.06]'
+                    : 'border-white/[0.08] hover:border-white/[0.14]'
                 }`}
               >
                 <input
@@ -645,8 +653,8 @@ function WebhookForm({
                   className="mt-0.5 accent-violet-400"
                 />
                 <span className="min-w-0">
-                  <span className="block font-mono text-[12px] text-zinc-200">{type}</span>
-                  <span className="mt-0.5 block text-[11.5px] leading-snug text-zinc-500">
+                  <span className="block font-mono text-[12px] text-zinc-100">{type}</span>
+                  <span className="mt-0.5 block text-[12px] leading-[17px] text-zinc-500">
                     {EVENT_DESCRIPTIONS[type]}
                   </span>
                 </span>

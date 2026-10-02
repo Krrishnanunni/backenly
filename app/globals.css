@@ -949,6 +949,62 @@ html {
   background: rgba(255, 255, 255, 0.14);
 }
 
+/* ─── Console shell ──────────────────────────────────────────────────────────
+   The dashboard frame (components/shell). The chrome is one night surface; the
+   work sits on a canvas inset into it on md+, full-bleed below. These two
+   numbers are the only place the frame's geometry is written down, so the
+   full-height instruments can fit the viewport exactly. */
+:root {
+  --console-bar: 48px; /* top bar */
+  --console-gap: 8px;  /* canvas inset from the chrome, md+ */
+}
+
+/* Exactly the canvas's inner height, for pages that own the viewport and
+   scroll internally (Database, Storage, Functions, Realtime, Monitoring,
+   Auth). The 2px is the canvas's own top and bottom border. */
+.console-fill {
+  height: calc(100vh - var(--console-bar));
+  height: calc(100dvh - var(--console-bar));
+}
+@media (min-width: 768px) {
+  .console-fill {
+    height: calc(100vh - var(--console-bar) - var(--console-gap) - 2px);
+    height: calc(100dvh - var(--console-bar) - var(--console-gap) - 2px);
+    /* The canvas cannot clip (overflow:hidden would break sticky headers on
+       document pages), so a full-height instrument rounds its own corners to
+       the canvas's inner radius. Instruments already clip their panes. */
+    border-radius: 13px;
+  }
+}
+
+/* The canvas's minimum height, so short pages still read as one sheet. */
+.console-canvas-min {
+  min-height: calc(100vh - var(--console-bar));
+  min-height: calc(100dvh - var(--console-bar));
+}
+@media (min-width: 768px) {
+  .console-canvas-min {
+    min-height: calc(100vh - var(--console-bar) - var(--console-gap));
+    min-height: calc(100dvh - var(--console-bar) - var(--console-gap));
+  }
+}
+
+/* One entrance per page: the content settles in as the route changes.
+   Opacity ONLY. A transform (even a finished translateY(0) held by the fill
+   mode) makes this element the containing block for every position:fixed
+   descendant, and every dialog inside a page would then anchor to the page
+   instead of the viewport. */
+@keyframes consoleEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.console-enter {
+  animation: consoleEnter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-enter { animation: none; }
+}
+
 /* ── Smooth animation utilities (CSS fallback) ── */
 @keyframes slideInFromLeft {
   from {

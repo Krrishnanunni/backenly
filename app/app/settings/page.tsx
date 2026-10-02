@@ -3,10 +3,10 @@
 /**
  * Account Settings (/app/settings) — IA restructure §5.6.
  *
- * Rebuilt to live INSIDE the org shell (§5) and speak the locked flat kit (§11):
- * #16171d panels, hairline borders, mono numerals, violet only for action/
- * attention — no ambient glows, no gradient cover cards, no "Back" button. The
- * org sidebar is the only navigation; sub-sections are in-page tabs.
+ * Lives inside the org shell (§5) on the console kit: the standard document
+ * header with the sections as tabs under it, hairline panels, and the plan
+ * shown only on Cloud, where there is one. The org sidebar is the only
+ * navigation.
  *
  * Billing was promoted to its own org page (§5.4) — any legacy ?tab=billing
  * deep link redirects there. Every auth handler (profile, 2FA, password,
@@ -23,9 +23,12 @@ import {
 } from 'lucide-react'
 import { OrgShell } from '@/components/shell/OrgShell'
 import {
-  SectionTitle, KitCard, KitCardHeader, KitCardBody, KitButton,
+  KitCard, KitCardHeader, KitCardBody, KitButton,
   KitField, KitInput, KitNote, KitBadge, KitTabs, KitTab,
+  INPUT_BASE, PageHeader, Skeleton, StatusDot, Tag,
 } from '@/components/inspector/kit'
+import { FLOAT, PAGE_GUTTER, PAGE_WIDTH, RAISE } from '@/components/console/tokens'
+import { usePlanName } from '@/components/shell/ConsoleChrome'
 import { CLOUD_CONTROL_PLANE } from '@cloud/control-plane'
 import { DeploymentRecoverySection } from '@/components/app/DeploymentRecoverySection'
 import { deleteAccount, signOut } from '@/lib/api/auth'
@@ -80,6 +83,7 @@ let cachedSettingsUser: UserProfile | null = null
 export default function SettingsPage() {
   const router = useRouter()
   const [user, setUser] = useState<UserProfile | null>(() => cachedSettingsUser)
+  const planName = usePlanName()
   const [loading, setLoading] = useState(() => !cachedSettingsUser)
   const [activeSection, setActiveSection] = useState<Section>('profile')
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; msg: string } | null>(null)
@@ -291,9 +295,7 @@ export default function SettingsPage() {
       {/* Toast */}
       {toast && (
         <div className="fixed top-16 right-6 z-50">
-          <div className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 bg-[#1c1d23] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${
-            toast.kind === 'success' ? 'border-emerald-500/25' : 'border-rose-500/25'
-          }`}>
+          <div role="status" aria-live="polite" className={`flex items-center gap-2.5 rounded-[10px] px-3.5 py-2.5 ${RAISE} ${FLOAT}`}>
             {toast.kind === 'success'
               ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               : <AlertTriangle className="h-4 w-4 text-rose-400" />}
@@ -302,33 +304,33 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
-        <SectionTitle
+      <div className={`${PAGE_WIDTH} ${PAGE_GUTTER} pb-16`}>
+        <PageHeader
+          className="!px-0"
           title="Settings"
-          description="Manage your profile, security and account."
+          description="Your profile, sign-in and security, and the account itself."
           actions={
-            <KitButton variant="secondary" size="sm" icon={LogOut} onClick={handleLogout}>
+            <KitButton variant="secondary" icon={LogOut} onClick={handleLogout}>
               Sign out
             </KitButton>
           }
+          tabs={
+            <KitTabs>
+              {TABS.map(({ id, label, icon: Icon }) => (
+                <KitTab key={id} active={activeSection === id} onClick={() => setActiveSection(id)}>
+                  <Icon />
+                  {label}
+                </KitTab>
+              ))}
+            </KitTabs>
+          }
         />
-
-        <KitTabs className="mb-5">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <KitTab key={id} active={activeSection === id} onClick={() => setActiveSection(id)}>
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </KitTab>
-          ))}
-        </KitTabs>
+        <div className="h-6" />
 
         {loading ? (
-          <div className="space-y-4 animate-pulse">
-            <div className="h-44 rounded-xl border border-white/[0.07] bg-[#16171d] p-5 space-y-3">
-              <div className="h-4 w-32 rounded bg-white/[0.06]" />
-              <div className="h-8 w-48 rounded bg-white/[0.04]" />
-              <div className="h-3 w-64 rounded bg-white/[0.03]" />
-            </div>
+          <div className="max-w-[760px] space-y-4" aria-hidden>
+            <Skeleton className="h-[150px] w-full rounded-[10px]" />
+            <Skeleton className="h-[180px] w-full rounded-[10px]" />
           </div>
         ) : (
           <>
@@ -336,7 +338,7 @@ export default function SettingsPage() {
               <ProfileSection
                 user={user}
                 initials={initials}
-                planLabel={planLabelFor(user?.tier)}
+                planLabel={CLOUD_CONTROL_PLANE ? planName ?? planLabelFor(user?.tier) : null}
                 editingName={editingName}
                 setEditingName={setEditingName}
                 newName={newName}
@@ -436,8 +438,8 @@ export default function SettingsPage() {
                   <img src={twoFASetup.qrCodeUrl} alt="2FA QR code" className="h-44 w-44" />
                 </div>
                 <div className="mt-4">
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">Or enter manually</p>
-                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-[#0f1015] px-3 py-2">
+                  <p className="mb-1.5 text-[12px] font-medium text-zinc-500">Or enter manually</p>
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-[#08090a] px-3 py-2">
                     <code className="flex-1 break-all font-mono text-[12px] text-violet-200/90">{twoFASetup.secret}</code>
                     <button
                       onClick={() => { navigator.clipboard.writeText(twoFASetup.secret); showToast('Secret copied') }}
@@ -456,7 +458,7 @@ export default function SettingsPage() {
                       onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, ''))}
                       placeholder="123456"
                       autoFocus
-                      className="w-full rounded-lg border border-white/[0.07] bg-[#0f1015] px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
+                      className="w-full rounded-lg border border-white/[0.07] bg-[#08090a] px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
                     />
                   </KitField>
                 </div>
@@ -477,7 +479,7 @@ export default function SettingsPage() {
                 <KitNote icon={AlertTriangle} tone="warn">
                   Store these somewhere safe. We won&apos;t show them again.
                 </KitNote>
-                <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-white/[0.07] bg-[#0f1015] p-4">
+                <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-white/[0.07] bg-[#08090a] p-4">
                   {twoFABackupCodes.map((code, i) => (
                     <div key={i} className="rounded-md border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-center font-mono text-[12.5px] text-violet-100/90">
                       {code}
@@ -532,7 +534,7 @@ function ProfileSection({
 }: {
   user: UserProfile | null
   initials: string
-  planLabel: string
+  planLabel: string | null
   editingName: boolean
   setEditingName: (v: boolean) => void
   newName: string
@@ -545,16 +547,16 @@ function ProfileSection({
       {/* Identity */}
       <KitCard>
         <div className="flex flex-wrap items-center gap-4 px-5 py-5">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-lg font-semibold text-zinc-100">
+          <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[linear-gradient(135deg,#27272a,#18181b)] text-[16px] font-semibold text-zinc-100 ring-1 ring-inset ring-white/[0.12]">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[17px] font-semibold leading-tight text-white">{user?.name || 'Unnamed user'}</h2>
-            <p className="mt-0.5 text-[12.5px] text-zinc-500">{user?.email}</p>
+            <h2 className="text-[17px] font-semibold leading-[24px] tracking-[-0.014em] text-zinc-50">{user?.name || 'Unnamed user'}</h2>
+            <p className="text-[13px] text-zinc-500">{user?.email}</p>
           </div>
-          <div className="flex items-center gap-2">
-            {user?.emailVerified && <KitBadge tone="operational">Verified</KitBadge>}
-            <KitBadge tone="beta" icon={Sparkles}>{planLabel}</KitBadge>
+          <div className="flex items-center gap-3">
+            {user?.emailVerified && <StatusDot tone="operational" label="Email verified" />}
+            {planLabel && <Tag>{planLabel} plan</Tag>}
           </div>
         </div>
         <div className="grid grid-cols-2 border-t border-white/[0.06] divide-x divide-white/[0.04] sm:grid-cols-4">
@@ -575,7 +577,8 @@ function ProfileSection({
               <input
                 value={user?.email || ''}
                 disabled
-                className="h-8 w-full cursor-not-allowed rounded-lg border border-white/[0.07] bg-white/[0.02] pl-9 pr-3 text-[12.5px] text-zinc-400"
+                aria-label="Email address"
+                className={`${INPUT_BASE} h-[36px] cursor-not-allowed pl-9 pr-3 text-zinc-400 sm:h-[32px]`}
               />
             </div>
           </KitField>
@@ -584,17 +587,20 @@ function ProfileSection({
             {editingName ? (
               <div className="flex items-center gap-2">
                 <KitInput value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Enter your name" autoFocus />
-                <KitButton variant="primary" onClick={onSaveName} disabled={savingName} icon={savingName ? undefined : Check}>
-                  {savingName ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+                <KitButton variant="primary" onClick={onSaveName} loading={savingName} icon={Check}>
+                  Save
                 </KitButton>
-                <KitButton variant="ghost" onClick={() => { setEditingName(false); setNewName(user?.name || '') }} icon={X}>{''}</KitButton>
+                <KitButton variant="ghost" onClick={() => { setEditingName(false); setNewName(user?.name || '') }}>
+                  Cancel
+                </KitButton>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <input
                   value={user?.name || 'Not set'}
                   disabled
-                  className={`h-8 flex-1 cursor-not-allowed rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 text-[12.5px] ${user?.name ? 'text-zinc-200' : 'italic text-zinc-600'}`}
+                  aria-label="Display name"
+                  className={`${INPUT_BASE} h-[36px] flex-1 cursor-not-allowed px-3 sm:h-[32px] ${user?.name ? 'text-zinc-200' : 'italic text-zinc-500'}`}
                 />
                 <KitButton variant="secondary" onClick={() => setEditingName(true)}>Edit</KitButton>
               </div>
@@ -634,7 +640,7 @@ function SecuritySection({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-zinc-100">{providerLabel(user?.provider)}</p>
-              <p className="mt-0.5 text-[11.5px] text-zinc-500">
+              <p className="mt-0.5 text-[12.5px] text-zinc-500">
                 {isEmailUser ? 'Signed in with email and password' : `Managed by ${providerLabel(user?.provider)}`}
               </p>
             </div>
@@ -661,7 +667,7 @@ function SecuritySection({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-zinc-100">Authenticator app</p>
-              <p className="mt-0.5 text-[11.5px] text-zinc-500">
+              <p className="mt-0.5 text-[12.5px] text-zinc-500">
                 {twoFAOn ? 'A code is required from your authenticator on every sign-in.' : 'Use Google Authenticator, 1Password, Authy or similar.'}
               </p>
             </div>
@@ -681,7 +687,7 @@ function SecuritySection({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium text-zinc-100">Send password reset link</p>
-                <p className="mt-0.5 text-[11.5px] text-zinc-500">We&apos;ll email a secure link to {user?.email}.</p>
+                <p className="mt-0.5 text-[12.5px] text-zinc-500">We&apos;ll email a secure link to {user?.email}.</p>
               </div>
               <KitButton variant="secondary" size="sm" icon={resetLoading ? undefined : Mail} onClick={onPasswordReset} disabled={resetLoading}>
                 {resetLoading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…</> : 'Send link'}
@@ -705,7 +711,7 @@ function SecuritySection({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-zinc-100">This browser</p>
-              <p className="mt-0.5 text-[11.5px] text-zinc-500">Last signed in {fmtRelative(user?.lastLogin)}.</p>
+              <p className="mt-0.5 text-[12.5px] text-zinc-500">Last signed in {fmtRelative(user?.lastLogin)}.</p>
             </div>
             <KitButton variant="secondary" size="sm" icon={LogOut} onClick={onLogout}>Sign out</KitButton>
           </div>
@@ -802,7 +808,7 @@ function NotificationsSection({ onToast }: { onToast: (msg: string, kind?: 'succ
           <p className="text-[12.5px] text-zinc-400">Preferences could not be loaded. Try again in a moment.</p>
         ) : (
           <div className="divide-y divide-white/[0.06]">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 pb-2 text-[10.5px] font-medium uppercase tracking-wide text-zinc-500">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 pb-2 text-[12px] font-medium text-zinc-500">
               <span />
               <span className="w-12 text-center">Email</span>
               <span className="w-12 text-center">In app</span>
@@ -813,7 +819,7 @@ function NotificationsSection({ onToast }: { onToast: (msg: string, kind?: 'succ
                 <div key={pref.type} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 py-3">
                   <div className="min-w-0">
                     <p className="text-[13px] font-medium text-zinc-100">{meta.label}</p>
-                    {meta.description && <p className="mt-0.5 text-[11.5px] text-zinc-500">{meta.description}</p>}
+                    {meta.description && <p className="mt-0.5 text-[12.5px] text-zinc-500">{meta.description}</p>}
                   </div>
                   {(['emailEnabled', 'inAppEnabled'] as const).map(channel => (
                     <label key={channel} className="flex w-12 justify-center">
@@ -908,7 +914,7 @@ function SupportSection({ userEmail }: { userEmail?: string }) {
                         <p className="text-[13px] font-medium text-zinc-100">{c.title}</p>
                         <ArrowUpRight className="h-3.5 w-3.5 text-zinc-600 transition-colors group-hover:text-zinc-300" />
                       </div>
-                      <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-500">{c.cardDesc}</p>
+                      <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-500">{c.cardDesc}</p>
                     </div>
                   </button>
                 )
@@ -990,7 +996,7 @@ function InlineForm({
         </div>
         <p className="mt-4 text-[14px] font-semibold text-white">{successTitle}</p>
         <p className="mt-1.5 max-w-[320px] text-[12.5px] leading-relaxed text-zinc-500">{successMsg}</p>
-        {userEmail && <p className="mt-3 text-[11.5px] text-zinc-600">Reply will be sent to <span className="text-zinc-400">{userEmail}</span></p>}
+        {userEmail && <p className="mt-3 text-[12.5px] text-zinc-600">Reply will be sent to <span className="text-zinc-400">{userEmail}</span></p>}
         <div className="mt-5 flex items-center gap-2">
           <KitButton variant="secondary" size="sm" onClick={() => setSent(false)}>Submit another</KitButton>
           <KitButton variant="ghost" size="sm" onClick={onBack}>Done</KitButton>
@@ -1007,7 +1013,7 @@ function InlineForm({
         </div>
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-zinc-100">{title}</p>
-          <p className="truncate text-[11.5px] text-zinc-500">{formDesc}</p>
+          <p className="truncate text-[12.5px] text-zinc-500">{formDesc}</p>
         </div>
       </div>
 
@@ -1015,16 +1021,16 @@ function InlineForm({
         {userEmail && (
           <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
             <Mail className="h-3.5 w-3.5 flex-shrink-0 text-zinc-600" />
-            <span className="text-[11.5px] text-zinc-500">Sending as</span>
-            <span className="truncate text-[11.5px] font-medium text-zinc-300">{userEmail}</span>
+            <span className="text-[12.5px] text-zinc-500">Sending as</span>
+            <span className="truncate text-[12.5px] font-medium text-zinc-300">{userEmail}</span>
           </div>
         )}
 
-        <KitField label={<span className="flex items-center justify-between"><span>{primaryLabel}</span><span className="font-mono text-[10.5px] tabular-nums text-zinc-600">{primary.length}/{PRIMARY_MAX}</span></span>} hint={primaryHint}>
+        <KitField label={<span className="flex items-center justify-between"><span>{primaryLabel}</span><span className="text-[12px] tabular-nums text-zinc-600">{primary.length}/{PRIMARY_MAX}</span></span>} hint={primaryHint}>
           <KitInput value={primary} onChange={(e) => setPrimary(e.target.value)} maxLength={PRIMARY_MAX} placeholder={primaryPlaceholder} disabled={busy} />
         </KitField>
 
-        <KitField label={<span className="flex items-center justify-between"><span>{secondaryLabel}</span><span className="font-mono text-[10.5px] tabular-nums text-zinc-600">{secondary.length}/{SECONDARY_MAX}</span></span>} hint={secondaryHint}>
+        <KitField label={<span className="flex items-center justify-between"><span>{secondaryLabel}</span><span className="text-[12px] tabular-nums text-zinc-600">{secondary.length}/{SECONDARY_MAX}</span></span>} hint={secondaryHint}>
           <textarea
             value={secondary}
             onChange={(e) => setSecondary(e.target.value)}
@@ -1032,7 +1038,7 @@ function InlineForm({
             placeholder={secondaryPlaceholder}
             disabled={busy}
             rows={6}
-            className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#0f1015] px-3 py-2.5 text-[12.5px] leading-relaxed text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
+            className="w-full resize-none rounded-lg border border-white/[0.07] bg-[#08090a] px-3 py-2.5 text-[12.5px] leading-relaxed text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-violet-400/40 focus:ring-2 focus:ring-violet-400/15"
           />
         </KitField>
 
@@ -1063,7 +1069,7 @@ function DangerSection({ onOpenDelete }: { onOpenDelete: () => void }) {
         <AlertTriangle className="h-4 w-4 text-rose-400" />
         <div>
           <h2 className="text-[13px] font-semibold text-white">Danger zone</h2>
-          <p className="text-[11.5px] text-zinc-500">Irreversible and destructive actions.</p>
+          <p className="text-[12.5px] text-zinc-500">Irreversible and destructive actions.</p>
         </div>
       </div>
       <KitCardBody>
@@ -1085,10 +1091,10 @@ function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: st
   return (
     <div className="px-4 py-3.5">
       <div className="flex items-center gap-1.5">
-        <Icon className="h-3 w-3 text-zinc-600" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">{label}</p>
+        <Icon className="h-3.5 w-3.5 text-zinc-600" strokeWidth={1.75} />
+        <p className="text-[12px] text-zinc-500">{label}</p>
       </div>
-      <p className="mt-1.5 truncate text-[13px] font-medium text-zinc-200">{value}</p>
+      <p className="mt-1 truncate text-[13px] font-medium tabular-nums text-zinc-100">{value}</p>
     </div>
   )
 }
@@ -1096,8 +1102,8 @@ function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: st
 function ModalShell({ children, onClose, accent = 'default' }: { children: React.ReactNode; onClose: () => void; accent?: 'default' | 'danger' }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className={`relative w-full max-w-md overflow-hidden rounded-xl border bg-[#16171d] shadow-[0_16px_44px_-28px_rgba(0,0,0,0.9)] ${accent === 'danger' ? 'border-rose-500/20' : 'border-white/[0.07]'}`}>
+      <div className="absolute inset-0 bg-black/65" onClick={onClose} />
+      <div role="dialog" aria-modal="true" className={`relative w-full max-w-md overflow-hidden rounded-[14px] ${RAISE} ${FLOAT} ${accent === 'danger' ? 'ring-1 ring-rose-400/25' : ''}`}>
         {children}
       </div>
     </div>
@@ -1108,10 +1114,10 @@ function ModalHeader({ icon: Icon, title, subtitle, onClose }: { icon: React.Ele
   return (
     <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
       <div className="flex items-center gap-2.5">
-        <Icon className="h-4 w-4 text-violet-300" />
+        <Icon className="h-4 w-4 text-zinc-400" strokeWidth={1.75} />
         <div>
-          <h3 className="text-base font-semibold leading-none text-white">{title}</h3>
-          {subtitle && <p className="mt-1 text-[11.5px] text-zinc-500">{subtitle}</p>}
+          <h3 className="text-[15px] font-semibold leading-[22px] tracking-[-0.012em] text-zinc-50">{title}</h3>
+          {subtitle && <p className="text-[13px] text-zinc-400">{subtitle}</p>}
         </div>
       </div>
       <button onClick={onClose} className="rounded-md p-1 text-zinc-500 transition hover:bg-white/[0.06] hover:text-white" aria-label="Close">

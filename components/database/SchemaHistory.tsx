@@ -21,8 +21,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, History, Loader2, RotateCcw } from 'lucide-react'
-import { EmptyState, KitButton } from '@/components/inspector/kit'
+import { AlertTriangle, CheckCircle2, History, RotateCcw } from 'lucide-react'
+import { EmptyState, KIT, KitButton, KitField, KitInput, KitModal, KitNote, Skeleton } from '@/components/inspector/kit'
+import { EDGE, FOCUS_INSET, RULE, R_PANEL } from '@/components/console/tokens'
 
 interface VersionRow {
   id: string
@@ -37,6 +38,10 @@ interface TableSnapshot {
   columns?: Array<{ name: string; type: string }>
 }
 
+function when(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 export function SchemaHistory({ projectId }: { projectId: string }) {
   const [versions, setVersions] = useState<VersionRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,7 +54,7 @@ export function SchemaHistory({ projectId }: { projectId: string }) {
   const [confirmFor, setConfirmFor] = useState<VersionRow | null>(null)
   const [typed, setTyped] = useState('')
   const [rollingBack, setRollingBack] = useState(false)
-  const [outcome, setOutcome] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -68,17 +73,18 @@ export function SchemaHistory({ projectId }: { projectId: string }) {
     }
   }, [projectId])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+  }, [load])
 
   const openSnapshot = async (v: VersionRow) => {
     setSelected(v)
     setSnapshot(null)
     setSnapshotLoading(true)
     try {
-      const res = await fetch(
-        `/api/projects/${projectId}/schema-versions?versionId=${encodeURIComponent(v.id)}`,
-        { credentials: 'include' },
-      )
+      const res = await fetch(`/api/projects/${projectId}/schema-versions?versionId=${encodeURIComponent(v.id)}`, {
+        credentials: 'include',
+      })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'Could not load that version')
       setSnapshot(body.version?.snapshot?.tables ?? [])
@@ -108,119 +114,161 @@ export function SchemaHistory({ projectId }: { projectId: string }) {
       // The count is reported because "rolled back" with zero statements means
       // the schema already matched, which is a different outcome worth knowing.
       const n = Array.isArray(body.statementsExecuted) ? body.statementsExecuted.length : 0
-      setOutcome(
-        n === 0
-          ? `Schema already matched v${confirmFor.versionNum}. Nothing was changed.`
-          : `Rolled back to v${confirmFor.versionNum}. ${n} ${n === 1 ? 'statement' : 'statements'} executed.`
-      )
+      setOutcome({
+        ok: true,
+        text:
+          n === 0
+            ? `Schema already matched v${confirmFor.versionNum}. Nothing was changed.`
+            : `Rolled back to v${confirmFor.versionNum}. ${n} ${n === 1 ? 'statement' : 'statements'} executed.`,
+      })
       setConfirmFor(null)
       setTyped('')
       await load()
     } catch (err: any) {
-      setOutcome(err?.message || 'Rollback failed')
+      setOutcome({ ok: false, text: err?.message || 'Rollback failed' })
     } finally {
       setRollingBack(false)
     }
   }
 
+  const closeConfirm = () => {
+    if (rollingBack) return
+    setConfirmFor(null)
+    setTyped('')
+  }
+
   return (
-    <div className="flex h-full w-full min-h-0">
-      <div className="flex w-80 flex-shrink-0 flex-col border-r border-white/[0.06]">
-        <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-white/[0.06] px-3">
-          <span className="text-[12.5px] font-semibold text-zinc-100">Schema history</span>
-          <span className="font-mono text-[10.5px] tabular-nums text-zinc-600">{versions.length}</span>
+    <div className="flex h-full min-h-0 w-full flex-col md:flex-row">
+      {/* Ledger */}
+      <div className={`flex max-h-[45%] w-full flex-shrink-0 flex-col border-b ${RULE} md:max-h-none md:w-[300px] md:border-b-0 md:border-r ${KIT.rail}`}>
+        <div className={`flex h-[44px] flex-shrink-0 items-center justify-between border-b ${RULE} pl-4 pr-3`}>
+          <span className="text-[13px] font-medium text-zinc-200">Schema history</span>
+          <span className="text-[12px] tabular-nums text-zinc-500">{versions.length}</span>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
           {error ? (
-            <div className="p-3">
-              <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.05] px-3 py-2">
-                <p className="text-[11.5px] text-rose-200">{error}</p>
-                <KitButton variant="secondary" onClick={() => void load()} className="mt-2">Try again</KitButton>
-              </div>
+            <div className="p-2">
+              <KitNote
+                tone="danger"
+                icon={AlertTriangle}
+                actions={
+                  <KitButton size="sm" variant="ghost" onClick={() => void load()}>
+                    Try again
+                  </KitButton>
+                }
+              >
+                {error}
+              </KitNote>
             </div>
           ) : loading ? (
-            <div className="flex h-full items-center justify-center text-[12px] text-zinc-500">
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Loading
+            <div className="space-y-3 p-4" aria-hidden>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-1.5">
+                  <Skeleton className="h-[12px] w-12" />
+                  <Skeleton className="h-[11px] w-3/4" />
+                </div>
+              ))}
             </div>
           ) : versions.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-6">
-              <EmptyState
-                icon={History}
-                title="No schema versions yet"
-                description="A version is recorded every time the schema changes, so this fills in as you build."
-              />
-            </div>
+            <EmptyState
+              icon={History}
+              title="No schema versions yet"
+              description="A version is recorded every time the schema changes, so this fills in as you build."
+              className="h-full !py-10"
+            />
           ) : (
-            versions.map(v => (
-              <button
-                key={v.id}
-                onClick={() => void openSnapshot(v)}
-                className={`block w-full border-b border-white/[0.04] px-3 py-2.5 text-left transition-colors focus:outline-none ${
-                  selected?.id === v.id ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'
-                }`}
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[11.5px] font-medium text-zinc-100">v{v.versionNum}</span>
-                  <span className="font-mono text-[10.5px] tabular-nums text-zinc-600">
-                    {new Date(v.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                <p className="mt-0.5 truncate text-[11.5px] text-zinc-400">{v.description}</p>
-                <p className="mt-0.5 truncate font-mono text-[10.5px] text-zinc-600">{v.triggeredBy}</p>
-              </button>
-            ))
+            <ul className="py-1.5">
+              {versions.map((v) => {
+                const active = selected?.id === v.id
+                return (
+                  <li key={v.id} className="px-2">
+                    <button
+                      type="button"
+                      onClick={() => void openSnapshot(v)}
+                      aria-current={active ? 'true' : undefined}
+                      className={`block w-full rounded-[7px] px-2.5 py-2 text-left transition-colors ${FOCUS_INSET} ${
+                        active ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="font-mono text-[12.5px] font-medium text-zinc-100">v{v.versionNum}</span>
+                        <span className="text-[12px] tabular-nums text-zinc-500">{when(v.createdAt)}</span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-[12.5px] text-zinc-400">{v.description}</span>
+                      <span className="mt-0.5 block truncate font-mono text-[11.5px] text-zinc-600">{v.triggeredBy}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
           )}
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Snapshot */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {outcome && (
-          <div className="flex-shrink-0 border-b border-white/[0.06] px-4 py-2.5">
-            <p className="text-[11.5px] text-zinc-300">{outcome}</p>
+          <div className={`flex-shrink-0 border-b ${RULE} px-4 py-2.5 sm:px-5`}>
+            <KitNote tone={outcome.ok ? 'success' : 'danger'} icon={outcome.ok ? CheckCircle2 : AlertTriangle}>
+              {outcome.text}
+            </KitNote>
           </div>
         )}
 
         {!selected ? (
           <div className="flex h-full items-center justify-center px-8 text-center">
-            <p className="text-[12.5px] text-zinc-500">Select a version to see the schema it captured.</p>
+            <p className="text-[13px] text-zinc-500">Select a version to see the schema it captured.</p>
           </div>
         ) : (
           <>
-            <div className="flex h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] px-4">
-              <div className="flex min-w-0 items-baseline gap-2">
+            <div className={`flex h-[44px] flex-shrink-0 items-center justify-between gap-3 border-b ${RULE} pl-4 pr-2 sm:pl-5`}>
+              <div className="flex min-w-0 items-baseline gap-2.5">
                 <h2 className="font-mono text-[13px] font-medium text-zinc-100">v{selected.versionNum}</h2>
-                <span className="truncate text-[11.5px] text-zinc-500">{selected.description}</span>
+                <span className="truncate text-[12.5px] text-zinc-500">{selected.description}</span>
               </div>
               <KitButton
-                variant="secondary"
+                size="sm"
                 icon={RotateCcw}
-                onClick={() => { setConfirmFor(selected); setTyped(''); setOutcome(null) }}
+                onClick={() => {
+                  setConfirmFor(selected)
+                  setTyped('')
+                  setOutcome(null)
+                }}
               >
                 Roll back to this
               </KitButton>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto p-4">
+            <div className="min-h-0 flex-1 overflow-auto px-4 py-5 sm:px-5">
               {snapshotLoading ? (
-                <div className="flex items-center gap-2 text-[12px] text-zinc-500">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading snapshot
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-hidden>
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-[120px] w-full" />
+                  ))}
                 </div>
               ) : !snapshot || snapshot.length === 0 ? (
-                <p className="text-[12px] text-zinc-500">This version captured no tables.</p>
+                <p className="text-[13px] text-zinc-500">This version captured no tables.</p>
               ) : (
-                <div className="space-y-4">
-                  {snapshot.map(t => (
-                    <div key={t.name} className="overflow-hidden rounded-lg border border-white/[0.07]">
-                      <div className="border-b border-white/[0.06] bg-white/[0.02] px-3 py-1.5">
-                        <span className="font-mono text-[11.5px] font-medium text-zinc-200">{t.name}</span>
+                <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {snapshot.map((t) => (
+                    <div key={t.name} className={`overflow-hidden border ${EDGE} ${R_PANEL}`}>
+                      <div className={`flex items-baseline justify-between gap-2 border-b ${RULE} ${KIT.gridHead} px-3.5 py-2`}>
+                        <span className="truncate font-mono text-[12.5px] font-medium text-zinc-100">{t.name}</span>
+                        <span className="text-[11.5px] tabular-nums text-zinc-500">
+                          {(t.columns ?? []).length} {(t.columns ?? []).length === 1 ? 'column' : 'columns'}
+                        </span>
                       </div>
                       <table className="w-full">
                         <tbody>
-                          {(t.columns ?? []).map(c => (
+                          {(t.columns ?? []).map((c) => (
                             <tr key={c.name}>
-                              <td className="border-b border-white/[0.04] px-3 py-1.5 font-mono text-[11px] text-zinc-300">{c.name}</td>
-                              <td className="border-b border-white/[0.04] px-3 py-1.5 text-right font-mono text-[11px] text-zinc-500">{c.type}</td>
+                              <td className="border-b border-white/[0.04] px-3.5 py-1.5 font-mono text-[12px] text-zinc-300">
+                                {c.name}
+                              </td>
+                              <td className="border-b border-white/[0.04] px-3.5 py-1.5 text-right font-mono text-[11.5px] text-zinc-500">
+                                {c.type}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -236,55 +284,49 @@ export function SchemaHistory({ projectId }: { projectId: string }) {
 
       {/* Typed confirmation, not a button. Reaching an older shape means
           dropping what came after it, and dropping a column drops its data. */}
-      {confirmFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-xl border border-rose-500/25 bg-[#16171d] shadow-[0_12px_32px_-16px_rgba(0,0,0,0.85)]">
-            <div className="border-b border-white/[0.06] px-5 py-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-300" />
-                <div>
-                  <h2 className="text-[13px] font-semibold text-zinc-50">
-                    Roll back to v{confirmFor.versionNum}?
-                  </h2>
-                  <p className="mt-1.5 text-[11.5px] text-zinc-400">
-                    Tables and columns added after this version will be dropped, and dropping a
-                    column drops its data. A snapshot of the current schema is taken first.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="px-5 py-4">
-              <label className="block text-[11px] text-zinc-400 mb-1.5">
-                Type <span className="font-mono text-zinc-200">{confirmFor.versionNum}</span> to confirm
-              </label>
-              <input
-                autoFocus
-                value={typed}
-                onChange={e => setTyped(e.target.value)}
-                aria-label="Type the version number to confirm"
-                className="h-8 w-full rounded-lg border border-white/[0.07] bg-[#0f1015] px-3 font-mono text-[12.5px] text-zinc-50 focus:border-rose-400/40 focus:outline-none"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] px-5 py-4">
-              <button
-                onClick={() => { setConfirmFor(null); setTyped('') }}
-                disabled={rollingBack}
-                className="h-8 rounded-lg px-3 text-[12px] font-medium text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-100 disabled:opacity-50 focus:outline-none"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void rollback()}
-                disabled={rollingBack || typed.trim() !== String(confirmFor.versionNum)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-rose-500 px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {rollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                Roll back
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <KitModal
+        open={!!confirmFor}
+        onClose={closeConfirm}
+        title={confirmFor ? `Roll back to v${confirmFor.versionNum}?` : 'Roll back'}
+        description="Tables and columns added after this version will be dropped, and dropping a column drops its data. A snapshot of the current schema is taken first."
+        footer={
+          <>
+            <KitButton variant="ghost" onClick={closeConfirm} disabled={rollingBack}>
+              Cancel
+            </KitButton>
+            <KitButton
+              variant="danger"
+              icon={RotateCcw}
+              onClick={() => void rollback()}
+              loading={rollingBack}
+              disabled={!confirmFor || typed.trim() !== String(confirmFor.versionNum)}
+            >
+              Roll back
+            </KitButton>
+          </>
+        }
+      >
+        {confirmFor && (
+          <KitField
+            label={
+              <>
+                Type <span className="font-mono text-zinc-100">{confirmFor.versionNum}</span> to confirm
+              </>
+            }
+          >
+            <KitInput
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && typed.trim() === String(confirmFor.versionNum)) void rollback()
+              }}
+              aria-label="Type the version number to confirm"
+              className="font-mono"
+              inputMode="numeric"
+            />
+          </KitField>
+        )}
+      </KitModal>
     </div>
   )
 }
