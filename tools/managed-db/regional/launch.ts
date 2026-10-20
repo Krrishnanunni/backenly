@@ -12,7 +12,7 @@
  * (backenly-infra, aws/REGIONS_RUNBOOK.md): identifiers, never a secret value.
  * AWS calls go through the AWS CLI on PATH with the credentials in the
  * environment (AWS_PROFILE), so this adds no dependency. Linux or macOS: secret
- * values reach the CLI on /dev/stdin.
+ * values reach the CLI on /dev/stdin, through a real pipe (awsCli).
  *
  * A PASSWORD GOES NOWHERE BUT ITS SECRET. Each is generated here (scram.ts),
  * written to its secret through the CLI's standard input, never an argument,
@@ -26,6 +26,14 @@
  *
  * ONE RUN AT A TIME. A run of the procedure's task family that is still going
  * refuses another.
+ *
+ * A CHECK THAT DOES NOT VERIFY FAILS, with one exception. Once every step has
+ * been applied, `check` on its own, and the check that closes an apply, fail on
+ * anything the database does not verify. The check an apply runs first is told
+ * it is one (BOOTSTRAP_PRE_APPLY=true, bootstrap.sh): it reports what steps
+ * changed since they were applied have not converged yet without failing on it,
+ * because that is exactly what this apply converges, and the apply then fails
+ * the run if the database still does not verify.
  */
 
 import { spawn } from 'node:child_process'
@@ -200,11 +208,19 @@ export function connectionString(role: ManagedRole, password: string, db: Launch
 /** One AWS CLI call: its arguments, and what it reads on standard input. Resolves to stdout. */
 export type Aws = (args: string[], stdin?: string) => Promise<string>
 
-/** The real AWS CLI, in one region, answering JSON. */
-export function awsCli(region: string): Aws {
+/** The real AWS CLI, in one region, answering JSON. `env` is the CLI's environment (PATH, AWS_PROFILE). */
+export function awsCli(region: string, env: NodeJS.ProcessEnv = process.env): Aws {
   return (args, stdin) =>
     new Promise((resolve, reject) => {
-      const child = spawn('aws', [...args, '--region', region, '--output', 'json'], { stdio: ['pipe', 'pipe', 'pipe'] })
+      const full = [...args, '--region', region, '--output', 'json']
+      // The CLI reads `file:///dev/stdin` by opening that path, and on Linux the
+      // standard input Node gives a child is a socket, which /dev/stdin cannot
+      // open (ENXIO). Through `cat` the CLI gets a real pipe; the input still
+      // passes only through memory and the kernel, never a file or an argument.
+      const child =
+        process.platform === 'win32'
+          ? spawn('aws', full, { stdio: ['pipe', 'pipe', 'pipe'], env })
+          : spawn('/bin/sh', ['-c', 'cat | exec aws "$@"', 'aws', ...full], { stdio: ['pipe', 'pipe', 'pipe'], env })
       let out = ''
       let err = ''
       child.stdout.on('data', (d) => (out += d))
@@ -242,21 +258,31 @@ export async function runProcedure(config: LaunchConfig, env: Record<string, str
     throw new Refusal(`a run of ${family} is still going (${running.taskArns.join(', ')}): one run at a time`)
   }
 
-  // On standard input, so the verifiers are not in this machine's process list.
-  const request = {
-    cluster: config.cluster,
-    taskDefinition: config.taskDefinition,
-    launchType: 'FARGATE',
-    count: 1,
-    startedBy: 'backenly-db-procedure',
-    networkConfiguration: {
-      awsvpcConfiguration: { subnets: config.subnets, securityGroups: [config.securityGroup], assignPublicIp: 'DISABLED' },
-    },
-    overrides: {
-      containerOverrides: [{ name: config.container, environment: Object.entries(env).map(([name, value]) => ({ name, value })) }],
-    },
+  // The identifiers as arguments; the task's environment, which carries the
+  // verifiers on apply, on standard input, so they are not in this machine's
+  // process list. Not --cli-input-json: the CLI reads that value twice (once to
+  // load the file, once more to parse it), so from a pipe it arrives empty.
+  const networkConfiguration = {
+    awsvpcConfiguration: { subnets: config.subnets, securityGroups: [config.securityGroup], assignPublicIp: 'DISABLED' },
   }
-  const started = JSON.parse(await aws(['ecs', 'run-task', '--cli-input-json', 'file:///dev/stdin'], JSON.stringify(request)))
+  const overrides = {
+    containerOverrides: [{ name: config.container, environment: Object.entries(env).map(([name, value]) => ({ name, value })) }],
+  }
+  const started = JSON.parse(
+    await aws(
+      [
+        'ecs', 'run-task',
+        '--cluster', config.cluster,
+        '--task-definition', config.taskDefinition,
+        '--launch-type', 'FARGATE',
+        '--count', '1',
+        '--started-by', 'backenly-db-procedure',
+        '--network-configuration', JSON.stringify(networkConfiguration),
+        '--overrides', 'file:///dev/stdin',
+      ],
+      JSON.stringify(overrides),
+    ),
+  )
   if ((started.failures ?? []).length > 0 || !started.tasks?.[0]?.taskArn) {
     throw new Error(`the task did not start: ${JSON.stringify(started.failures ?? [])}`)
   }
@@ -350,7 +376,12 @@ export async function launch(mode: Mode, config: LaunchConfig, rotate: ManagedRo
   const { aws, log } = deps
   log(`Regional database procedure, ${mode}: ${config.database.host}/${config.database.name} in ${config.region}`)
 
-  const before = await runProcedure(config, { BOOTSTRAP_MODE: 'check' }, deps)
+  // Only the check this apply runs first is a pre-apply check (see the header).
+  const before = await runProcedure(
+    config,
+    mode === 'apply' ? { BOOTSTRAP_MODE: 'check', BOOTSTRAP_PRE_APPLY: 'true' } : { BOOTSTRAP_MODE: 'check' },
+    deps,
+  )
   printRun('check', before, log)
   if (before.exitCode !== 0) {
     log('The check failed. Nothing was written.')

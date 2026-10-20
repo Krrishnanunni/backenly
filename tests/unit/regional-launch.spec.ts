@@ -13,10 +13,15 @@
  * itself, against a real PostgreSQL, is tests/integration/regional-bootstrap.spec.ts.
  */
 
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import {
   ROLES,
   Refusal,
   auditReport,
+  awsCli,
   connectionString,
   launch,
   loadConfig,
@@ -61,6 +66,11 @@ interface Database {
   roles: Partial<Record<ManagedRole, { verifier: string | null; recorded: boolean }>>
   applied: boolean
   failApply?: boolean
+  /**
+   * The direct-access step's files changed since it was applied, and the
+   * database does not verify against them until an apply converges it.
+   */
+  changed?: boolean
 }
 
 type Call = { args: string[]; stdin?: string }
@@ -98,9 +108,18 @@ class FakeAws {
     const [service, command] = args
     if (service === 'ecs' && command === 'list-tasks') return JSON.stringify({ taskArns: this.running })
     if (service === 'ecs' && command === 'run-task') {
-      const request = JSON.parse(stdin!)
+      // The identifiers as arguments and only the overrides on standard input:
+      // the real CLI reads --cli-input-json twice, so from a pipe it is empty.
+      expect(args).not.toContain('--cli-input-json')
+      expect(flag('--cluster')).toBe(CONFIG.cluster)
+      expect(flag('--task-definition')).toBe(CONFIG.taskDefinition)
+      expect(flag('--overrides')).toBe('file:///dev/stdin')
+      expect(JSON.parse(flag('--network-configuration')!).awsvpcConfiguration).toEqual({
+        subnets: CONFIG.subnets, securityGroups: [CONFIG.securityGroup], assignPublicIp: 'DISABLED',
+      })
+      const overrides = JSON.parse(stdin!)
       const env: Record<string, string> = { BOOTSTRAP_MODE: 'check' }
-      for (const e of request.overrides.containerOverrides[0].environment) env[e.name] = e.value
+      for (const e of overrides.containerOverrides[0].environment) env[e.name] = e.value
       const taskArn = `arn:aws:ecs:${REGION}:123456789012:task/backenly-region/task${++this.n}`
       this.tasks.set(taskArn, { env, polls: 0, ...this.procedure(env) })
       return JSON.stringify({ tasks: [{ taskArn }], failures: [] })
@@ -158,8 +177,12 @@ class FakeAws {
   /** bootstrap.sh, as the launcher sees it: its report lines, its refusals, its exit code. */
   private procedure(env: Record<string, string>): { exitCode: number; lines: string[] } {
     const apply = env.BOOTSTRAP_MODE === 'apply'
+    const preApply = env.BOOTSTRAP_PRE_APPLY === 'true'
     const lines = ['', `Regional database initialisation (${apply ? 'apply' : 'check'})`]
     const rotate = (env.BOOTSTRAP_ROTATE ?? '').split(',').filter(Boolean)
+    if (apply && preApply) {
+      return { exitCode: 2, lines: [...lines, 'refusing: BOOTSTRAP_PRE_APPLY marks the check a launcher runs before its own apply, never the apply'] }
+    }
     if (apply) {
       if (this.db.failApply) return { exitCode: 3, lines: [...lines, 'ERROR:  could not connect'] }
       for (const role of ALL_ROLES) {
@@ -175,9 +198,17 @@ class FakeAws {
         if (verifier) this.db.roles[role] = { verifier, recorded: true }
       }
       this.db.applied = true
+      this.db.changed = false
       for (const id of STEPS) lines.push(`  step ${id}: applied`)
     } else {
-      for (const id of STEPS) lines.push(`  step ${id}: ${this.db.applied ? 'current (applied, files unchanged)' : 'pending (not applied)'}`)
+      for (const id of STEPS) {
+        const state = !this.db.applied
+          ? 'pending (not applied)'
+          : this.db.changed && id === 'direct-access'
+            ? 'changed (applied, but its files have changed since)'
+            : 'current (applied, files unchanged)'
+        lines.push(`  step ${id}: ${state}`)
+      }
     }
     for (const role of ALL_ROLES) {
       const have = this.db.roles[role]
@@ -186,6 +217,16 @@ class FakeAws {
           !have ? `missing (the first apply must supply ${ROLES[role].verifier})` : have.recorded ? 'recorded 2026-10-16T12:00:00Z' : 'unrecorded (exists, but this procedure never set its password)'
         }`,
       )
+    }
+    if (!apply && this.db.applied && this.db.changed) {
+      // As bootstrap.sh: only the check a launcher runs before its own apply passes.
+      lines.push('ERROR:  regional database verification failed: backenly_backup cannot use workspace schema workspace_0, so its snapshots fail')
+      if (!preApply) {
+        lines.push('Check only: nothing was written. 1 step(s) changed since applied, and the database does not verify.')
+        return { exitCode: 3, lines }
+      }
+      lines.push('Check only: nothing was written. 1 step(s) changed since applied: the apply that follows converges what does not verify.')
+      return { exitCode: 0, lines }
     }
     lines.push(apply ? 'Regional database initialised and verified.' : 'Check only: nothing was written.')
     return { exitCode: 0, lines }
@@ -211,7 +252,7 @@ function verifies(password: string, verifier: string): boolean {
 
 const runTasks = (fake: FakeAws) => fake.calls.filter((c) => c.args[0] === 'ecs' && c.args[1] === 'run-task')
 const envOf = (call: Call): Record<string, string> =>
-  Object.fromEntries(JSON.parse(call.stdin!).overrides.containerOverrides[0].environment.map((e: { name: string; value: string }) => [e.name, e.value]))
+  Object.fromEntries(JSON.parse(call.stdin!).containerOverrides[0].environment.map((e: { name: string; value: string }) => [e.name, e.value]))
 
 // ── The runs ─────────────────────────────────────────────────────────────────
 
@@ -254,6 +295,8 @@ describe('a first apply', () => {
     const applyEnv = envOf(runTasks(fake)[1])
     for (const role of ALL_ROLES) expect(applyEnv[ROLES[role].verifier]).toMatch(/^SCRAM-SHA-256\$4096:/)
     expect(applyEnv.BOOTSTRAP_ROTATE).toBeUndefined()
+    // ...on standard input only: no verifier is ever an argument (the process list).
+    for (const call of fake.calls) expect(call.args.join(' ')).not.toContain('SCRAM-SHA-256')
   })
 
   it('leaves no current credential when the procedure fails', async () => {
@@ -269,21 +312,23 @@ describe('a first apply', () => {
   })
 })
 
-describe('an apply on a finished database', () => {
-  function finished(): { fake: FakeAws; passwords: Record<ManagedRole, string> } {
-    const passwords = { backenly_app: generatePassword(), backenly_backup: generatePassword(), backenly_authenticator: generatePassword() }
-    const fake = new FakeAws({
-      roles: Object.fromEntries(ALL_ROLES.map((role) => [role, { verifier: scramSha256Verifier(passwords[role]), recorded: true }])),
-      applied: true,
-    })
-    fake.seedCurrent(CONFIG.secrets.app, connectionString('backenly_app', passwords.backenly_app, CONFIG.database))
-    fake.seedCurrent(CONFIG.secrets.direct, connectionString('backenly_app', passwords.backenly_app, CONFIG.database))
-    fake.seedCurrent(CONFIG.secrets.backup, connectionString('backenly_backup', passwords.backenly_backup, CONFIG.database))
-    fake.seedCurrent(CONFIG.secrets.authenticator, connectionString('backenly_authenticator', passwords.backenly_authenticator, CONFIG.database))
-    fake.seedCurrent(CONFIG.secrets.postgrestJwt, 'kept-jwt-secret-of-at-least-thirty-two-characters')
-    return { fake, passwords }
-  }
+/** A database the procedure finished, with every credential in its secret. */
+function finished(db: Partial<Database> = {}): { fake: FakeAws; passwords: Record<ManagedRole, string> } {
+  const passwords = { backenly_app: generatePassword(), backenly_backup: generatePassword(), backenly_authenticator: generatePassword() }
+  const fake = new FakeAws({
+    roles: Object.fromEntries(ALL_ROLES.map((role) => [role, { verifier: scramSha256Verifier(passwords[role]), recorded: true }])),
+    applied: true,
+    ...db,
+  })
+  fake.seedCurrent(CONFIG.secrets.app, connectionString('backenly_app', passwords.backenly_app, CONFIG.database))
+  fake.seedCurrent(CONFIG.secrets.direct, connectionString('backenly_app', passwords.backenly_app, CONFIG.database))
+  fake.seedCurrent(CONFIG.secrets.backup, connectionString('backenly_backup', passwords.backenly_backup, CONFIG.database))
+  fake.seedCurrent(CONFIG.secrets.authenticator, connectionString('backenly_authenticator', passwords.backenly_authenticator, CONFIG.database))
+  fake.seedCurrent(CONFIG.secrets.postgrestJwt, 'kept-jwt-secret-of-at-least-thirty-two-characters')
+  return { fake, passwords }
+}
 
+describe('an apply on a finished database', () => {
   it('sets no password and keeps every secret', async () => {
     const { fake } = finished()
     const before = Object.values(CONFIG.secrets).map((arn) => fake.current(arn))
@@ -321,6 +366,35 @@ describe('an apply on a finished database', () => {
     expect(await launch('apply', CONFIG, ['backenly_app'], deps(fake))).toBe(1)
     expect(passwordOf(fake.current(CONFIG.secrets.app)!)).toBe(passwords.backenly_app)
     expect(passwordOf(fake.current(CONFIG.secrets.direct)!)).toBe(passwords.backenly_app)
+  })
+})
+
+describe('a region whose step files changed and do not verify yet', () => {
+  it('fails a check on its own, and writes nothing', async () => {
+    const { fake } = finished({ changed: true })
+    const log: string[] = []
+    expect(await launch('check', CONFIG, [], deps(fake, log))).toBe(1)
+    // A standalone check carries no pre-apply signal: a gate reading its exit code
+    // never passes a region that does not verify.
+    expect(runTasks(fake).map(envOf)).toEqual([{ BOOTSTRAP_MODE: 'check' }])
+    expect(fake.calls.filter((c) => c.args[0] === 'secretsmanager')).toHaveLength(0)
+    expect(log.join('\n')).toContain('The check failed. Nothing was written.')
+  })
+
+  it('is converged by an apply, whose first check alone is a pre-apply check', async () => {
+    const { fake } = finished({ changed: true })
+    const before = Object.values(CONFIG.secrets).map((arn) => fake.current(arn))
+    const log: string[] = []
+    expect(await launch('apply', CONFIG, [], deps(fake, log))).toBe(0)
+    expect(runTasks(fake).map(envOf)).toEqual([
+      { BOOTSTRAP_MODE: 'check', BOOTSTRAP_PRE_APPLY: 'true' },
+      { BOOTSTRAP_MODE: 'apply' },
+      // The closing check is strict again: it passes only because the apply converged.
+      { BOOTSTRAP_MODE: 'check' },
+    ])
+    expect(fake.db.changed).toBe(false)
+    expect(Object.values(CONFIG.secrets).map((arn) => fake.current(arn))).toEqual(before)
+    expect(log.join('\n')).toContain('The region database is initialised: every step current, every credential recorded and kept.')
   })
 })
 
@@ -419,5 +493,27 @@ describe('arguments and configuration', () => {
     )
     expect(() => loadConfig(JSON.stringify({ ...CONFIG, subnets: [] }))).toThrow(/subnets/)
     expect(() => loadConfig('not json')).toThrow(/terraform output -json/)
+  })
+})
+
+describe('the AWS CLI it calls', () => {
+  // The CLI reads file:///dev/stdin by opening that path. On Linux the standard
+  // input Node gives a child is a socket, which /dev/stdin cannot open (ENXIO):
+  // the first run against a real region failed that way before starting
+  // anything. A stand-in `aws` on PATH that reads /dev/stdin as the CLI does.
+  const unix = process.platform === 'win32' ? it.skip : it
+
+  unix('hands the CLI a standard input it can open as /dev/stdin, without an argument or a file', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-aws-'))
+    fs.writeFileSync(path.join(dir, 'aws'), '#!/bin/sh\ncat /dev/stdin\nprintf " args:%s" "$*"\n', { mode: 0o755 })
+    // Passed as the CLI's environment: jest's sandboxed process.env does not
+    // reach a child, which would then find a real `aws` on the runner instead.
+    const env = { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}` }
+    try {
+      const out = await awsCli(REGION, env)(['secretsmanager', 'put-secret-value', '--secret-string', 'file:///dev/stdin'], 'kept-off-the-process-list')
+      expect(out).toBe(`kept-off-the-process-list args:secretsmanager put-secret-value --secret-string file:///dev/stdin --region ${REGION} --output json`)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

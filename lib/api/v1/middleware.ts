@@ -3,6 +3,7 @@ import { clientIpFromHeaders } from '@/lib/security/client-ip'
 import { authenticateApiKey } from '@/lib/middleware/apiKeyAuth'
 import { prisma } from '@/lib/db'
 import { workspaceRawClient } from '@/lib/data-plane/regional'
+import { readEndUserBlocked } from '@/lib/services/end-user-blocked'
 import { createErrorResponse, ErrorCodes } from './errors'
 import { checkUsage, getUsageMessage } from '@/lib/scaling/usage-monitor'
 import { applySoftRateLimit } from '@/lib/scaling/usage-monitor'
@@ -23,6 +24,7 @@ import {
   serviceRoleRefusalMessage,
 } from '@/lib/security/service-role-exposure'
 import { MCP_KEY_HINT, MCP_KEY_IN_APP, isMcpCredential, mcpKeyRefusalMessage } from '@/lib/security/key-placement'
+import { endUserBearerToken } from '@/lib/security/end-user-bearer'
 
 import { INTERNAL_DOMAINS, isInternalOrigin } from '@/lib/security/internal-origin'
 import { answersFromCopy, authorizingProject } from '@/lib/auth-projection/read'
@@ -46,7 +48,8 @@ export interface V1ApiContext {
   projectId: string
   correlationId: string
   /**
-   * End-user ID extracted from the project-scoped JWT in `X-User-Token`.
+   * End-user ID extracted from the project-scoped JWT in `X-User-Token`, or in
+   * `Authorization: Bearer` when that header is absent.
    * Used by database routes to set `app.current_user_id` before executing
    * workspace queries so PostgreSQL RLS policies are enforced.
    * null when the request is a service-role / server-to-server call.
@@ -446,11 +449,15 @@ export async function v1ApiMiddleware(
   // End-users receive a project-scoped JWT from /v1/{projectId}/auth/signin.
   // They must pass it as `X-User-Token: <jwt>` on every database request so
   // the server can set app.current_user_id before executing workspace queries.
+  // Without X-User-Token, a token in `Authorization: Bearer` is the user when it
+  // names a project, as on the runtime (lib/security/end-user-bearer.ts), and
+  // passes the same checks below; the key then came in x-api-key or the query.
   // Service-role keys (serviceRole = true) bypass this — they see all rows.
   let endUserId: string | null = null
   let endUserRole: string | null = null
   if (!apiKeyRecord.serviceRole) {
-    const userTokenHeader = request.headers.get('x-user-token')
+    const userTokenHeader =
+      request.headers.get('x-user-token') ?? endUserBearerToken(request.headers.get('authorization'))
     if (userTokenHeader) {
       const rawToken = userTokenHeader.startsWith('Bearer ')
         ? userTokenHeader.substring(7)
@@ -493,18 +500,15 @@ export async function v1ApiMiddleware(
         // Blocking promises "existing JWT tokens stop working immediately" —
         // true only if request time checks it. Before this, is_blocked was
         // read at sign-in and refresh alone, so a blocked user's live token
-        // kept serving data for up to seven days. A missing table or column
-        // means nobody was ever blocked; other failures fail open, loudly,
-        // like the revocation check above.
+        // kept serving data for up to seven days. Read as the service role:
+        // the users table is row-level secured against the app role
+        // (lib/services/end-user-blocked.ts). A missing table or column means
+        // nobody was ever blocked; other failures fail open, loudly, like the
+        // revocation check above.
         let blocked = false
         if (!blacklisted) {
           try {
-            const schemaName = `workspace_${projectId}`
-            const rows = await db.$queryRawUnsafe<{ is_blocked: boolean | null }[]>(
-              `SELECT is_blocked FROM "${schemaName}"."users" WHERE id::text = $1 LIMIT 1`,
-              String(payload.userId)
-            )
-            blocked = rows[0]?.is_blocked === true
+            blocked = await readEndUserBlocked(db, `workspace_${projectId}`, String(payload.userId))
           } catch (err: any) {
             const text = String(err?.message ?? err)
             const absent =
